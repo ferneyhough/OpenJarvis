@@ -1,0 +1,6 @@
+Id: OpenJarvisBridge
+Name: Open Jarvis Bridge
+Author: Open Jarvis
+Version: 1.0
+Module: OpenJarvisBridge.psm1
+Type: Script

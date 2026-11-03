@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Jarvis: Install (Windows CMD)",
+      "type": "shell",
+      "command": "cmd /c install.bat",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Jarvis: Install (Git Bash)",
+      "type": "shell",
+      "command": "bash install.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Jarvis: Install (pip)",
+      "type": "shell",
+      "command": "python -m venv .venv && .venv/Scripts/python -m pip install --upgrade pip && .venv/Scripts/pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ && .venv/Scripts/pip install -r requirements.txt",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Jarvis: Run",
+      "type": "shell",
+      "command": ".venv/Scripts/python jarvis.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "Jarvis: Build .exe + Setup installer",
+      "type": "shell",
+      "command": "cmd /c build_exe.bat",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

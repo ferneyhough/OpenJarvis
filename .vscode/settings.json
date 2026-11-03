@@ -1,0 +1,8 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "window.title": "${dirty}${activeEditorLong}${separator}${rootName}${separator}${appName}",
+  "files.exclude": {
+    "**/__pycache__": true
+  }
+}
