@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../lib/store';
-import { fetchManagedAgents, fetchMediaLibrary, getBase, type ManagedAgent } from '../lib/api';
+import { fetchManagedAgents, fetchMediaLibrary, getBase, openAllowedLink, type ManagedAgent } from '../lib/api';
 import { listConnectors } from '../lib/connectors-api';
 import type { ConnectorInfo } from '../types/connectors';
 
@@ -78,16 +78,74 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-function Links({ items }: { items: { label: string; url: string }[] }) {
+interface AppLink {
+  label: string;
+  url: string;
+  embed?: string;
+}
+
+const EMBEDS: Record<string, string> = {
+  'https://open.spotify.com/': 'https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M',
+  'https://soundcloud.com/': 'https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fsoundcloud&visual=false',
+};
+
+function AppRow({ item }: { item: AppLink }) {
+  const [open, setOpen] = useState(false);
+  const embed = item.embed ?? EMBEDS[item.url];
+  const launch = () => {
+    openAllowedLink(item.url).catch(() => {
+      window.open(item.url, '_blank', 'noopener,noreferrer');
+    });
+  };
   return (
-    <ul className="flex flex-col gap-1">
-      {items.map((i) => (
-        <li key={i.url}>
-          <a href={i.url} target="_blank" rel="noreferrer noopener" className="underline" style={{ color: 'var(--color-accent)' }}>
-            {i.label}
-          </a>
-        </li>
-      ))}
+    <li className="rounded" style={{ border }}>
+      <div className="flex items-center gap-2 px-2 py-1">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-label={`${open ? 'Collapse' : 'Expand'} ${item.label}`}
+          className="flex flex-1 items-center gap-1.5 text-left cursor-pointer"
+          style={{ color: 'var(--color-text)' }}
+        >
+          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {item.label}
+        </button>
+        <button
+          type="button"
+          onClick={launch}
+          className="shrink-0 rounded px-2 py-0.5 cursor-pointer"
+          style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
+        >
+          Launch
+        </button>
+      </div>
+      {open && (
+        <div className="px-2 pb-2">
+          {embed ? (
+            <iframe
+              src={embed}
+              title={`${item.label} player`}
+              loading="lazy"
+              allow="autoplay; encrypted-media; clipboard-write"
+              className="h-40 w-full rounded"
+              style={{ border: 0 }}
+            />
+          ) : (
+            <p style={muted}>
+              {item.label} can&apos;t be embedded here. Use Launch to open it in your browser.
+            </p>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Links({ items }: { items: AppLink[] }) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {items.map((i) => <AppRow key={i.url} item={i} />)}
     </ul>
   );
 }

@@ -354,6 +354,34 @@ async def open_free_site(req: ModelDownloadRequest, request: Request):
     return {"url": url}
 
 
+LINK_HOSTS = {
+    "music.youtube.com", "open.spotify.com", "music.apple.com", "music.amazon.com",
+    "listen.tidal.com", "soundcloud.com", "www.audible.com", "www.deezer.com",
+    "www.pandora.com", "bandcamp.com", "play.qobuz.com", "www.mixcloud.com",
+    "archive.org", "store.steampowered.com", "store.epicgames.com", "www.gog.com",
+    "www.humblebundle.com", "isthereanydeal.com", "www.reddit.com", "www.youtube.com",
+    "x.com", "news.ycombinator.com",
+}
+
+
+class OpenLinkRequest(BaseModel):
+    url: str = Field(max_length=500)
+
+
+@media_router.post("/open-link")
+async def open_link(req: OpenLinkRequest, request: Request):
+    """Open an allow-listed https link in the default browser (local only)."""
+    _local_only(request)
+    import webbrowser
+    from urllib.parse import urlparse
+
+    parsed = urlparse(req.url)
+    if parsed.scheme != "https" or parsed.hostname not in LINK_HOSTS:
+        raise HTTPException(400, "Link not allowed")
+    webbrowser.open(req.url)
+    return {"url": req.url}
+
+
 @media_router.get("/library")
 async def media_library():
     """List generated/converted files, newest first."""
