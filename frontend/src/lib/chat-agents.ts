@@ -35,7 +35,7 @@ export const CHAT_AGENTS: readonly ChatAgent[] = [
   },
   {
     id: 'agent',
-    label: 'Agent',
+    label: 'Pro',
     hint: 'Work through tasks step by step, acting autonomously',
     action: 'Working through the task step by step',
     prompt:
