@@ -38,7 +38,7 @@ import {
 import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
 import { useHandsFree } from '../../hooks/useHandsFree';
-import { ChatToolbar, CHAT_MODES, MODE_PROMPTS, type Attachment } from './ChatToolbar';
+import { ChatToolbar, CHAT_MODES, MODE_PROMPTS, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { generateMedia, convertMedia, openFreeMediaSite, openAllowedLink } from '../../lib/api';
 import { MUSIC_APPS, isShortReturnCommand, parseMusicVoiceCommand } from '../../lib/music-commands';
 import { runMusicAction } from '../../lib/music-actions';
@@ -141,6 +141,7 @@ export function InputArea() {
 
   const activeId = useAppStore((s) => s.activeId);
   const selectedModel = useAppStore((s) => s.selectedModel);
+  const chatModeSetting = useAppStore((s) => s.settings.chatMode);
   const streamState = useAppStore((s) => s.streamState);
   const messages = useAppStore((s) => s.messages);
   const speechEnabled = useAppStore((s) => s.settings.speechEnabled);
@@ -1219,7 +1220,7 @@ export function InputArea() {
               void addFiles(files);
             }
           }}
-          placeholder={selectedModel ? 'Message OpenJarvis...' : 'Pick a model first (⌘K)...'}
+          placeholder={selectedModel ? (MODE_PLACEHOLDERS[chatModeSetting] ?? 'Message OpenJarvis...') : 'Pick a model first (⌘K)...'}
           rows={1}
           className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed"
           style={{ color: 'var(--color-text)', maxHeight: '200px' }}

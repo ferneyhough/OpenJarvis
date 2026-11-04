@@ -27,6 +27,20 @@ export const MODE_PROMPTS: Record<string, string> = {
     'You are in Edit mode. Reply only with the revised text or code (and a one-line summary of changes). Preserve everything not asked to change.',
 };
 
+export const MODE_STATUS: Record<string, string> = {
+  ask: 'replies directly to your question.',
+  agent: 'works through your request step by step and reports what it did.',
+  plan: 'replies with a numbered plan only, nothing is carried out.',
+  edit: 'replies only with the revised text or code you supplied.',
+};
+
+export const MODE_PLACEHOLDERS: Record<string, string> = {
+  ask: 'Ask anything...',
+  agent: 'Describe a task for Jarvis to carry out...',
+  plan: 'Describe what to plan...',
+  edit: 'Paste text or code and say what to change...',
+};
+
 const pill = (active: boolean): React.CSSProperties => ({
   background: active ? 'var(--color-accent-subtle)' : 'transparent',
   border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
@@ -66,8 +80,10 @@ export function ChatToolbar({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span style={{ color: 'var(--color-text-tertiary)' }}>Model</span>
         <select
           aria-label="Model"
+          title={`${models.length} model${models.length === 1 ? '' : 's'} available`}
           value={selectedModel}
           disabled={disabled}
           onChange={(e) => setSelectedModel(e.target.value)}
@@ -182,6 +198,9 @@ export function ChatToolbar({
         >
           <Paperclip size={12} /> Attach
         </button>
+      </div>
+      <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+        {CHAT_MODES.find((m) => m.id === settings.chatMode)?.label} mode: {MODE_STATUS[settings.chatMode]}
       </div>
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2">
