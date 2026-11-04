@@ -67,23 +67,21 @@ export function ChatToolbar({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span style={{ color: 'var(--color-text-tertiary)' }}>Agent</span>
-        <select
-          aria-label="Agent"
-          title={getAgent(settings.chatMode).hint}
-          value={settings.chatMode}
-          disabled={disabled}
-          onChange={(e) => updateSettings({ chatMode: e.target.value as typeof settings.chatMode })}
-          className="rounded-full px-2.5 py-1 cursor-pointer"
-          style={{ ...pill(true), background: 'var(--color-bg-secondary)' }}
-        >
-          {CHAT_AGENTS.map((a) => (
-            <option key={a.id} value={a.id} title={a.hint}>
-              {a.label}
-            </option>
+        <div role="group" aria-label="Mode" className="flex flex-wrap items-center gap-1">
+          {CHAT_AGENTS.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              title={m.hint}
+              aria-pressed={settings.chatMode === m.id}
+              onClick={() => updateSettings({ chatMode: m.id })}
+              className="rounded-full px-2.5 py-1 cursor-pointer"
+              style={pill(settings.chatMode === m.id)}
+            >
+              {m.label}
+            </button>
           ))}
-        </select>
-        <span style={{ color: 'var(--color-text-tertiary)' }}>Model</span>
+        </div>        <span style={{ color: 'var(--color-text-tertiary)' }}>Model</span>
         <select
           aria-label="Model"
           title={`${models.length} model${models.length === 1 ? '' : 's'} available`}
