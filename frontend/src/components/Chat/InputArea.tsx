@@ -109,6 +109,25 @@ function useResearchCorpusSync(enabled: boolean): {
 
 export function InputArea() {
   const [input, setInput] = useState('');
+  const [micPerm, setMicPerm] = useState<string>('unknown');
+  useEffect(() => {
+    let status: PermissionStatus | undefined;
+    let cancelled = false;
+    const onChange = () => status && setMicPerm(status.state);
+    navigator.permissions
+      ?.query({ name: 'microphone' as PermissionName })
+      .then((s) => {
+        if (cancelled) return;
+        status = s;
+        setMicPerm(s.state);
+        s.addEventListener('change', onChange);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      status?.removeEventListener('change', onChange);
+    };
+  }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1025,6 +1044,20 @@ export function InputArea() {
               {handsFree.phase === 'error' ? 'Retry microphone' : 'Start hands-free'}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => { void openMicSettings(); }}
+            title="Open Windows microphone privacy settings and the browser's site permission page"
+            aria-label="Microphone settings"
+            className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{
+              background: 'var(--color-bg-secondary)',
+              color: micPerm === 'denied' ? 'var(--color-error)' : 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            Mic settings{micPerm === 'denied' ? ' (blocked)' : micPerm === 'granted' ? ' ✓' : ''}
+          </button>
         </div>
         {handsFree.error && handsFree.phase !== 'unsupported' && (
           <div className="flex items-center gap-2 px-1 text-[11px]" role="alert" style={{ color: 'var(--color-error)' }}>
