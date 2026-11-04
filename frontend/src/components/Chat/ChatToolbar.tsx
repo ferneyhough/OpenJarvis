@@ -1,4 +1,4 @@
-import { Paperclip, X, Shield, Image as ImageIcon, Film } from 'lucide-react';
+import { Paperclip, Folder, Shield, Image as ImageIcon, Film } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../lib/store';
 import { CHAT_AGENTS, getAgent } from '../../lib/chat-agents';
@@ -8,6 +8,8 @@ export interface Attachment {
   id: string;
   name: string;
   kind: 'image' | 'text';
+  /** relative path inside an attached folder */
+  path?: string;
   /** data URL for images, file text for text files */
   data: string;
 }
@@ -37,16 +39,14 @@ const pill = (active: boolean): React.CSSProperties => ({
 });
 
 export function ChatToolbar({
-  attachments,
   onAttach,
-  onRemove,
+  onAttachFolder,
   onCommand,
   onConvert,
   disabled,
 }: {
-  attachments: Attachment[];
   onAttach: () => void;
-  onRemove: (id: string) => void;
+  onAttachFolder: () => void;
   onCommand: (cmd: string) => void;
   onConvert: (format: string) => void;
   disabled?: boolean;
@@ -221,29 +221,20 @@ export function ChatToolbar({
         >
           <Paperclip size={12} /> Attach
         </button>
+        <button
+          type="button"
+          onClick={onAttachFolder}
+          disabled={disabled}
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 cursor-pointer disabled:opacity-50"
+          style={pill(false)}
+          title="Attach a folder and browse it below the chat box"
+        >
+          <Folder size={12} /> Folder
+        </button>
       </div>
       <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
         {getAgent(settings.chatMode).label}: {getAgent(settings.chatMode).hint}
       </div>
-      {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {attachments.map((a) => (
-            <span
-              key={a.id}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs"
-              style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
-            >
-              {a.kind === 'image' && (
-                <img src={a.data} alt="" className="h-5 w-5 rounded object-cover" />
-              )}
-              {a.name}
-              <button type="button" onClick={() => onRemove(a.id)} aria-label={`Remove ${a.name}`}>
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -41,6 +41,7 @@ import { useHandsFree } from '../../hooks/useHandsFree';
 import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { resolveAgent } from '../../lib/chat-agents';
 import { resolvePermissions } from '../../lib/permissions';
+import { FileExplorer } from './FileExplorer';
 import { generateMedia, convertMedia, openFreeMediaSite, openAllowedLink } from '../../lib/api';
 import { MUSIC_APPS, isShortReturnCommand, parseMusicVoiceCommand } from '../../lib/music-commands';
 import { runMusicAction } from '../../lib/music-actions';
@@ -136,6 +137,7 @@ export function InputArea() {
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const convertInputRef = useRef<HTMLInputElement>(null);
   const convertTargetRef = useRef('mp3');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -232,7 +234,24 @@ export function InputArea() {
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const next: Attachment[] = [];
-    for (const f of Array.from(files)) {
+    const SKIP_DIRS = /(^|\/)(node_modules|\.git|\.venv|venv|__pycache__|dist|build|\.next|target)\//;
+    const TEXT_EXT = /\.(txt|md|json|jsonl|ya?ml|toml|ini|cfg|conf|env|csv|tsv|log|xml|html?|css|scss|less|js|jsx|ts|tsx|mjs|cjs|py|pyi|rs|go|java|kt|c|h|cpp|hpp|cs|rb|php|sh|bat|ps1|sql|vue|svelte|lock)$/i;
+    const list = Array.from(files);
+    const isFolder = list.some((f) => (f as File & { webkitRelativePath?: string }).webkitRelativePath);
+    let skipped = 0;
+    for (const f of list) {
+      const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || '';
+      if (isFolder) {
+        const isImg = f.type.startsWith('image/');
+        if (SKIP_DIRS.test(rel) || (!isImg && !TEXT_EXT.test(f.name)) || next.length >= 300) {
+          skipped++;
+          continue;
+        }
+        if (f.size > 1024 * 1024) {
+          skipped++;
+          continue;
+        }
+      }
       if (f.size > 10 * 1024 * 1024) {
         toast.error(`${f.name} is larger than 10 MB`);
         continue;
@@ -245,8 +264,9 @@ export function InputArea() {
         if (isImage) r.readAsDataURL(f);
         else r.readAsText(f);
       });
-      next.push({ id: generateId(), name: f.name, kind: isImage ? 'image' : 'text', data });
+      next.push({ id: generateId(), name: f.name, kind: isImage ? 'image' : 'text', data, path: rel || undefined });
     }
+    if (skipped > 0) toast(`Skipped ${skipped} file(s): binary, too large, over 300 files, or in node_modules/.git`);
     setAttachments((prev) => [...prev, ...next]);
   }, []);
 
@@ -394,17 +414,24 @@ export function InputArea() {
     }
     const pending = attachments;
     const filesAllowed = useAppStore.getState().settings.allowFiles;
-    const attachLabel = pending.map((a) => `📎 ${a.name}`).join('\n');
+    const attachLabel = pending.length > 6
+      ? `📎 ${pending.length} files`
+      : pending.map((a) => `📎 ${a.path || a.name}`).join('\n');
     const content = [typed, attachLabel].filter(Boolean).join('\n\n');
+    let budget = 60000;
+    const tree = pending.length > 1 ? `Attached files:\n${pending.map((a) => a.path || a.name).join('\n')}` : '';
     const fullContent = [
       typed,
-      ...pending.map((a) =>
-        a.kind === 'text'
-          ? filesAllowed
-            ? `File "${a.name}":\n\`\`\`\n${a.data.slice(0, 40000)}\n\`\`\``
-            : `[file "${a.name}" attached, but file access is disabled]`
-          : `[image "${a.name}" attached]`,
-      ),
+      tree,
+      ...pending.map((a) => {
+        const label = a.path || a.name;
+        if (a.kind !== 'text') return `[image "${label}" attached]`;
+        if (!filesAllowed) return `[file "${label}" attached, but file access is disabled]`;
+        if (budget <= 0) return `[file "${label}" omitted: attachment size limit reached]`;
+        const body = a.data.slice(0, Math.min(40000, budget));
+        budget -= body.length;
+        return `File "${label}":\n\`\`\`\n${body}\n\`\`\``;
+      }),
     ].filter(Boolean).join('\n\n');
     const userMedia = pending
       .filter((a) => a.kind === 'image' && a.data.length < 300_000)
@@ -1124,9 +1151,8 @@ export function InputArea() {
           </div>
         )}
         <ChatToolbar
-          attachments={attachments}
           onAttach={() => fileInputRef.current?.click()}
-          onRemove={(id) => setAttachments((p) => p.filter((a) => a.id !== id))}
+          onAttachFolder={() => folderInputRef.current?.click()}
           onCommand={(cmd) => {
             const s = useAppStore.getState().settings;
             if (
@@ -1150,6 +1176,16 @@ export function InputArea() {
           type="file"
           multiple
           hidden
+          onChange={(e) => {
+            if (e.target.files) void addFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          hidden
+          {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
           onChange={(e) => {
             if (e.target.files) void addFiles(e.target.files);
             e.target.value = '';
@@ -1274,6 +1310,11 @@ export function InputArea() {
           </div>
         )}
       </div>
+      <FileExplorer
+        attachments={attachments}
+        onRemove={(ids) => setAttachments((p) => p.filter((a) => !ids.includes(a.id)))}
+        onClear={() => setAttachments([])}
+      />
       <div className="flex items-center justify-center mt-2 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
         <span>
           <kbd className="font-mono">Enter</kbd> to send &middot;{' '}
