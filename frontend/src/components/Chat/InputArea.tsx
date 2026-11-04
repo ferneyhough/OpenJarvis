@@ -940,7 +940,7 @@ export function InputArea() {
       const app = MUSIC_APPS.find((a) => a.id === music.app);
       if (app) {
         void openAllowedLink(app.url)
-          .then(() => toast.success(`${app.label} opened. Say “Return to Jarvis” to go back.`))
+          .then((via) => toast.success(`${app.label} opened${via === 'app' ? ' in its app' : ' in your browser'}. Say “Return to Jarvis” to go back.`))
           .catch((error) => toast.error(`Could not open ${app.label}: ${error instanceof Error ? error.message : String(error)}`));
         return;
       }

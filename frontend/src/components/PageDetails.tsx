@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 import { useMusicStore } from '../lib/music';
-import { fetchManagedAgents, fetchMediaLibrary, getBase, openAllowedLink, type ManagedAgent } from '../lib/api';
+import { fetchManagedAgents, fetchMediaLibrary, fetchNativeApps, getBase, openAllowedLink, type ManagedAgent } from '../lib/api';
 import { listConnectors } from '../lib/connectors-api';
 import type { ConnectorInfo } from '../types/connectors';
 
@@ -90,7 +90,7 @@ const EMBEDS: Record<string, string> = {
   'https://soundcloud.com/': 'https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fsoundcloud&visual=false',
 };
 
-function AppRow({ item }: { item: AppLink }) {
+function AppRow({ item, installed }: { item: AppLink; installed: boolean }) {
   const [open, setOpen] = useState(false);
   const embed = item.embed ?? EMBEDS[item.url];
   const launch = () => {
@@ -111,6 +111,7 @@ function AppRow({ item }: { item: AppLink }) {
         >
           {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           {item.label}
+          {installed && <span className="ml-1 text-[10px]" style={{ color: 'var(--color-accent)' }}>app installed</span>}
         </button>
         <button
           type="button"
@@ -118,7 +119,7 @@ function AppRow({ item }: { item: AppLink }) {
           className="shrink-0 rounded px-2 py-0.5 cursor-pointer"
           style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
         >
-          Launch
+          {installed ? 'Open app' : 'Launch'}
         </button>
       </div>
       {open && (
@@ -144,9 +145,15 @@ function AppRow({ item }: { item: AppLink }) {
 }
 
 function Links({ items }: { items: AppLink[] }) {
+  const [native, setNative] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    fetchNativeApps().then(setNative).catch(() => {});
+  }, []);
   return (
     <ul className="flex flex-col gap-1.5">
-      {items.map((i) => <AppRow key={i.url} item={i} />)}
+      {items.map((i) => (
+        <AppRow key={i.url} item={i} installed={!!native[new URL(i.url).hostname]} />
+      ))}
     </ul>
   );
 }

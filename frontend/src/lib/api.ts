@@ -477,13 +477,21 @@ export async function fetchServerMusic(): Promise<{ root: string; files: string[
   return res.json();
 }
 
-export async function openAllowedLink(url: string): Promise<void> {
+export async function openAllowedLink(url: string): Promise<'app' | 'browser'> {
   const res = await apiFetch('/v1/media/open-link', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
   });
   if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+  const data = await res.json().catch(() => ({}));
+  return data.via === 'app' ? 'app' : 'browser';
+}
+
+export async function fetchNativeApps(): Promise<Record<string, boolean>> {
+  const res = await apiFetch('/v1/media/native-apps');
+  if (!res.ok) return {};
+  return res.json();
 }
 
 export async function fetchMediaLibrary(): Promise<Array<{ name: string; kind: 'image' | 'video' | 'audio'; url: string; modified: number }>> {

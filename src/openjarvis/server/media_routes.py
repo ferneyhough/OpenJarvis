@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -369,11 +370,47 @@ LINK_HOSTS = {
 
 class OpenLinkRequest(BaseModel):
     url: str = Field(max_length=500)
+    prefer_app: bool = True
+
+
+# host -> (URL scheme the desktop app registers, URI used to launch it).
+NATIVE_APPS: dict[str, tuple[str, str]] = {
+    "open.spotify.com": ("spotify", "spotify:"),
+    "listen.tidal.com": ("tidal", "tidal://"),
+    "music.apple.com": ("music", "music://"),
+    "music.amazon.com": ("amazonmusic", "amazonmusic://"),
+    "www.deezer.com": ("deezer", "deezer://"),
+    "www.audible.com": ("audible", "audible://"),
+    "store.steampowered.com": ("steam", "steam://store"),
+    "store.epicgames.com": ("com.epicgames.launcher", "com.epicgames.launcher://store"),
+    "www.gog.com": ("goggalaxy", "goggalaxy://"),
+}
+
+
+def _native_installed(scheme: str) -> bool:
+    """True when a desktop app has registered this URL scheme (Windows)."""
+    if sys.platform != "win32":
+        return False
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, scheme) as key:
+            winreg.QueryValueEx(key, "URL Protocol")
+        return True
+    except OSError:
+        return False
+
+
+@media_router.get("/native-apps")
+async def native_apps(request: Request):
+    """Which allow-listed services have an installed desktop app (local only)."""
+    _local_only(request)
+    return {host: _native_installed(s) for host, (s, _) in NATIVE_APPS.items()}
 
 
 @media_router.post("/open-link")
 async def open_link(req: OpenLinkRequest, request: Request):
-    """Open an allow-listed https link in the default browser (local only)."""
+    """Open an allow-listed link in its desktop app if installed, else the browser."""
     _local_only(request)
     import webbrowser
     from urllib.parse import urlparse
@@ -381,10 +418,16 @@ async def open_link(req: OpenLinkRequest, request: Request):
     parsed = urlparse(req.url)
     if parsed.scheme != "https" or parsed.hostname not in LINK_HOSTS:
         raise HTTPException(400, "Link not allowed")
-    opened = webbrowser.open(req.url)
-    if not opened:
+    native = NATIVE_APPS.get(parsed.hostname or "")
+    if req.prefer_app and native and _native_installed(native[0]):
+        try:
+            os.startfile(native[1])  # type: ignore[attr-defined]
+            return {"url": req.url, "opened": True, "via": "app"}
+        except OSError:
+            pass
+    if not webbrowser.open(req.url):
         raise HTTPException(500, "No browser could be opened")
-    return {"url": req.url, "opened": True}
+    return {"url": req.url, "opened": True, "via": "browser"}
 
 
 @media_router.get("/music")
