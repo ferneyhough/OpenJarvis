@@ -23,6 +23,7 @@ import {
   Tv,
   Users,
   Video,
+  Music2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
@@ -32,6 +33,8 @@ import { getSteamLibrary, launchSteamGame, type SteamLibrary } from '../../lib/s
 import { fetchMediaDocument, playMediaUrl } from '../../lib/media';
 import { parseM3U, parseXMLTV, type GuideProgram, type M3UChannel } from '../../lib/media-guide';
 import { useAppStore } from '../../lib/store';
+import { useMusicStore } from '../../lib/music';
+import { Links, MUSIC } from '../PageDetails';
 import { getCloudKeyStatus } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
 import { openHubService } from '../../lib/hub-voice';
@@ -41,7 +44,7 @@ import {
   type GameLauncherId,
 } from '../../lib/game-launchers';
 
-type HubSection = 'games' | 'social' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
+type HubSection = 'games' | 'social' | 'music' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
 type GameSource = 'steam' | 'playnite';
 
 interface HubService {
@@ -1215,6 +1218,26 @@ function DeveloperPanel() {
   );
 }
 
+function MusicPanel() {
+  const openPlayer = useMusicStore((s) => s.openPlayer);
+  return (
+    <div className="space-y-3 px-4 pb-4">
+      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+        Play local files and playlists in the Jarvis player, or open a music app. Say &ldquo;Jarvis open Spotify&rdquo;, &ldquo;pause&rdquo;, &ldquo;next&rdquo; or &ldquo;Jarvis return&rdquo;.
+      </p>
+      <button
+        type="button"
+        onClick={openPlayer}
+        className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm"
+        style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
+      >
+        <Music2 size={14} /> Open music player
+      </button>
+      <div className="text-xs"><Links items={MUSIC} /></div>
+    </div>
+  );
+}
+
 export function MainPageHub() {
   const [section, setSection] = useState<HubSection | null>(null);
   const [visitedSections, setVisitedSections] = useState<Set<HubSection>>(() => new Set());
@@ -1235,6 +1258,9 @@ export function MainPageHub() {
         </ActionButton>
         <ActionButton active={section === 'social'} onClick={() => selectSection('social')}>
           <ArrowUpRight size={15} /> Social
+        </ActionButton>
+        <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
+          <Music2 size={15} /> Music
         </ActionButton>
         <ActionButton active={section === 'media'} onClick={() => selectSection('media')}>
           <Tv size={15} /> Media
@@ -1260,6 +1286,7 @@ export function MainPageHub() {
       <div className={`max-h-[42vh] overflow-y-auto pb-2 ${section ? '' : 'hidden'}`}>
         {visitedSections.has('games') && <div hidden={section !== 'games'}><GamesPanel /></div>}
         {visitedSections.has('social') && <div hidden={section !== 'social'}><SocialPanel /></div>}
+        {visitedSections.has('music') && <div hidden={section !== 'music'}><MusicPanel /></div>}
         {visitedSections.has('media') && <div hidden={section !== 'media'}><MediaPanel /></div>}
         {visitedSections.has('record') && <div hidden={section !== 'record'}><LocalRecorder /></div>}
         {visitedSections.has('remote') && <div hidden={section !== 'remote'}><RemotePanel /></div>}
