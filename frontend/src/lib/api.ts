@@ -471,6 +471,12 @@ export async function openFreeMediaSite(kind: 'image' | 'video'): Promise<void> 
   if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
 }
 
+export async function fetchServerMusic(): Promise<{ root: string; files: string[] }> {
+  const res = await apiFetch('/v1/media/music');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function openAllowedLink(url: string): Promise<void> {
   const res = await apiFetch('/v1/media/open-link', {
     method: 'POST',

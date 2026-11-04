@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../lib/store';
+import { useMusicStore } from '../lib/music';
 import { fetchManagedAgents, fetchMediaLibrary, getBase, openAllowedLink, type ManagedAgent } from '../lib/api';
 import { listConnectors } from '../lib/connectors-api';
 import type { ConnectorInfo } from '../types/connectors';
@@ -190,6 +191,7 @@ export function PageDetails() {
   const conversations = useAppStore((s) => s.conversations);
   const activeId = useAppStore((s) => s.activeId);
   const selectConversation = useAppStore((s) => s.selectConversation);
+  const openPlayer = useMusicStore((s) => s.openPlayer);
 
   const page = PAGES[pathname] ?? { title: 'Page', keywords: [] };
 
@@ -339,7 +341,18 @@ export function PageDetails() {
                 </div>
               )
             )}
-            {tab === 'music' && <Links items={MUSIC} />}
+            {tab === 'music' && (
+              <>
+                <button
+                  onClick={openPlayer}
+                  className="mb-2 rounded px-2.5 py-1 cursor-pointer"
+                  style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
+                >
+                  Open music player
+                </button>
+                <Links items={MUSIC} />
+              </>
+            )}
             {tab === 'deals' && <Links items={DEALS} />}
             {tab === 'feeds' && <Links items={FEEDS} />}
             {tab === 'chats' && (

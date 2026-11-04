@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router';
 import { ApprovalBell } from './ApprovalBell';
 import { Sidebar } from './Sidebar/Sidebar';
 import { PageDetails } from './PageDetails';
+import { MusicPlayer } from './MusicPlayer';
 import { SystemPulse } from './SystemPulse';
 import { useAppStore } from '../lib/store';
 import { checkHealth } from '../lib/api';
@@ -69,6 +70,7 @@ export function Layout() {
             <Outlet />
           </div>
           <PageDetails />
+          <MusicPlayer />
         </main>
       </div>
     </div>

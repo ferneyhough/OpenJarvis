@@ -39,7 +39,9 @@ import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
 import { useHandsFree } from '../../hooks/useHandsFree';
 import { ChatToolbar, CHAT_MODES, MODE_PROMPTS, type Attachment } from './ChatToolbar';
-import { generateMedia, convertMedia, openFreeMediaSite } from '../../lib/api';
+import { generateMedia, convertMedia, openFreeMediaSite, openAllowedLink } from '../../lib/api';
+import { MUSIC_APPS, isShortReturnCommand, parseMusicVoiceCommand } from '../../lib/music-commands';
+import { runMusicAction } from '../../lib/music-actions';
 import type {
   ChatMessage,
   MessageTelemetry,
@@ -844,6 +846,16 @@ export function InputArea() {
   const pendingVoiceMessagesRef = useRef<string[]>([]);
   const launchedHubWindowRef = useRef<Window | null>(null);
   const handleVoiceCommand = useCallback((text: string) => {
+    const music = parseMusicVoiceCommand(text);
+    if (music && music.type !== 'open-app') {
+      runMusicAction(music);
+      return;
+    }
+    if (isShortReturnCommand(text)) {
+      window.focus();
+      toast.success('Returned to OpenJarvis.');
+      return;
+    }
     const launcherId = parseGameLauncherVoiceCommand(text);
     if (launcherId) {
       const launcher = gameLaunchers.find((entry) => entry.id === launcherId);
@@ -922,6 +934,16 @@ export function InputArea() {
         toast.error(`Could not open VS Code: ${error instanceof Error ? error.message : String(error)}`);
       });
       return;
+    }
+
+    if (music?.type === 'open-app') {
+      const app = MUSIC_APPS.find((a) => a.id === music.app);
+      if (app) {
+        void openAllowedLink(app.url)
+          .then(() => toast.success(`${app.label} opened. Say “Return to Jarvis” to go back.`))
+          .catch((error) => toast.error(`Could not open ${app.label}: ${error instanceof Error ? error.message : String(error)}`));
+        return;
+      }
     }
 
     if (isReturnToJarvisVoiceCommand(text)) {

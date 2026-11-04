@@ -35,6 +35,9 @@ MEDIA_DIR = Path(
     os.environ.get("OPENJARVIS_MEDIA_DIR", str(Path.home() / ".openjarvis" / "media"))
 )
 
+MUSIC_DIR = Path(os.environ.get("OPENJARVIS_MUSIC_DIR", str(Path.home() / "Music")))
+MUSIC_EXTS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".opus"}
+
 IMAGE_REPO = "stabilityai/sd-turbo"
 VIDEO_BASE_REPO = "stable-diffusion-v1-5/stable-diffusion-v1-5"
 VIDEO_ADAPTER_REPO = "ByteDance/AnimateDiff-Lightning"
@@ -380,6 +383,32 @@ async def open_link(req: OpenLinkRequest, request: Request):
         raise HTTPException(400, "Link not allowed")
     webbrowser.open(req.url)
     return {"url": req.url}
+
+
+@media_router.get("/music")
+async def list_music():
+    """List audio files in the music folder (~/Music or OPENJARVIS_MUSIC_DIR)."""
+    root = MUSIC_DIR
+    items = []
+    if root.is_dir():
+        for p in root.rglob("*"):
+            if p.is_file() and p.suffix.lower() in MUSIC_EXTS:
+                items.append(str(p.relative_to(root)).replace("\\", "/"))
+                if len(items) >= 1000:
+                    break
+    items.sort(key=str.lower)
+    return {"root": str(root), "files": items}
+
+
+@media_router.get("/music/file")
+async def music_file(path: str):
+    root = MUSIC_DIR.resolve()
+    target = (root / path).resolve()
+    if root not in target.parents or target.suffix.lower() not in MUSIC_EXTS:
+        raise HTTPException(404, "Not found")
+    if not target.is_file():
+        raise HTTPException(404, "Not found")
+    return FileResponse(target)
 
 
 @media_router.get("/library")
