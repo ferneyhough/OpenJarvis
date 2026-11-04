@@ -79,6 +79,25 @@ run.bat          REM  Windows
 
 The HUD window opens. Type a command, or hit **🎤 TALK** and speak.
 
+### Desktop app (web UI in a native WebView2 window)
+
+```cmd
+python jarvis_desktop.py
+```
+
+`run.bat` starts this. It launches `jarvis serve` on port 8000 if needed and opens it in a
+native window. Chat needs Ollama with `qwen3.5:4b` (`install.bat` installs both).
+
+- **Voice:** one global voice, Kokoro `bm_george`, everywhere. Models download into `models\`.
+- **Chat toolbar:** model picker, Ask/Agent/Plan/Edit modes, tool permissions, file/image
+  attach, edit/resend/regenerate on messages, and slash commands (`/help`).
+- **AI image:** `/image <prompt>` (sd-turbo, local; minutes on CPU).
+- **AI video:** `/video <prompt>` (AnimateDiff-Lightning; very slow on CPU, about 20 min).
+- **Convert:** the **Convert…** dropdown or `/convert <format>` converts audio/video via the
+  bundled ffmpeg (`imageio-ffmpeg`). Output files are in `%USERPROFILE%\.openjarvis\media`.
+- Download the image/video models with `python scripts\download_media_models.py` and the
+  voice models with `python scripts\download_voice_models.py`.
+
 ### Try these
 
 ```

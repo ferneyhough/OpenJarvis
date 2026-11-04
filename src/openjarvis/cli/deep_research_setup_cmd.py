@@ -259,7 +259,10 @@ def ingest_sources(
         Path for the SyncEngine checkpoint database.  Defaults to
         ``~/.openjarvis/sync_state.db`` when empty.
 
-    Returns total chunks indexed across all sources.
+    Returns
+    -------
+    int
+        Total chunks indexed across all sources.
     """
     pipeline = IngestionPipeline(store, embedder=default_embedder())
     engine = SyncEngine(pipeline, state_db=state_db)

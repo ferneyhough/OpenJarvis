@@ -5,14 +5,21 @@ Premium automatically falls back to free if it fails.
 Wake word: always detected with the free recognizer so idle listening costs nothing.
 """
 import io
+import os
 import sys
 import time
 import wave
 import queue
 import asyncio
 import threading
+from pathlib import Path
+
+# Keep voice models inside the install folder.
+os.environ.setdefault("HF_HOME", str(Path(__file__).resolve().parent / "models" / "huggingface"))
 
 PREMIUM_VOICES = ["onyx", "echo", "fable", "alloy", "ash", "coral", "nova", "sage", "shimmer"]
+GEORGE_VOICE = "bm_george"
+GEORGE_SPEED = 0.9
 
 
 class Voice:
@@ -29,7 +36,7 @@ class Voice:
         self._sr = None
         self._recognizer = None
         self._mic = None
-
+        self._kokoro = None
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._loop.run_forever, daemon=True).start()
         threading.Thread(target=self._tts_worker, daemon=True).start()
@@ -53,6 +60,26 @@ class Voice:
         if voices and 0 <= idx < len(voices):
             engine.setProperty("voice", voices[idx].id)
         return engine
+
+    def _speak_george(self, text: str) -> bool:
+        """Speak with the local Kokoro British voice 'bm_george' (the only AI voice)."""
+        try:
+            import numpy as np
+            if self._kokoro is None:
+                from kokoro import KPipeline
+                self._kokoro = KPipeline(lang_code="b")
+            speed = float(self.cfg.get("voice_speed", GEORGE_SPEED))
+            chunks = [np.asarray(a) for _, _, a in
+                      self._kokoro(text[:4000], voice=GEORGE_VOICE, speed=speed)]
+            if not chunks:
+                return False
+            pcm = (np.concatenate(chunks) * 32767).astype("<i2").tobytes()
+            self._play_wav(pcm_to_wav(pcm))
+            return True
+        except Exception as e:
+            self.last_error = f"George voice failed, using Windows voice: {e}"
+            print(f"[voice] {self.last_error}")
+            return False
 
     def _speak_premium(self, text: str) -> bool:
         try:
@@ -100,7 +127,7 @@ class Voice:
                 break
             self.speaking.set()
             try:
-                if not (self._premium() and self._speak_premium(text)):
+                if not self._speak_george(text):
                     engine = engine or self._init_sapi()
                     engine.say(text)
                     engine.runAndWait()

@@ -97,7 +97,7 @@ does not delete previously submitted entries from Supabase.
 
 The canonical, authoritative list with every property name and its
 type validator lives in
-[`src/openjarvis/analytics/events.py`](../src/openjarvis/analytics/events.py).
+[`src/openjarvis/analytics/events.py`](https://github.com/ferneyhough/OpenJarvis/blob/main/src/openjarvis/analytics/events.py).
 That file is the only place new events can be added — PR review is
 the gate.
 
@@ -122,11 +122,11 @@ Backend events use a property allowlist and value-level redaction:
 
 Two independent filters run before backend event properties are sent:
 
-1. [`src/openjarvis/analytics/redaction.py`](../src/openjarvis/analytics/redaction.py) — value-level pattern matching (20+ regexes for PII).
-2. [`src/openjarvis/analytics/events.py`](../src/openjarvis/analytics/events.py) — structural allowlist (event name + property name + type validator).
+1. [`src/openjarvis/analytics/redaction.py`](https://github.com/ferneyhough/OpenJarvis/blob/main/src/openjarvis/analytics/redaction.py) — value-level pattern matching (20+ regexes for PII).
+2. [`src/openjarvis/analytics/events.py`](https://github.com/ferneyhough/OpenJarvis/blob/main/src/openjarvis/analytics/events.py) — structural allowlist (event name + property name + type validator).
 
 Any failure at either layer → the event or property is silently
-dropped. Tests covering the patterns: [`tests/analytics/test_redaction.py`](../tests/analytics/test_redaction.py).
+dropped. Tests covering the patterns: [`tests/analytics/test_redaction.py`](https://github.com/ferneyhough/OpenJarvis/blob/main/tests/analytics/test_redaction.py).
 
 The frontend sends directly through `posthog-js`. Its wrapper restricts event
 names but does not use these backend property filters. The SDK can add browser
@@ -176,7 +176,7 @@ previous UUID remain on the receiving service until deleted there.
 
 - Local telemetry (FLOPs, energy, latency stored in
   `~/.openjarvis/telemetry.db`) is a **separate** subsystem documented
-  in [`src/openjarvis/telemetry/`](../src/openjarvis/telemetry/). It
+  in [`src/openjarvis/telemetry/`](https://github.com/ferneyhough/OpenJarvis/tree/main/src/openjarvis/telemetry). It
   never leaves the machine and is controlled by `[telemetry]` (not
   `[analytics]`) in `config.toml`.
 - The leaderboard / contest opt-in (`OptInModal.tsx`) is a separate,

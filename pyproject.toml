@@ -185,6 +185,21 @@ speech = [
     "soundfile>=0.12",
 ]
 speech-deepgram = ["deepgram-sdk>=3.0"]
+imagegen = [
+    "accelerate>=0.30",
+    "peft>=0.10",
+    "pillow>=10.2.0",
+    "imageio>=2.34",
+    "imageio-ffmpeg>=0.5",
+    "python-multipart>=0.0.9",
+]
+desktop-app = [
+    "pywebview>=5.0",
+    "kokoro>=0.9",
+    "soundfile",
+    "misaki[en]",
+    "faster-whisper>=1.0",
+]
 eval-wandb = ["wandb>=0.17"]
 eval-sheets = ["gspread>=6.0", "google-auth>=2.0"]
 mining-pearl-cpu = [
@@ -246,13 +261,22 @@ openjarvis-rust = { path = "rust/crates/openjarvis-python" }
 [tool.hatch.build.targets.sdist]
 # Tauri release bundles carry these executables; Python source distributions
 # must not duplicate platform binaries on every PyPI release.
+include = [
+    "/deploy/windows/**",
+    "/frontend/src-tauri/src/**",
+    "/scripts/install/**",
+    "/src/openjarvis/**",
+]
 exclude = [
     "/desktop/src-tauri/binaries",
     "/frontend/src-tauri/binaries",
 ]
 # The publishing workflow builds this UI before packaging. Keep its generated
 # files even though the directory is intentionally ignored by Git.
-artifacts = ["/src/openjarvis/server/static/**"]
+artifacts = [
+    "/src/openjarvis/server/static/**",
+    "/src/openjarvis/templates/data/assistant.toml",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openjarvis"]
@@ -262,6 +286,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
+"src/openjarvis/templates/data/assistant.toml" = "openjarvis/templates/data/assistant.toml"
 "src/openjarvis/agents/claude_code_runner/index.mjs" = "_node_modules/claude_code_runner/index.mjs"
 "src/openjarvis/agents/claude_code_runner/package.json" = "_node_modules/claude_code_runner/package.json"
 "src/openjarvis/channels/whatsapp_baileys_bridge" = "_node_modules/whatsapp_baileys_bridge"

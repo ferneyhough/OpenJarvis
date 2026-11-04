@@ -105,8 +105,15 @@ try:
         port: Optional[int] = None
         security: Optional[str] = None
 
+    class PersonalSourceSearchRequest(_BaseModel):
+        """Bounded query against the user's currently connected sources."""
+
+        query: str
+        top_k: int = 5
+
 except ImportError:
     ConnectRequest = None  # type: ignore[assignment,misc]
+    PersonalSourceSearchRequest = None  # type: ignore[assignment,misc]
 
 
 def create_connectors_router():
@@ -124,6 +131,8 @@ def create_connectors_router():
         ) from exc
 
     if ConnectRequest is None:
+        raise ImportError("pydantic is required for the connectors router")
+    if PersonalSourceSearchRequest is None:
         raise ImportError("pydantic is required for the connectors router")
 
     from openjarvis.core.registry import ConnectorRegistry
@@ -448,6 +457,73 @@ def create_connectors_router():
                     }
                 )
         return {"connectors": results}
+
+    @router.post("/search")
+    def search_connected_sources(req: PersonalSourceSearchRequest):
+        """Search only the indexed data owned by currently connected sources."""
+        query = req.query.strip()
+        if not query:
+            raise HTTPException(
+                status_code=422, detail="A non-empty search query is required."
+            )
+        if len(query) > 1000:
+            raise HTTPException(
+                status_code=422,
+                detail="Search queries must be 1000 characters or fewer.",
+            )
+        if not 1 <= req.top_k <= 8:
+            raise HTTPException(
+                status_code=422, detail="top_k must be between 1 and 8."
+            )
+
+        _ensure_connectors_registered()
+        allowed_sources = []
+        for connector_id in ConnectorRegistry.keys():
+            try:
+                connector = _get_or_create(connector_id)
+                if connector.is_connected():
+                    allowed_sources.extend(_knowledge_sources(connector_id, connector))
+            except Exception:
+                logger.warning(
+                    "Could not verify connector %r for personal-source search",
+                    connector_id,
+                    exc_info=True,
+                )
+
+        allowed_sources = sorted(set(allowed_sources))
+        if not allowed_sources:
+            return {"results": []}
+
+        try:
+            from openjarvis.connectors.hybrid_search import HybridSearch
+            from openjarvis.connectors.store import KnowledgeStore
+
+            with KnowledgeStore() as store:
+                hits = HybridSearch(store).search(
+                    query,
+                    sources=allowed_sources,
+                    limit=req.top_k,
+                )
+            return {
+                "results": [
+                    {
+                        "source": hit.source,
+                        "title": hit.title,
+                        "author": ", ".join(hit.participants),
+                        "timestamp": hit.timestamp,
+                        "url": hit.url,
+                        "content": hit.content_snippet,
+                    }
+                    for hit in hits
+                    if hit.source in allowed_sources
+                ]
+            }
+        except Exception as exc:
+            logger.exception("Personal-source search failed")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Could not search connected sources: {exc}",
+            ) from exc
 
     @router.get("/{connector_id}")
     async def connector_detail(connector_id: str):

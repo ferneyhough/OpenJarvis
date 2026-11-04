@@ -431,6 +431,55 @@ export async function fetchTtsHealth(): Promise<TtsHealth> {
   return res.json();
 }
 
+export async function openMicSettings(): Promise<void> {
+  await apiFetch(`/v1/speech/open-mic-settings`, { method: 'POST' });
+}
+
+export interface MediaResult {
+  kind: 'image' | 'video' | 'audio';
+  url: string;
+  name?: string;
+}
+
+export async function generateMedia(
+  kind: 'image' | 'video',
+  prompt: string,
+  onStage?: (stage: string) => void,
+  signal?: AbortSignal,
+): Promise<MediaResult> {
+  const res = await apiFetch(`/v1/media/${kind}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+  const { job_id } = await res.json();
+  for (;;) {
+    if (signal?.aborted) throw new Error('Cancelled');
+    await new Promise((r) => setTimeout(r, 2000));
+    const jr = await apiFetch(`/v1/media/jobs/${job_id}`);
+    const job = await jr.json();
+    if (job.stage) onStage?.(job.stage);
+    if (job.status === 'done') return { kind, url: `${getBase()}${job.url}` };
+    if (job.status === 'error') throw new Error(job.error || 'Generation failed');
+  }
+}
+
+export async function convertMedia(file: File, target: string): Promise<MediaResult> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('target', target);
+  const res = await apiFetch(`/v1/media/convert`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+  const data = await res.json();
+  const audio = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(target);
+  return {
+    kind: audio ? 'audio' : 'video',
+    url: `${getBase()}${data.url}`,
+    name: data.name,
+  };
+}
+
 export async function fetchSpeechHealth(): Promise<SpeechHealth> {
   if (isTauri()) {
     try {

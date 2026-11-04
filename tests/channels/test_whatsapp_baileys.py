@@ -74,6 +74,34 @@ class TestEnsureBridge:
             with pytest.raises(RuntimeError, match="Node.js is required"):
                 ch._ensure_bridge()
 
+    def test_runs_resolved_npm_executable(self, tmp_path):
+        ch = WhatsAppBaileysChannel()
+        ch._runtime_dir = tmp_path / "runtime"
+        bridge_source = tmp_path / "bridge-source"
+        (bridge_source / "dist").mkdir(parents=True)
+        (bridge_source / "package.json").write_text("{}")
+        (bridge_source / "dist" / "bridge.js").write_text("// bridge")
+        npm_executable = r"C:\Program Files\nodejs\npm.cmd"
+        with (
+            patch("openjarvis.channels.whatsapp_baileys._BRIDGE_SRC", bridge_source),
+            patch(
+                "shutil.which",
+                side_effect=lambda name: {
+                    "node": r"C:\Program Files\nodejs\node.exe",
+                    "npm": npm_executable,
+                }.get(name),
+            ),
+            patch("subprocess.run") as npm_install,
+        ):
+            ch._ensure_bridge()
+
+        npm_install.assert_called_once_with(
+            [npm_executable, "install", "--production"],
+            cwd=str(ch._runtime_dir),
+            check=True,
+            capture_output=True,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Connect / Disconnect lifecycle

@@ -52,6 +52,22 @@ if not exist config.json (
     echo [+] Created config.json
 )
 
+echo [+] Installing OpenJarvis web UI, desktop window and voice (Kokoro / Whisper)
+pip install -e . pywebview "kokoro>=0.9" soundfile "misaki[en]" faster-whisper --quiet
+echo [+] Downloading voice and hands-free models into .\models
+python scripts\download_voice_models.py
+
+echo [+] Installing image/video generation and converter packages
+pip install diffusers accelerate peft pillow imageio imageio-ffmpeg python-multipart --quiet
+echo [+] Downloading image and video models (about 5 GB, one time)
+python scripts\download_media_models.py
+
+where ollama >nul 2>&1
+if errorlevel 1 (
+    echo [+] Installing Ollama for local chat
+    winget install -e --id Ollama.Ollama --accept-package-agreements --accept-source-agreements --silent
+)
+ollama pull qwen3.5:4b
 echo.
 echo  ============================================================
 echo    Install complete.

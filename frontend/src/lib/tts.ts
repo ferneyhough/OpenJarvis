@@ -20,9 +20,11 @@ interface TtsStore {
   errorId: string | null;
   /** null until the health probe has answered. */
   available: boolean | null;
+  /** Active TTS backend, used to avoid sending backend-specific voice IDs elsewhere. */
+  backend: string | null;
   /** Last message spoken by autoplay, so a re-render never repeats it. */
   autoSpokenId: string | null;
-  speak: (id: string, text: string) => Promise<void>;
+  speak: (id: string, text: string, voiceId?: string) => Promise<void>;
   stop: () => void;
   ensureHealth: () => Promise<void>;
   markAutoSpoken: (id: string) => void;
@@ -80,13 +82,14 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
   error: null,
   errorId: null,
   available: null,
+  backend: null,
   autoSpokenId: null,
 
   ensureHealth: () => {
     if (healthProbe) return healthProbe;
     healthProbe = fetchTtsHealth()
       .then((health) => {
-        set({ available: health.available });
+        set({ available: health.available, backend: health.backend ?? null });
         if (!health.available) healthProbe = null;
       })
       .catch(() => {
@@ -98,7 +101,7 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
 
   markAutoSpoken: (id: string) => set({ autoSpokenId: id }),
 
-  speak: async (id: string, text: string) => {
+  speak: async (id: string, text: string, voiceId?: string) => {
     const trimmed = toSpeakableText(text);
     if (!trimmed) return;
 
@@ -113,7 +116,8 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
     controller = ac;
 
     try {
-      const blob = await synthesizeSpeech(trimmed, { signal: ac.signal });
+      const selectedVoice = get().backend === 'kokoro' ? voiceId : undefined;
+      const blob = await synthesizeSpeech(trimmed, { voiceId: selectedVoice, signal: ac.signal });
       if (mine !== token) return;
 
       const url = URL.createObjectURL(blob);
@@ -165,6 +169,7 @@ export function __resetTtsForTests(): void {
     error: null,
     errorId: null,
     available: null,
+    backend: null,
     autoSpokenId: null,
   });
 }

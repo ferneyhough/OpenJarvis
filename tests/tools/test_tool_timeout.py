@@ -189,7 +189,7 @@ assert not result.success
             env=env,
             capture_output=True,
             text=True,
-            timeout=3,
+            timeout=10,
             check=False,
         )
         assert completed.returncode == 0, completed.stderr

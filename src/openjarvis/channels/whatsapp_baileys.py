@@ -124,13 +124,24 @@ class WhatsAppBaileysChannel(BaseChannel):
         # Run npm install if node_modules is missing.
         node_modules = runtime / "node_modules"
         if not node_modules.exists():
+            npm_executable = shutil.which("npm") or shutil.which("npm.cmd")
+            if npm_executable is None:
+                raise RuntimeError(
+                    "npm is required for WhatsAppBaileysChannel but was not "
+                    "found on PATH. Install Node.js 22+ and try again."
+                )
             logger.info("Running npm install in %s", runtime)
-            subprocess.run(
-                ["npm", "install", "--production"],
-                cwd=str(runtime),
-                check=True,
-                capture_output=True,
-            )
+            try:
+                subprocess.run(
+                    [npm_executable, "install", "--production"],
+                    cwd=str(runtime),
+                    check=True,
+                    capture_output=True,
+                )
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise RuntimeError(
+                    f"Failed to install WhatsApp bridge dependencies: {exc}"
+                ) from exc
 
         bridge_js = runtime / "dist" / "bridge.js"
         if not bridge_js.exists():

@@ -5,7 +5,8 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import 'katex/dist/katex.min.css';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Pencil, RotateCcw } from 'lucide-react';
+import { useAppStore } from '../../lib/store';
 import { AudioPlayer } from './AudioPlayer';
 import { ToolCallCard } from './ToolCallCard';
 import { ResearchTimeline } from './ResearchTimeline';
@@ -96,9 +97,62 @@ function CopyMessageButton({ content }: { content: string }) {
   );
 }
 
+function MediaList({ media }: { media?: ChatMessage['media'] }) {
+  if (!media?.length) return null;
+  return (
+    <div className="flex flex-col gap-2 my-2">
+      {media.map((m, i) =>
+        m.kind === 'image' ? (
+          <img key={i} src={m.url} alt={m.name ?? 'image'} className="max-w-full rounded-lg" style={{ maxHeight: 420 }} />
+        ) : m.kind === 'video' ? (
+          <video key={i} src={m.url} controls loop className="max-w-full rounded-lg" style={{ maxHeight: 420 }} />
+        ) : (
+          <audio key={i} src={m.url} controls />
+        ),
+      )}
+      {media.map((m, i) =>
+        m.kind !== 'image' || m.url.startsWith('http') ? (
+          <a key={`d${i}`} href={m.url} download className="text-xs underline" style={{ color: 'var(--color-accent)' }}>
+            Download {m.kind}
+          </a>
+        ) : null,
+      )}
+    </div>
+  );
+}
+
+function ActionButton({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+      style={{ color: 'var(--color-text-tertiary)' }}
+      title={title}
+      aria-label={title}
+    >
+      {children}
+    </button>
+  );
+}
+
+function resend(messageId: string, content: string) {
+  const st = useAppStore.getState();
+  if (st.streamState.isStreaming || !st.activeId) return;
+  st.truncateFrom(st.activeId, messageId);
+  window.dispatchEvent(new CustomEvent('jarvis:resend', { detail: { content } }));
+}
+
 export function MessageBubble({ message, isLive = false }: Props) {
   const isUser = message.role === 'user';
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content);
 
+  const retry = () => {
+    const msgs = useAppStore.getState().messages;
+    const i = msgs.findIndex((m) => m.id === message.id);
+    const prev = i > 0 ? msgs[i - 1] : undefined;
+    if (prev?.role === 'user') resend(prev.id, prev.content);
+  };
   const cleanContent = useMemo(() => stripThinkTags(message.content), [message.content]);
 
   // Build a ref→source lookup once per render. Memoized so the rehype plugin
@@ -119,7 +173,7 @@ export function MessageBubble({ message, isLive = false }: Props) {
 
   if (isUser) {
     return (
-      <div className="flex justify-end mb-4">
+      <div className="group flex flex-col items-end mb-4">
         <div
           className="max-w-[85%] px-4 py-2.5 text-sm leading-relaxed"
           style={{
@@ -130,8 +184,44 @@ export function MessageBubble({ message, isLive = false }: Props) {
             wordBreak: 'break-word',
           }}
         >
-          {message.content}
+          {editing ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={3}
+                className="w-full rounded p-2 text-sm"
+                style={{ background: 'var(--color-input-bg)', color: 'var(--color-text)' }}
+              />
+              <div className="flex justify-end gap-2 text-xs">
+                <button onClick={() => setEditing(false)}>Cancel</button>
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    if (draft.trim()) resend(message.id, draft.trim());
+                  }}
+                  className="font-semibold"
+                >
+                  Save &amp; resend
+                </button>
+              </div>
+            </div>
+          ) : (
+            message.content
+          )}
+          <MediaList media={message.media} />
         </div>
+        {!editing && (
+          <div className="flex items-center gap-1 mt-1">
+            <ActionButton title="Edit message" onClick={() => { setDraft(message.content); setEditing(true); }}>
+              <Pencil size={14} />
+            </ActionButton>
+            <ActionButton title="Resend" onClick={() => resend(message.id, message.content)}>
+              <RotateCcw size={14} />
+            </ActionButton>
+            <CopyMessageButton content={message.content} />
+          </div>
+        )}
       </div>
     );
   }
@@ -174,9 +264,16 @@ export function MessageBubble({ message, isLive = false }: Props) {
         </div>
       )}
 
+      <MediaList media={message.media} />
+
       {/* Footer: copy + read aloud + x-ray */}
       <div className="flex items-center gap-2 mt-1.5">
         <CopyMessageButton content={cleanContent} />
+        {!isLive && (
+          <ActionButton title="Regenerate response" onClick={retry}>
+            <RotateCcw size={14} />
+          </ActionButton>
+        )}
         {!isUser && !isLive && (
           <SpeakMessageButton messageId={message.id} content={cleanContent} />
         )}

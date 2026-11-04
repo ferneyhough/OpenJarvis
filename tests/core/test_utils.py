@@ -14,9 +14,37 @@ import pytest
 
 from openjarvis.core.utils import (
     _windows_process_alive,
+    open_browser,
     process_alive,
     terminate_process,
 )
+
+
+class TestOpenBrowser:
+    def test_windows_opens_url_without_shell(self) -> None:
+        url = "https://example.com/oauth?code=a&scope=b"
+        with (
+            patch("openjarvis.core.utils.platform.system", return_value="Windows"),
+            patch("openjarvis.core.utils.os.startfile", create=True) as startfile,
+            patch("openjarvis.core.utils.webbrowser.open") as browser_open,
+        ):
+            open_browser(url)
+        startfile.assert_called_once_with(url)
+        browser_open.assert_not_called()
+
+    def test_windows_falls_back_when_startfile_fails(self) -> None:
+        url = "https://example.com/oauth?code=a&scope=b"
+        with (
+            patch("openjarvis.core.utils.platform.system", return_value="Windows"),
+            patch(
+                "openjarvis.core.utils.os.startfile",
+                side_effect=OSError,
+                create=True,
+            ),
+            patch("openjarvis.core.utils.webbrowser.open") as browser_open,
+        ):
+            open_browser(url)
+        browser_open.assert_called_once_with(url)
 
 
 class TestProcessAlive:

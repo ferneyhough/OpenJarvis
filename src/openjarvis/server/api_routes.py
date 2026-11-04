@@ -1190,6 +1190,64 @@ async def tts_health(request: Request):
     }
 
 
+@speech_router.post("/open-mic-settings")
+async def open_mic_settings(request: Request):
+    """Open the OS microphone privacy page and the browser's mic site settings.
+
+    Local-only: this launches programs on the machine running the server.
+    """
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Local requests only")
+
+    opened: List[str] = []
+    if sys.platform == "win32":
+        try:
+            os.startfile("ms-settings:privacy-microphone")  # type: ignore[attr-defined]
+            opened.append("windows-privacy")
+        except OSError:
+            logger.debug("Could not open Windows mic privacy page", exc_info=True)
+
+        browser, url = "chrome", "chrome://settings/content/microphone"
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\Shell\Associations"
+                r"\UrlAssociations\http\UserChoice",
+            )
+            prog_id = winreg.QueryValueEx(key, "ProgId")[0].lower()
+            if "edge" in prog_id or "msedge" in prog_id:
+                browser, url = "msedge", "edge://settings/content/microphone"
+            elif "firefox" in prog_id:
+                browser, url = "firefox", "about:preferences#privacy"
+            elif "brave" in prog_id:
+                browser, url = "brave", "brave://settings/content/microphone"
+        except OSError:
+            pass
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "", browser, url])
+            opened.append(browser)
+        except OSError:
+            logger.debug("Could not open browser mic settings", exc_info=True)
+    elif sys.platform == "darwin" and shutil.which("open"):
+        subprocess.Popen(
+            [
+                "open",
+                "x-apple.systempreferences:com.apple.preference.security"
+                "?Privacy_Microphone",
+            ]
+        )
+        opened.append("macos-privacy")
+    return {"opened": opened}
+
+
 # ---- Feedback routes ----
 
 feedback_router = APIRouter(prefix="/v1/feedback", tags=["feedback"])

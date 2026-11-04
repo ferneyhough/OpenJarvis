@@ -39,9 +39,15 @@ def test_has_channel_id(channel_entry):
     assert len(channel_cls.channel_id) > 0
 
 
-def test_connect_no_credentials_no_crash(channel_entry):
+def test_connect_no_credentials_no_crash(channel_entry, monkeypatch):
     key, channel_cls = channel_entry
     ch = channel_cls()
+    if key == "whatsapp_baileys":
+
+        def fail_bridge_setup():
+            raise RuntimeError("bridge setup unavailable in contract test")
+
+        monkeypatch.setattr(ch, "_ensure_bridge", fail_bridge_setup)
     ch.connect()
     # Should not raise — just set status to ERROR or DISCONNECTED
 

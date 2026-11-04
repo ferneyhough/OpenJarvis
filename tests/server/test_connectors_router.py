@@ -78,6 +78,99 @@ def test_connector_not_found(app):
     assert resp.status_code == 404
 
 
+def test_search_connected_sources_only_returns_connected_source_results(
+    app, monkeypatch
+):
+    """Search results are limited to connected connector sources."""
+    from contextlib import nullcontext
+
+    from openjarvis.connectors import hybrid_search, store
+    from openjarvis.core.registry import ConnectorRegistry
+    from openjarvis.server.connectors_router import _instances
+
+    class ConnectedConnector:
+        indexed_sources = ("obsidian",)
+
+        def is_connected(self):
+            return True
+
+    class DisconnectedConnector:
+        indexed_sources = ("gmail",)
+
+        def is_connected(self):
+            return False
+
+    monkeypatch.setattr(
+        ConnectorRegistry,
+        "keys",
+        classmethod(lambda cls: ("obsidian", "gmail")),
+    )
+    monkeypatch.setitem(_instances, "obsidian", ConnectedConnector())
+    monkeypatch.setitem(_instances, "gmail", DisconnectedConnector())
+    monkeypatch.setattr(store, "KnowledgeStore", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        hybrid_search.HybridSearch,
+        "search",
+        lambda self, query, **kwargs: [
+            type(
+                "Hit",
+                (),
+                {
+                    "source": "obsidian",
+                    "title": "Project notes",
+                    "participants": ["Alex"],
+                    "timestamp": "2025-01-02",
+                    "url": "https://example.test/notes",
+                    "content_snippet": "A relevant note.",
+                },
+            )(),
+            type(
+                "Hit",
+                (),
+                {
+                    "source": "gmail",
+                    "title": "Unconnected email",
+                    "participants": ["Alex"],
+                    "timestamp": "2025-01-02",
+                    "url": "",
+                    "content_snippet": "Must not be returned.",
+                },
+            )(),
+        ],
+    )
+
+    response = app.post(
+        "/v1/connectors/search",
+        json={"query": "project update", "top_k": 5},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["results"] == [
+        {
+            "source": "obsidian",
+            "title": "Project notes",
+            "author": "Alex",
+            "timestamp": "2025-01-02",
+            "url": "https://example.test/notes",
+            "content": "A relevant note.",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("payload", "detail"),
+    [
+        ({"query": "  "}, "A non-empty search query is required."),
+        ({"query": "anything", "top_k": 9}, "top_k must be between 1 and 8."),
+    ],
+)
+def test_search_connected_sources_rejects_invalid_requests(app, payload, detail):
+    response = app.post("/v1/connectors/search", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == detail
+
+
 def test_connect_obsidian(app, tmp_path):
     """POST /v1/connectors/obsidian/connect with a valid path marks it connected."""
     # Create a minimal vault directory so is_connected() returns True.

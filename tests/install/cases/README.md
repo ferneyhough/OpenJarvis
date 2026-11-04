@@ -1,6 +1,6 @@
 # Failure-mode regression catalog
 
-Every error-handling case from the [design doc §8](../../../docs/superpowers/specs/2026-05-03-cli-cold-start-refresh-design.md) is documented here, with:
+Every error-handling case for the installer cold-start refresh is documented here, with:
 
 - The trigger conditions
 - The expected user-visible behavior

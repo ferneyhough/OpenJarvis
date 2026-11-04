@@ -411,7 +411,13 @@ class PrivacyScanner:
 
     def run_all(self) -> list[ScanResult]:
         """Run all checks, filter to the current platform, hide 'skip' results."""
-        current_plat = "darwin" if sys.platform == "darwin" else "linux"
+        current_plat = (
+            "darwin"
+            if sys.platform == "darwin"
+            else "linux"
+            if sys.platform.startswith("linux")
+            else sys.platform
+        )
         results: list[ScanResult] = []
         for check_fn in self._get_all_checks():
             result = check_fn()
@@ -424,12 +430,20 @@ class PrivacyScanner:
 
     def run_quick(self) -> list[ScanResult]:
         """Run only critical checks: disk encryption + cloud sync agents."""
-        current_plat = "darwin" if sys.platform == "darwin" else "linux"
+        current_plat = (
+            "darwin"
+            if sys.platform == "darwin"
+            else "linux"
+            if sys.platform.startswith("linux")
+            else sys.platform
+        )
         quick_checks: list[Callable[[], ScanResult]]
         if current_plat == "darwin":
             quick_checks = [self.check_filevault, self.check_cloud_sync_agents]
-        else:
+        elif current_plat == "linux":
             quick_checks = [self.check_luks, self.check_cloud_sync_agents]
+        else:
+            quick_checks = [self.check_cloud_sync_agents]
         results = []
         for check_fn in quick_checks:
             result = check_fn()

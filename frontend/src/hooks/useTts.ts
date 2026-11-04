@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTtsStore } from '../lib/tts';
+import { useAppStore } from '../lib/store';
 
 export type { TtsState } from '../lib/tts';
 
@@ -16,9 +17,14 @@ export function useTts() {
   const error = useTtsStore((s) => s.error);
   const errorId = useTtsStore((s) => s.errorId);
   const available = useTtsStore((s) => s.available);
-  const speak = useTtsStore((s) => s.speak);
+  const speakToVoice = useTtsStore((s) => s.speak);
+  const voiceId = useAppStore((s) => s.settings.voiceId);
   const stop = useTtsStore((s) => s.stop);
   const ensureHealth = useTtsStore((s) => s.ensureHealth);
+  const speak = useCallback(
+    (id: string, text: string) => speakToVoice(id, text, voiceId),
+    [speakToVoice, voiceId],
+  );
 
   useEffect(() => {
     ensureHealth();

@@ -24,9 +24,9 @@ If manifest.version > installed_version:
 ```
 
 The frontend code lives in
-[`frontend/src/components/Desktop/UpdateChecker.tsx`](../frontend/src/components/Desktop/UpdateChecker.tsx);
+[`frontend/src/components/Desktop/UpdateChecker.tsx`](https://github.com/ferneyhough/OpenJarvis/blob/main/frontend/src/components/Desktop/UpdateChecker.tsx);
 the Tauri wiring is in
-[`frontend/src-tauri/tauri.conf.json`](../frontend/src-tauri/tauri.conf.json)
+[`frontend/src-tauri/tauri.conf.json`](https://github.com/ferneyhough/OpenJarvis/blob/main/frontend/src-tauri/tauri.conf.json)
 under `plugins.updater`.
 
 Windows ARM64 releases use an NSIS `arm64-setup.exe` installer, with a separate
@@ -37,7 +37,7 @@ so an ARM64 app cannot be offered an x64 package by the release manifest.
 ## How releases reach the update endpoint
 
 The `Desktop Build & Release` GitHub Action
-([`.github/workflows/desktop.yml`](../.github/workflows/desktop.yml))
+([`.github/workflows/desktop.yml`](https://github.com/ferneyhough/OpenJarvis/blob/main/.github/workflows/desktop.yml))
 builds signed binaries plus a `latest.json` manifest with the
 `tauri-action` step (`includeUpdaterJson: true` generates the manifest
 automatically). Where it publishes depends on the trigger.

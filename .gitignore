@@ -8,3 +8,13 @@ Output/
 *.spec
 jarvis.log
 /tools/PlaynitePortable/
+env/
+.pytest_cache/
+.ruff_cache/
+frontend/node_modules/
+frontend/src-tauri/target/
+rust/target/
+src/openjarvis/server/static/
+
+# Downloaded voice / speech models
+models/

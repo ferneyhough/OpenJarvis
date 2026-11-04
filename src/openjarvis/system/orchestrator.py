@@ -196,9 +196,9 @@ class QueryOrchestrator:
                     "sections": dc.sections,
                     "section_sources": section_sources,
                     "timezone": dc.timezone,
-                    "voice_id": dc.voice_id,
-                    "voice_speed": dc.voice_speed,
-                    "tts_backend": dc.tts_backend,
+                    "voice_id": s.config.speech.voice_id,
+                    "voice_speed": s.config.speech.voice_speed,
+                    "tts_backend": s.config.speech.tts_backend,
                     "honorific": dc.honorific,
                 }
             )

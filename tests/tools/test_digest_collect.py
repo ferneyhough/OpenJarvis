@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -10,10 +11,11 @@ from openjarvis.core.registry import ConnectorRegistry, ToolRegistry
 
 
 def test_digest_collect_registered():
-    from openjarvis.tools.digest_collect import DigestCollectTool
+    import openjarvis.tools.digest_collect as digest_collect
 
-    ToolRegistry.register_value("digest_collect", DigestCollectTool)
-    assert ToolRegistry.contains("digest_collect")
+    ToolRegistry.clear()
+    importlib.reload(digest_collect)
+    assert ToolRegistry.get("digest_collect") is digest_collect.DigestCollectTool
 
 
 def test_digest_collect_executes():
@@ -58,3 +60,13 @@ def test_digest_collect_missing_connector():
 
     assert result.success is True  # Partial success
     assert "not available" in result.content
+
+
+def test_digest_datetime_formatting_is_platform_independent():
+    from openjarvis.tools.digest_collect import _format_date, _format_time
+
+    timestamp = datetime(2026, 4, 1, 1, 5)
+
+    assert _format_date(timestamp) == "April 1"
+    assert _format_time(timestamp) == "1:05 AM"
+    assert _format_time(timestamp.replace(hour=13)) == "1:05 PM"

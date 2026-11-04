@@ -18,6 +18,32 @@ export async function listConnectors(): Promise<ConnectorInfo[]> {
   return data.connectors || [];
 }
 
+export interface PersonalSourceSearchResult {
+  source: string;
+  title: string;
+  author: string;
+  timestamp: string;
+  url: string;
+  content: string;
+}
+
+export async function searchConnectedSources(
+  query: string,
+  topK = 5,
+): Promise<PersonalSourceSearchResult[]> {
+  const res = await apiFetch('/v1/connectors/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, top_k: topK }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Connected-source search failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.results;
+}
+
 export async function getConnector(id: string): Promise<ConnectorInfo> {
   const res = await apiFetch(`/v1/connectors/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`Failed to get connector ${id}: ${res.status}`);

@@ -141,6 +141,8 @@ def _run_case(tmp_path: Path, case: str) -> dict:
             "-NoLogo",
             "-NoProfile",
             "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
             "-File",
             str(script),
             "-Installer",

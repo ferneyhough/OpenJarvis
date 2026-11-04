@@ -120,6 +120,10 @@ interface Settings {
   vscodeExecutablePath: string;
   hubEnabledApps: string[];
   personalSourcesEnabled: boolean;
+  chatMode: 'ask' | 'agent' | 'plan' | 'edit';
+  allowShell: boolean;
+  allowWeb: boolean;
+  allowFiles: boolean;
 }
 
 function loadSettings(): Settings {
@@ -147,6 +151,10 @@ function loadSettings(): Settings {
     vscodeExecutablePath: '',
     hubEnabledApps: [],
     personalSourcesEnabled: false,
+    chatMode: 'ask',
+    allowShell: false,
+    allowWeb: true,
+    allowFiles: true,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -231,6 +239,7 @@ interface AppState {
   deleteConversation: (id: string) => void;
   loadMessages: (conversationId: string | null) => void;
   addMessage: (conversationId: string, message: ChatMessage) => void;
+  truncateFrom: (conversationId: string, messageId: string) => void;
   updateLastAssistant: (
     conversationId: string,
     content: string,
@@ -240,6 +249,11 @@ interface AppState {
     audio?: { url: string },
     researchTraces?: ResearchSearchTrace[],
     researchSources?: ResearchSource[],
+  ) => void;
+  setLastAssistantMedia: (
+    conversationId: string,
+    content: string,
+    media: NonNullable<ChatMessage['media']>,
   ) => void;
   setStreamState: (state: Partial<StreamState>) => void;
   resetStream: () => void;
@@ -456,6 +470,18 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ messages: conv ? conv.messages : [] });
     },
 
+    truncateFrom: (conversationId: string, messageId: string) => {
+      const store = loadConversations();
+      const conv = store.conversations[conversationId];
+      if (!conv) return;
+      const idx = conv.messages.findIndex((m) => m.id === messageId);
+      if (idx < 0) return;
+      conv.messages = conv.messages.slice(0, idx);
+      conv.updatedAt = Date.now();
+      saveConversations(store);
+      if (get().activeId === conversationId) set({ messages: [...conv.messages] });
+    },
+
     addMessage: (conversationId: string, message: ChatMessage) => {
       const store = loadConversations();
       const conv = store.conversations[conversationId];
@@ -500,6 +526,22 @@ export const useAppStore = create<AppState>((set, get) => {
         if (audio) lastMsg.audio = audio;
         if (researchTraces) lastMsg.researchTraces = researchTraces;
         if (researchSources) lastMsg.researchSources = researchSources;
+        conv.updatedAt = Date.now();
+        saveConversations(store);
+        if (get().activeId === conversationId) {
+          set({ messages: [...conv.messages] });
+        }
+      }
+    },
+
+    setLastAssistantMedia: (conversationId, content, media) => {
+      const store = loadConversations();
+      const conv = store.conversations[conversationId];
+      if (!conv) return;
+      const lastMsg = conv.messages[conv.messages.length - 1];
+      if (lastMsg && lastMsg.role === 'assistant') {
+        lastMsg.content = content;
+        lastMsg.media = media;
         conv.updatedAt = Date.now();
         saveConversations(store);
         if (get().activeId === conversationId) {

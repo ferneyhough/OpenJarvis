@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+**Windows desktop app** — `jarvis_desktop.py` opens the web UI in a native
+WebView2 window. Voice is a single global Kokoro `bm_george` voice; the
+embedded window uses local faster-whisper for hands-free input. New
+`/v1/media` routes provide local AI image generation (sd-turbo), AI video
+generation (AnimateDiff-Lightning) and audio/video conversion (bundled
+ffmpeg). The chat box gains a model picker, Ask/Agent/Plan/Edit modes, tool
+permission toggles, attachments, slash commands, and edit/resend/regenerate.
+`install.bat` installs Ollama and downloads the voice and media models.
+
+**Fixed:** `MultiEngine` no longer lets a later engine (e.g. LiteLLM, which
+echoes its default model) override the first engine that owns a model; this
+broke Ollama chat with "LLM Provider NOT provided". The morning digest now
+uses the global `[speech]` voice settings.
+
+### Added
+
 **Apple Foundation Models (AFM 3)** — a new in-process `afm` engine drives
 Apple's `apple-fm-sdk` directly, with no HTTP hop and no second process whose
 CPU draw would land inside the same energy measurement window. Install with

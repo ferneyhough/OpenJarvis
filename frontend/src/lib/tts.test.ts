@@ -85,10 +85,35 @@ describe('shared voice output', () => {
 
     await useTtsStore.getState().speak('m1', 'Hallo');
 
+    expect(synth).toHaveBeenCalledWith('Hallo', expect.objectContaining({ voiceId: undefined }));
     expect(FakeAudio.instances).toHaveLength(1);
     expect(FakeAudio.instances[0].playCalls).toBe(1);
     expect(useTtsStore.getState().state).toBe('speaking');
     expect(useTtsStore.getState().speakingId).toBe('m1');
+  });
+
+  it('passes the selected voice to speech synthesis', async () => {
+    synth.mockResolvedValue(new Blob(['wav']));
+    useTtsStore.setState({ backend: 'kokoro' });
+
+    await useTtsStore.getState().speak('m1', 'Good evening', 'bm_george');
+
+    expect(synth).toHaveBeenCalledWith(
+      'Good evening',
+      expect.objectContaining({ voiceId: 'bm_george' }),
+    );
+  });
+
+  it('does not send a Kokoro voice ID to another backend', async () => {
+    synth.mockResolvedValue(new Blob(['wav']));
+    useTtsStore.setState({ backend: 'openai_tts' });
+
+    await useTtsStore.getState().speak('m1', 'Good evening', 'bm_george');
+
+    expect(synth).toHaveBeenCalledWith(
+      'Good evening',
+      expect.objectContaining({ voiceId: undefined }),
+    );
   });
 
   it('starting a second message stops the first instead of overlapping it', async () => {
