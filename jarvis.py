@@ -17,6 +17,12 @@ FROZEN = getattr(sys, "frozen", False)
 APP_DIR = Path(sys.executable).parent if FROZEN else Path(__file__).parent.resolve()
 RES_DIR = Path(getattr(sys, "_MEIPASS", APP_DIR))
 sys.path.insert(0, str(RES_DIR))
+if FROZEN:
+    appdata = os.environ.get("APPDATA")
+    data_root = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+    APP_DATA_DIR = data_root / "OpenJarvis"
+else:
+    APP_DATA_DIR = APP_DIR
 
 if FROZEN and sys.stdout is None:
     sys.stdout = sys.stderr = open(APP_DIR / "jarvis.log", "a", encoding="utf-8", buffering=1)
@@ -28,9 +34,23 @@ from tools import execute_tool_calls, strip_tool_blocks, needs_followup
 import vscode
 import playnite
 
-CONFIG_PATH = APP_DIR / "config.json"
-if not CONFIG_PATH.exists() and (RES_DIR / "config.example.json").exists():
-    shutil.copy(RES_DIR / "config.example.json", CONFIG_PATH)
+CONFIG_PATH = APP_DATA_DIR / "config.json"
+
+
+def prepare_user_data() -> None:
+    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if FROZEN:
+        legacy_config = APP_DIR / "config.json"
+        legacy_memory = APP_DIR / "data" / "memory.db"
+        new_memory = APP_DATA_DIR / "data" / "memory.db"
+        if not CONFIG_PATH.exists() and legacy_config.is_file():
+            shutil.copy2(legacy_config, CONFIG_PATH)
+        if not new_memory.exists() and legacy_memory.is_file():
+            new_memory.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy_memory, new_memory)
+    example_config = RES_DIR / "config.example.json"
+    if not CONFIG_PATH.exists() and example_config.is_file():
+        shutil.copy2(example_config, CONFIG_PATH)
 
 
 def load_config() -> dict:
@@ -69,7 +89,7 @@ class JarvisApp:
         self.session_id = f"jarvis-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6]}"
         self.workspace = Path(self.cfg.get("workspace_dir", "~/JarvisWorkspace")).expanduser()
         self.workspace.mkdir(parents=True, exist_ok=True)
-        self.memory = Memory(APP_DIR / "data" / "memory.db")
+        self.memory = Memory(APP_DATA_DIR / "data" / "memory.db")
         self.voice = Voice(self.cfg)
         self.brain = None
         self.listening = False
@@ -378,6 +398,15 @@ class JarvisApp:
 
 def main():
     root = tk.Tk()
+    try:
+        prepare_user_data()
+    except OSError as error:
+        messagebox.showerror(
+            "OpenJarvis setup failed",
+            f"Could not prepare the user settings folder:\n{error}",
+        )
+        root.destroy()
+        return
     app = JarvisApp(root)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()

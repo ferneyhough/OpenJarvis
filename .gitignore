@@ -7,3 +7,4 @@ dist/
 Output/
 *.spec
 jarvis.log
+/tools/PlaynitePortable/

@@ -108,6 +108,16 @@ interface Settings {
   speechEnabled: boolean;
   voiceOutputEnabled: boolean;
   voiceAutoplay: boolean;
+  voiceId: string;
+  voiceSettingsVersion: number;
+  handsFreeEnabled: boolean;
+  steamId64: string;
+  steamContextEnabled: boolean;
+  developerModeEnabled: boolean;
+  developerWorkspacePath: string;
+  vscodeExecutablePath: string;
+  hubEnabledApps: string[];
+  personalSourcesEnabled: boolean;
 }
 
 function loadSettings(): Settings {
@@ -120,14 +130,41 @@ function loadSettings(): Settings {
     defaultAgent: '',
     temperature: 0.7,
     maxTokens: 4096,
-    speechEnabled: false,
-    voiceOutputEnabled: false,
-    voiceAutoplay: false,
+    speechEnabled: true,
+    voiceOutputEnabled: true,
+    voiceAutoplay: true,
+    voiceId: 'bm_george',
+    voiceSettingsVersion: 1,
+    handsFreeEnabled: false,
+    steamId64: '',
+    steamContextEnabled: false,
+    developerModeEnabled: false,
+    developerWorkspacePath: '',
+    vscodeExecutablePath: '',
+    hubEnabledApps: [],
+    personalSourcesEnabled: false,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return defaults;
-    return { ...defaults, ...JSON.parse(raw) };
+    const stored = JSON.parse(raw) as Partial<Settings>;
+    const needsVoiceSettingsMigration = stored.voiceSettingsVersion === undefined;
+    if (needsVoiceSettingsMigration) {
+      stored.speechEnabled = true;
+      stored.voiceOutputEnabled = true;
+      stored.voiceAutoplay = true;
+      stored.voiceId = defaults.voiceId;
+      stored.voiceSettingsVersion = defaults.voiceSettingsVersion;
+    }
+    const settings = { ...defaults, ...stored, developerModeEnabled: false };
+    if (needsVoiceSettingsMigration || stored.developerModeEnabled === true) {
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      } catch {
+        // Keep launch settings usable in memory if storage is unavailable.
+      }
+    }
+    return settings;
   } catch {
     return defaults;
   }

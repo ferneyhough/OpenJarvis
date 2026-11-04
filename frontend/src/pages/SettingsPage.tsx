@@ -15,10 +15,17 @@ import {
   Mic,
   Key,
   Search,
+  Gamepad2,
   Brain,
   RefreshCw,
+  Volume2,
+  Square,
+  Code2,
+  ExternalLink,
+  ArrowUpRight,
 } from 'lucide-react';
 import { useAppStore, type ThemeMode } from '../lib/store';
+import { useTts } from '../hooks/useTts';
 import {
   checkHealth,
   fetchSpeechHealth,
@@ -36,6 +43,9 @@ import {
   type MemoryStats,
 } from '../lib/api';
 import { isAutoUpdateDisabled, setAutoUpdateDisabled } from '../components/Desktop/UpdateChecker';
+import { getSteamApiKeyStatus, saveSteamApiKey } from '../lib/steam';
+import { gameLaunchers } from '../lib/game-launchers';
+import { openVSCode } from '../lib/developer';
 
 const CLOUD_KEY_STATUS_CHANGED = 'openjarvis-cloud-key-status-changed';
 
@@ -204,6 +214,7 @@ function CloudProviderStatus({ label, keyName }: { label: string; keyName: strin
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div
+      id={title === 'Inference source' ? 'inference-source' : undefined}
       className="rounded-xl p-5"
       style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
     >
@@ -226,6 +237,405 @@ function SettingRow({ label, description, children }: { label: string; descripti
       </div>
       <div>{children}</div>
     </div>
+  );
+}
+
+function SteamSettings() {
+  const settings = useAppStore((s) => s.settings);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  const [apiKey, setApiKey] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const desktop = isTauri();
+
+  const refreshKeyStatus = useCallback(async () => {
+    if (!desktop) return;
+    try {
+      setHasApiKey(await getSteamApiKeyStatus());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [desktop]);
+
+  useEffect(() => {
+    void refreshKeyStatus();
+  }, [refreshKeyStatus]);
+
+  const saveKey = async (value: string) => {
+    setKeyBusy(true);
+    setMessage('');
+    try {
+      await saveSteamApiKey(value);
+      setApiKey('');
+      setHasApiKey(Boolean(value.trim()));
+      setMessage(value.trim() ? 'API key saved securely.' : 'API key removed.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setKeyBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Steam">
+      <SettingRow
+        label="SteamID64"
+        description="A public 17-digit Steam profile ID. Your profile and game details must be public."
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={17}
+          pattern="[0-9]{17}"
+          aria-label="SteamID64"
+          placeholder="76561198000000000"
+          value={settings.steamId64}
+          onChange={(event) => updateSettings({ steamId64: event.target.value.replace(/\D/g, '').slice(0, 17) })}
+          className="w-56 max-w-full rounded-lg px-3 py-2 text-sm"
+          style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Steam Web API key"
+        description={desktop
+          ? 'Stored in your operating system credential store; never sent to your AI model.'
+          : 'Save API keys from OpenJarvis Desktop, where they are stored securely.'}
+      >
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <input
+            type="password"
+            autoComplete="new-password"
+            aria-label="Steam Web API key"
+            placeholder={hasApiKey ? 'Key saved securely' : 'Enter Steam Web API key'}
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            disabled={!desktop || keyBusy}
+            className="w-56 max-w-full rounded-lg px-3 py-2 text-sm"
+            style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+          />
+          {apiKey.trim() && (
+            <button
+              type="button"
+              onClick={() => void saveKey(apiKey)}
+              disabled={!desktop || keyBusy}
+              className="rounded-lg px-3 py-2 text-xs font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
+            >
+              Save key
+            </button>
+          )}
+          {hasApiKey && (
+            <button
+              type="button"
+              onClick={() => void saveKey('')}
+              disabled={keyBusy}
+              className="rounded-lg px-3 py-2 text-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ color: 'var(--color-error)', border: '1px solid var(--color-border)' }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </SettingRow>
+      <SettingRow
+        label="Use Steam context in chat"
+        description={desktop
+          ? 'When enabled, sends your current game and up to 20 most-played games with each standard chat request.'
+          : 'Steam context is available in OpenJarvis Desktop on Windows.'}
+      >
+        <input
+          type="checkbox"
+          aria-label="Use Steam context in chat"
+          checked={settings.steamContextEnabled}
+          onChange={(event) => updateSettings({ steamContextEnabled: event.target.checked })}
+          disabled={!desktop}
+          className="h-4 w-4 cursor-pointer accent-[var(--color-accent)]"
+        />
+      </SettingRow>
+      <div className="flex items-center justify-between gap-3 pt-2">
+        <a
+          href="https://steamcommunity.com/dev/apikey"
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs underline underline-offset-2"
+          style={{ color: 'var(--color-accent)' }}
+        >
+          Get a Steam Web API key
+        </a>
+        {message && (
+          <span role="status" className="text-xs" style={{ color: message.includes('saved') || message.includes('removed') ? 'var(--color-success)' : 'var(--color-error)' }}>
+            {message}
+          </span>
+        )}
+      </div>
+      {!desktop && (
+        <p className="mt-2 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+          Local game discovery and launching require OpenJarvis Desktop on Windows.
+        </p>
+      )}
+    </Section>
+  );
+}
+
+const hubIntegrationGroups = [
+  {
+    title: 'Games',
+    apps: gameLaunchers.map((launcher) => ({
+      id: launcher.settingsId,
+      name: launcher.name,
+      url: launcher.url,
+      auth: launcher.id === 'steam'
+        ? 'Enable to show Steam in Games. Local library and installed game launching require the desktop app and Steam client.'
+        : launcher.id === 'playnite'
+          ? 'Enable to show Playnite in Games. Open Playnite once with the OpenJarvis Bridge installed to export your library.'
+          : `Enable to show ${launcher.name} in Games. OpenJarvis opens its installed desktop app when available, otherwise its official website.`,
+    })),
+  },
+  {
+    title: 'Social',
+    apps: [
+      { id: 'discord', name: 'Discord', url: 'https://discord.com/app', auth: 'Sign in to Discord in your browser. OpenJarvis does not read private messages.' },
+      { id: 'telegram', name: 'Telegram', url: 'https://web.telegram.org/', auth: 'Sign in to Telegram in your browser.' },
+      { id: 'whatsapp', name: 'WhatsApp', url: 'https://web.whatsapp.com/', auth: 'Link your device in WhatsApp Web. Messages are not read by OpenJarvis.' },
+      { id: 'slack', name: 'Slack', url: 'https://slack.com/signin', auth: 'Sign in to your Slack workspace.' },
+      { id: 'facebook', name: 'Facebook', url: 'https://www.facebook.com/', auth: 'Sign in to Facebook in your browser.' },
+      { id: 'instagram', name: 'Instagram', url: 'https://www.instagram.com/', auth: 'Sign in to Instagram in your browser.' },
+      { id: 'tiktok', name: 'TikTok', url: 'https://www.tiktok.com/', auth: 'Sign in to TikTok in your browser. Live streaming eligibility is set by TikTok.' },
+    ],
+  },
+  {
+    title: 'Media and streaming',
+    apps: [
+      { id: 'youtube', name: 'YouTube', url: 'https://www.youtube.com/', auth: 'Sign in on YouTube if you want your subscriptions and watch history there.' },
+      { id: 'twitch', name: 'Twitch', url: 'https://www.twitch.tv/', auth: 'Sign in to Twitch in the browser; OpenJarvis does not access private chat or download streams.' },
+      { id: 'plex', name: 'Plex', url: 'https://app.plex.tv/desktop/', auth: 'Sign in to Plex in its web app. OpenJarvis does not connect to your Plex server or import its catalog.' },
+      { id: 'netflix', name: 'Netflix', url: 'https://www.netflix.com/', auth: 'Sign in to Netflix in your browser.' },
+      { id: 'prime-video', name: 'Prime Video', url: 'https://www.primevideo.com/', auth: 'Sign in to Prime Video in your browser.' },
+      { id: 'crave', name: 'Crave', url: 'https://www.crave.ca/', auth: 'Sign in to Crave in your browser.' },
+      { id: 'crunchyroll', name: 'Crunchyroll', url: 'https://www.crunchyroll.com/', auth: 'Sign in to Crunchyroll in your browser.' },
+      { id: 'disney-plus', name: 'Disney+', url: 'https://www.disneyplus.com/', auth: 'Sign in to Disney+ in your browser.' },
+      { id: 'max', name: 'Max', url: 'https://www.max.com/', auth: 'Sign in to Max in your browser.' },
+      { id: 'hulu', name: 'Hulu', url: 'https://www.hulu.com/', auth: 'Sign in to Hulu in your browser.' },
+      { id: 'paramount-plus', name: 'Paramount+', url: 'https://www.paramountplus.com/', auth: 'Sign in to Paramount+ in your browser.' },
+      { id: 'peacock', name: 'Peacock', url: 'https://www.peacocktv.com/', auth: 'Sign in to Peacock in your browser.' },
+      { id: 'vlc', name: 'VLC', url: 'https://www.videolan.org/vlc/', auth: 'Install VLC locally to play user-provided TV streams.' },
+      { id: 'tv-guide', name: 'Playlist TV guide', url: 'https://www.xmltv.org/', auth: 'Add an M3U/M3U8 playlist and optional XMLTV URL in the Media tab.' },
+    ],
+  },
+  {
+    title: 'AI and cloud tools',
+    apps: [
+      { id: 'base44', name: 'Base44', url: 'https://base44.com/', auth: 'Open Base44 and sign in there. This is a website launcher, not a model provider connected to OpenJarvis chat.' },
+      { id: 'emergent', name: 'Emergent', url: 'https://emergent.sh/', auth: 'Open Emergent and sign in there. This is a website launcher, not a model provider connected to OpenJarvis chat.' },
+      { id: 'microsoft-copilot', name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com/', auth: 'Open Copilot and sign in with Microsoft. This does not connect Copilot to OpenJarvis chat.' },
+    ],
+  },
+  {
+    title: 'Record and live stream',
+    apps: [
+      { id: 'live-twitch', name: 'Twitch Creator Dashboard', url: 'https://dashboard.twitch.tv/', auth: 'Open your own Twitch creator dashboard to configure a stream.' },
+      { id: 'live-youtube', name: 'YouTube Live', url: 'https://studio.youtube.com/', auth: 'Open YouTube Studio to set up a live stream on your own channel.' },
+      { id: 'live-kick', name: 'Kick Creator Dashboard', url: 'https://kick.com/creator/dashboard', auth: 'Open Kick creator tools; sign in and configure streaming with Kick.' },
+      { id: 'live-tiktok', name: 'TikTok LIVE Center', url: 'https://livecenter.tiktok.com/', auth: 'Open TikTok LIVE tools; account eligibility may apply.' },
+      { id: 'live-facebook', name: 'Facebook Live Producer', url: 'https://www.facebook.com/live/producer/', auth: 'Open Facebook Live Producer for your own broadcasts.' },
+      { id: 'live-rumble', name: 'Rumble Studio', url: 'https://rumble.com/studio', auth: 'Open Rumble Studio to configure your own live broadcast.' },
+      { id: 'live-steam', name: 'Steam Broadcast', url: 'https://steamcommunity.com/broadcast/upload/', auth: 'Open Steam Community broadcast settings for gameplay.' },
+      { id: 'obs-studio', name: 'OBS Studio', url: 'https://obsproject.com/', auth: 'Open the official OBS site to install or learn about the desktop streaming and recording app.' },
+      { id: 'prism-live-studio', name: 'PRISM Live Studio', url: 'https://prismlive.com/en_us/', auth: 'Open the official PRISM Live Studio site for the streaming and live-production app.' },
+      { id: 'streamlabs', name: 'Streamlabs', url: 'https://streamlabs.com/', auth: 'Open the official Streamlabs site for streaming software and creator tools.' },
+      { id: 'streamyard', name: 'StreamYard', url: 'https://streamyard.com/', auth: 'Open StreamYard to configure your browser-based live production.' },
+      { id: 'prism-launcher', name: 'Prism Launcher', url: 'https://prismlauncher.org/', auth: 'Minecraft instance launcher; it is separate from PRISM Live Studio.' },
+    ],
+  },
+  {
+    title: 'Remote access and play',
+    apps: [
+      { id: 'steam-link', name: 'Steam Link', url: 'https://store.steampowered.com/steamlink/about/', auth: 'Install Steam Link on your supported device and configure it with your own Steam account and PC.' },
+      { id: 'chrome-remote-desktop', name: 'Chrome Remote Desktop', url: 'https://remotedesktop.google.com/access/', auth: 'Set up Chrome Remote Desktop on computers you own or are authorized to access.' },
+      { id: 'anydesk', name: 'AnyDesk', url: 'https://anydesk.com/en', auth: 'Install and configure AnyDesk on devices you own or have permission to access.' },
+      { id: 'teamviewer', name: 'TeamViewer', url: 'https://www.teamviewer.com/en/', auth: 'Use TeamViewer only with the device owner’s permission.' },
+      { id: 'rustdesk', name: 'RustDesk', url: 'https://rustdesk.com/', auth: 'Install and configure RustDesk on devices you own or are authorized to access.' },
+      { id: 'parsec', name: 'Parsec', url: 'https://parsec.app/', auth: 'Install and configure Parsec on devices you own or have permission to access.' },
+    ],
+  },
+  {
+    title: 'Stores',
+    apps: [
+      { id: 'gg-deals', name: 'GG.deals', url: 'https://gg.deals/', auth: 'Open deal pages in your browser; sign in there if you use a GG.deals account.' },
+      { id: 'steam-store', name: 'Steam Store', url: 'https://store.steampowered.com/', auth: 'Uses your Steam sign-in; game library setup is in Steam settings above.' },
+      { id: 'epic-store', name: 'Epic Games Store', url: 'https://store.epicgames.com/', auth: 'Sign in to Epic Games in your browser.' },
+      { id: 'gog-store', name: 'GOG', url: 'https://www.gog.com/', auth: 'Sign in to GOG in your browser.' },
+      { id: 'humble-store', name: 'Humble Bundle', url: 'https://www.humblebundle.com/store', auth: 'Sign in to Humble Bundle in your browser.' },
+      { id: 'itch-store', name: 'itch.io', url: 'https://itch.io/', auth: 'Sign in to itch.io in your browser.' },
+      { id: 'xbox-store', name: 'Xbox Store', url: 'https://www.xbox.com/games/store', auth: 'Sign in to Xbox in your browser.' },
+      { id: 'playstation-store', name: 'PlayStation Store', url: 'https://store.playstation.com/', auth: 'Sign in to PlayStation in your browser.' },
+    ],
+  },
+];
+
+export function AppIntegrationsSettings() {
+  const enabledApps = useAppStore((state) => state.settings.hubEnabledApps);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const toggleApp = (id: string, enabled: boolean) => {
+    const next = new Set(enabledApps);
+    if (enabled) next.add(id);
+    else next.delete(id);
+    updateSettings({ hubEnabledApps: [...next] });
+  };
+
+  return (
+    <>
+      {hubIntegrationGroups.map((group) => (
+        <Section key={group.title} title={group.title}>
+          <p className="mb-2 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+            These are launch links and visibility controls, not account connections. Sign in with each provider separately; OpenJarvis cannot verify browser sign-in. Private feeds and unsupported provider APIs are not connected.
+          </p>
+          {group.apps.map((app) => (
+            <SettingRow key={app.id} label={app.name} description={app.auth}>
+              <div className="flex items-center gap-3">
+                <a
+                  href={app.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs underline underline-offset-2"
+                  style={{ color: 'var(--color-accent)' }}
+                >
+                  {group.title === 'AI and cloud tools' ? 'Open setup' : 'Sign in / open'} <ExternalLink size={12} />
+                </a>
+                <label className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Show ${app.name} in hub`}
+                    checked={enabledApps.includes(app.id)}
+                    onChange={(event) => toggleApp(app.id, event.target.checked)}
+                    className="accent-[var(--color-accent)]"
+                  />
+                  Show in hub
+                </label>
+              </div>
+            </SettingRow>
+          ))}
+        </Section>
+      ))}
+    </>
+  );
+}
+
+function PersonalSourcesSettings() {
+  const enabled = useAppStore((state) => state.settings.personalSourcesEnabled);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  return (
+    <Section title="Personal information sources">
+      <p className="mb-2 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+        Connect supported accounts in Data Sources. OpenJarvis searches only connected, indexed data and sends a few relevant excerpts to your selected model when this is enabled. Account linking does not grant access to apps without a supported connector.
+      </p>
+      <SettingRow
+        label="Use connected sources in regular chats"
+        description="Turn off to keep personal source excerpts out of standard chat prompts. Deep Research remains separately controlled."
+      >
+        <input
+          type="checkbox"
+          aria-label="Use connected sources in regular chats"
+          checked={enabled}
+          onChange={(event) => {
+            updateSettings({ personalSourcesEnabled: event.target.checked });
+          }}
+          className="h-4 w-4 accent-[var(--color-accent)]"
+        />
+      </SettingRow>
+      <SettingRow label="Manage connected accounts" description="Connect or disconnect supported sources and manage their indexed data.">
+        <a
+          href="/data-sources"
+          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs underline underline-offset-2"
+          style={{ color: 'var(--color-accent)' }}
+        >
+          Open Data Sources <ArrowUpRight size={12} />
+        </a>
+      </SettingRow>
+    </Section>
+  );
+}
+
+function DeveloperSettings({ onSaved }: { onSaved: () => void }) {
+  const settings = useAppStore((state) => state.settings);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState('');
+
+  const launchEditor = async () => {
+    setOpening(true);
+    setError('');
+    try {
+      await openVSCode(settings.vscodeExecutablePath, settings.developerWorkspacePath);
+    } catch (launchError) {
+      setError(launchError instanceof Error ? launchError.message : String(launchError));
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <Section title="Developer Mode">
+      <SettingRow
+        label="Enable Developer Mode"
+        description="Show developer tools and configured apps in the hub. This does not bypass service sign-in or grant new AI tool permissions."
+      >
+        <input
+          type="checkbox"
+          aria-label="Enable Developer Mode"
+          checked={settings.developerModeEnabled}
+          onChange={(event) => {
+            updateSettings({ developerModeEnabled: event.target.checked });
+            onSaved();
+          }}
+          className="h-4 w-4 accent-[var(--color-accent)]"
+        />
+      </SettingRow>
+      {settings.developerModeEnabled && (
+        <>
+          <SettingRow label="VS Code executable" description="Optional. Set this to Code.exe for a portable or non-standard install.">
+            <input
+              value={settings.vscodeExecutablePath}
+              onChange={(event) => {
+                updateSettings({ vscodeExecutablePath: event.target.value });
+                onSaved();
+              }}
+              placeholder="Auto-detect VS Code"
+              aria-label="VS Code executable path"
+              className="w-64 max-w-full rounded-lg px-3 py-2 text-xs"
+              style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            />
+          </SettingRow>
+          <SettingRow label="Workspace folder" description="Optional folder to open in VS Code.">
+            <input
+              value={settings.developerWorkspacePath}
+              onChange={(event) => {
+                updateSettings({ developerWorkspacePath: event.target.value });
+                onSaved();
+              }}
+              placeholder="C:\\Projects\\MyProject"
+              aria-label="Developer workspace folder"
+              className="w-64 max-w-full rounded-lg px-3 py-2 text-xs"
+              style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            />
+          </SettingRow>
+          <SettingRow label="Open editor" description="Uses an existing VS Code install; no editor is downloaded or embedded.">
+            <button
+              type="button"
+              onClick={() => void launchEditor()}
+              disabled={opening}
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs disabled:opacity-50"
+              style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
+            >
+              <Code2 size={14} /> {opening ? 'Opening…' : 'Open VS Code'}
+            </button>
+          </SettingRow>
+          {error && <p role="alert" className="pt-2 text-xs" style={{ color: 'var(--color-error)' }}>{error}</p>}
+        </>
+      )}
+    </Section>
   );
 }
 
@@ -290,6 +700,7 @@ export function SettingsPage() {
   const updateSettings = useAppStore((s) => s.updateSettings);
   const conversations = useAppStore((s) => s.conversations);
   const serverInfo = useAppStore((s) => s.serverInfo);
+  const tts = useTts();
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [speechBackendAvailable, setSpeechBackendAvailable] = useState<boolean | null>(null);
   const [ttsBackend, setTtsBackend] = useState<{ available: boolean; backend?: string; voice_id?: string } | null>(null);
@@ -635,22 +1046,45 @@ export function SettingsPage() {
 
           {/* API Keys */}
           <Section title="API Keys">
-            <SettingRow label="OpenAI" description="GPT-4, GPT-3.5, etc.">
-              <ApiKeyInput keyName="OPENAI_API_KEY" placeholder="sk-..." />
+            <SettingRow label="OpenAI" description="GPT models · setup and API-key management">
+              <div className="flex flex-wrap items-center gap-3">
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Get API key</a>
+                <ApiKeyInput keyName="OPENAI_API_KEY" placeholder="sk-..." />
+              </div>
             </SettingRow>
-            <SettingRow label="Anthropic" description="Claude models">
-              <ApiKeyInput keyName="ANTHROPIC_API_KEY" placeholder="sk-ant-..." />
+            <SettingRow label="Anthropic" description="Claude models · setup and API-key management">
+              <div className="flex flex-wrap items-center gap-3">
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Get API key</a>
+                <ApiKeyInput keyName="ANTHROPIC_API_KEY" placeholder="sk-ant-..." />
+              </div>
             </SettingRow>
-            <SettingRow label="Google" description="Gemini models">
-              <ApiKeyInput keyName="GEMINI_API_KEY" placeholder="AI..." />
+            <SettingRow label="Google AI Studio" description="Gemini models · setup and API-key management">
+              <div className="flex flex-wrap items-center gap-3">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Get API key</a>
+                <ApiKeyInput keyName="GEMINI_API_KEY" placeholder="AI..." />
+              </div>
             </SettingRow>
-            <SettingRow label="OpenRouter" description="Multi-provider routing">
-              <ApiKeyInput keyName="OPENROUTER_API_KEY" placeholder="sk-or-..." />
+            <SettingRow label="OpenRouter" description="Multi-provider routing · setup and API-key management">
+              <div className="flex flex-wrap items-center gap-3">
+                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Get API key</a>
+                <ApiKeyInput keyName="OPENROUTER_API_KEY" placeholder="sk-or-..." />
+              </div>
             </SettingRow>
-            <SettingRow label="Atlas Cloud" description="Models routed through Atlas Cloud">
-              <ApiKeyInput keyName="ATLASCLOUD_API_KEY" placeholder="Atlas Cloud API key" />
+            <SettingRow label="Atlas Cloud" description="Models routed through Atlas Cloud · setup and API-key management">
+              <div className="flex flex-wrap items-center gap-3">
+                <a href="https://cloud.atlascloud.ai/" target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Open platform</a>
+                <ApiKeyInput keyName="ATLASCLOUD_API_KEY" placeholder="Atlas Cloud API key" />
+              </div>
+            </SettingRow>
+            <SettingRow label="Local and custom providers" description="Ollama plus OpenAI-compatible servers such as LM Studio, vLLM, SGLang, llama.cpp, and MLX">
+              <a href="#inference-source" className="text-xs underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Configure inference source</a>
             </SettingRow>
           </Section>
+
+          <SteamSettings />
+          <AppIntegrationsSettings />
+          <PersonalSourcesSettings />
+          <DeveloperSettings onSaved={showSaved} />
 
           {/* Tools */}
           <Section title="Tools">
@@ -784,6 +1218,17 @@ export function SettingsPage() {
 
           {/* Speech */}
           <Section title="Speech">
+            <SettingRow
+              label="Hands-free voice"
+              description="In Chat, start the microphone once, say “Jarvis” to speak, then say “Sleep Jarvis” to return to wake-word mode."
+            >
+              <span className="text-xs whitespace-nowrap" style={{ color: settings.handsFreeEnabled ? 'var(--color-success)' : 'var(--color-text-tertiary)' }}>
+                {settings.handsFreeEnabled ? 'On for next Chat visit' : 'Off'}
+              </span>
+            </SettingRow>
+            <div className="mb-2 px-1 text-xs leading-relaxed" style={{ color: 'var(--color-text-tertiary)' }}>
+              Hands-free voice uses your browser’s speech-recognition service, which may process audio online. Browser microphone permission is requested when you start it in Chat; if blocked, allow Microphone in the site controls beside the address bar and retry.
+            </div>
             <SettingRow label="Speech-to-Text" description="Enable microphone input for voice dictation">
               <button
                 onClick={() => { updateSettings({ speechEnabled: !settings.speechEnabled }); showSaved(); }}
@@ -838,7 +1283,39 @@ export function SettingsPage() {
                 />
               </button>
             </SettingRow>
-            <SettingRow label="Voice" description="Backend and voice used for spoken replies">
+            <SettingRow label="Voice" description="Select an English Kokoro voice, including American and British accents">
+              <select
+                value={settings.voiceId}
+                onChange={(e) => { updateSettings({ voiceId: e.target.value }); showSaved(); }}
+                className="text-sm px-3 py-1.5 rounded-lg outline-none cursor-pointer"
+                style={{
+                  background: 'var(--color-bg-secondary)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                <optgroup label="American English — feminine">
+                  <option value="af_heart">Heart — American</option>
+                  <option value="af_bella">Bella — American</option>
+                  <option value="af_nicole">Nicole — American</option>
+                  <option value="af_sarah">Sarah — American</option>
+                  <option value="af_sky">Sky — American</option>
+                </optgroup>
+                <optgroup label="American English — masculine">
+                  <option value="am_adam">Adam — American</option>
+                  <option value="am_michael">Michael — American</option>
+                </optgroup>
+                <optgroup label="British English — feminine">
+                  <option value="bf_emma">Emma — British</option>
+                  <option value="bf_isabella">Isabella — British</option>
+                </optgroup>
+                <optgroup label="British English — masculine">
+                  <option value="bm_george">George — British</option>
+                  <option value="bm_lewis">Lewis — British</option>
+                </optgroup>
+              </select>
+            </SettingRow>
+            <SettingRow label="Voice backend" description="Backend and currently configured voice">
               <div className="flex items-center gap-2">
                 <span
                   className="w-2 h-2 rounded-full"
@@ -853,6 +1330,35 @@ export function SettingsPage() {
                 </span>
               </div>
             </SettingRow>
+            <SettingRow label="Test voice" description="Play a short sample using the selected voice">
+              <button
+                type="button"
+                onClick={() => {
+                    if (tts.speakingId === 'speech-test' && tts.state !== 'idle') {
+                      tts.stop();
+                    } else {
+                      void tts.speak('speech-test', 'Good evening. It is a pleasure to speak with you.');
+                    }
+                }}
+                disabled={!tts.available}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                    background: 'var(--color-bg-secondary)',
+                    color: 'var(--color-text-secondary)',
+                    border: '1px solid var(--color-border)',
+                }}
+                aria-busy={tts.speakingId === 'speech-test' && tts.state === 'loading'}
+              >
+                {tts.speakingId === 'speech-test' && tts.state !== 'idle'
+                    ? <><Square size={12} /> Stop test</>
+                    : <><Volume2 size={12} /> Test voice</>}
+              </button>
+            </SettingRow>
+            {tts.errorId === 'speech-test' && tts.error && (
+              <div role="alert" className="text-xs px-1" style={{ color: 'var(--color-error)' }}>
+                Voice test failed: {tts.error}
+              </div>
+            )}
             <SettingRow label="Backend status" description="Requires Whisper, Deepgram, or another speech backend">
               <div className="flex items-center gap-2">
                 <span
@@ -874,6 +1380,11 @@ export function SettingsPage() {
               <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
                 Set up a speech backend to use voice input.
                 See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>documentation</a> for details.
+              </div>
+            )}
+            {ttsBackend?.available === false && (
+              <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                Set up a text-to-speech backend to hear spoken replies.
               </div>
             )}
           </Section>

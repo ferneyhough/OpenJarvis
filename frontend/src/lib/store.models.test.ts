@@ -33,6 +33,21 @@ afterEach(() => {
 });
 
 describe('setModels', () => {
+  it('resets Developer Mode and its persisted value on launch', async () => {
+    localStorage.setItem(
+      'openjarvis-settings',
+      JSON.stringify({ developerModeEnabled: true, voiceSettingsVersion: 1 }),
+    );
+
+    const { useAppStore } = await import('./store');
+
+    expect(useAppStore.getState().settings.developerModeEnabled).toBe(false);
+    expect(
+      JSON.parse(localStorage.getItem('openjarvis-settings') || '{}')
+        .developerModeEnabled,
+    ).toBe(false);
+  });
+
   it('does not select an embedding-only model', async () => {
     const { useAppStore } = await import('./store');
 

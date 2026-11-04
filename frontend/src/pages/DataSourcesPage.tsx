@@ -834,7 +834,7 @@ export function SyncStatusDisplay({
   );
 }
 
-function DataSourcesSection() {
+export function DataSourcesSection() {
   const cachedConnectors = useAppStore((s) => s.cachedConnectors);
   const setCachedConnectors = useAppStore((s) => s.setCachedConnectors);
   const connectors = cachedConnectors ?? [];

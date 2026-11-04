@@ -6,6 +6,8 @@ use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tokio::sync::Mutex;
 
+mod steam;
+
 const OLLAMA_PORT: u16 = 11434;
 const JARVIS_PORT: u16 = 8000;
 #[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
@@ -1792,6 +1794,758 @@ async fn reset_inference_source(
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+struct PlayniteStatus {
+    supported: bool,
+    installed: bool,
+}
+
+fn playnite_candidates_from(
+    local_app_data: Option<&str>,
+    program_files: Option<&str>,
+    program_files_x86: Option<&str>,
+    configured_path: Option<&str>,
+    portable_directory: Option<&std::path::Path>,
+) -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(path) = configured_path.filter(|path| !path.is_empty()) {
+        let path = std::path::PathBuf::from(path);
+        if path.is_dir() {
+            candidates.push(path.join("Playnite.DesktopApp.exe"));
+        } else {
+            candidates.push(path);
+        }
+    }
+
+    for root in [local_app_data, program_files, program_files_x86]
+        .into_iter()
+        .flatten()
+        .filter(|root| !root.is_empty())
+    {
+        let root = std::path::PathBuf::from(root);
+        candidates.push(
+            root.join("Programs")
+                .join("Playnite")
+                .join("Playnite.DesktopApp.exe"),
+        );
+        candidates.push(root.join("Playnite").join("Playnite.DesktopApp.exe"));
+    }
+    if let Some(directory) = portable_directory {
+        candidates.push(directory.join("Playnite.DesktopApp.exe"));
+    }
+    candidates
+}
+
+#[cfg(target_os = "windows")]
+fn find_playnite_executable() -> Option<std::path::PathBuf> {
+    let local_app_data = std::env::var("LOCALAPPDATA").ok();
+    let program_files = std::env::var("ProgramFiles").ok();
+    let program_files_x86 = std::env::var("ProgramFiles(x86)").ok();
+    let configured_path = std::env::var("PLAYNITE_PATH").ok();
+    let manifest_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..");
+    let executable_root = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(std::path::Path::to_path_buf));
+    let mut candidates = playnite_candidates_from(
+        local_app_data.as_deref(),
+        program_files.as_deref(),
+        program_files_x86.as_deref(),
+        configured_path.as_deref(),
+        Some(&manifest_root.join("tools").join("PlaynitePortable")),
+    );
+    if let Some(mut directory) = executable_root {
+        loop {
+            candidates.push(
+                directory
+                    .join("tools")
+                    .join("PlaynitePortable")
+                    .join("Playnite.DesktopApp.exe"),
+            );
+            if !directory.pop() {
+                break;
+            }
+        }
+    }
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+#[tauri::command]
+fn get_playnite_status() -> PlayniteStatus {
+    #[cfg(target_os = "windows")]
+    {
+        PlayniteStatus {
+            supported: true,
+            installed: find_playnite_executable().is_some(),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        PlayniteStatus {
+            supported: false,
+            installed: false,
+        }
+    }
+}
+
+#[tauri::command]
+fn open_playnite() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let executable = find_playnite_executable().ok_or_else(|| {
+            "Playnite was not found. Run scripts\\install-playnite-portable.ps1, install Playnite normally, or set PLAYNITE_PATH to Playnite.DesktopApp.exe.".to_string()
+        })?;
+        std::process::Command::new(&executable)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| {
+                format!(
+                    "Could not open Playnite at {}: {error}",
+                    executable.display()
+                )
+            })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Playnite integration is available in OpenJarvis Desktop on Windows.".into())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn game_launcher_protocol_registered(protocol: &str) -> bool {
+    std::process::Command::new("reg.exe")
+        .args(["query", &format!(r"HKCR\{protocol}")])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(target_os = "windows")]
+fn game_launcher_executable(launcher_id: &str) -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+
+    let local_app_data = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    let program_files = std::env::var_os("ProgramFiles").map(PathBuf::from);
+    let program_files_x86 = std::env::var_os("ProgramFiles(x86)").map(PathBuf::from);
+    if launcher_id == "steam" {
+        return steam::find_steam_root().map(|root| root.join("steam.exe"));
+    }
+    if launcher_id == "playnite" {
+        return find_playnite_executable();
+    }
+
+    let mut candidates = Vec::new();
+    for root in [program_files_x86.as_ref(), program_files.as_ref()]
+        .into_iter()
+        .flatten()
+    {
+        let candidate = match launcher_id {
+            "gog" => root.join("GOG Galaxy").join("GalaxyClient.exe"),
+            "epic" => root
+                .join("Epic Games")
+                .join("Launcher")
+                .join("Portal")
+                .join("Binaries")
+                .join("Win64")
+                .join("EpicGamesLauncher.exe"),
+            "ea" => root
+                .join("Electronic Arts")
+                .join("EA Desktop")
+                .join("EA Desktop")
+                .join("EADesktop.exe"),
+            "ubisoft" => root
+                .join("Ubisoft")
+                .join("Ubisoft Game Launcher")
+                .join("UbisoftConnect.exe"),
+            "battle-net" => root.join("Battle.net").join("Battle.net Launcher.exe"),
+            "riot" => root
+                .join("Riot Games")
+                .join("Riot Client")
+                .join("RiotClientServices.exe"),
+            "rockstar" => root
+                .join("Rockstar Games")
+                .join("Launcher")
+                .join("Launcher.exe"),
+            "amazon-games" => root
+                .join("Amazon Games")
+                .join("App")
+                .join("Amazon Games.exe"),
+            _ => continue,
+        };
+        candidates.push(candidate);
+    }
+    if let Some(local) = local_app_data {
+        if launcher_id == "itch" {
+            candidates.push(local.join("Programs").join("itch").join("itch.exe"));
+            candidates.push(local.join("itch").join("itch.exe"));
+        }
+    }
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+#[cfg(target_os = "windows")]
+struct LaunchedGameAppProcess {
+    process_id: u32,
+    executable: std::path::PathBuf,
+}
+
+#[cfg(target_os = "windows")]
+fn launched_game_app_processes(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, LaunchedGameAppProcess>> {
+    static PROCESSES: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, LaunchedGameAppProcess>>,
+    > = std::sync::OnceLock::new();
+    PROCESSES.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+fn optional_program_package_id(program_id: &str) -> Option<&'static str> {
+    match program_id {
+        "steam" => Some("Valve.Steam"),
+        "playnite" => Some("Playnite.Playnite"),
+        "epic" => Some("EpicGames.EpicGamesLauncher"),
+        "gog" => Some("GOG.Galaxy"),
+        "ea" => Some("ElectronicArts.EADesktop"),
+        "ubisoft" => Some("Ubisoft.Connect"),
+        "battle-net" => Some("Blizzard.BattleNet"),
+        "obs-studio" => Some("OBSProject.OBSStudio"),
+        "vlc" => Some("VideoLAN.VLC"),
+        "prism-launcher" => Some("PrismLauncher.PrismLauncher"),
+        "discord" => Some("Discord.Discord"),
+        "telegram" => Some("Telegram.TelegramDesktop"),
+        "slack" => Some("SlackTechnologies.Slack"),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+async fn install_optional_program(program_id: String) -> Result<(), String> {
+    let package_id = optional_program_package_id(&program_id)
+        .ok_or_else(|| format!("Unsupported optional program: {program_id}"))?
+        .to_string();
+
+    #[cfg(target_os = "windows")]
+    {
+        return tokio::task::spawn_blocking(move || {
+            let output = std::process::Command::new("winget")
+                .args([
+                    "install",
+                    "--id",
+                    &package_id,
+                    "--exact",
+                    "--source",
+                    "winget",
+                    "--accept-source-agreements",
+                    "--accept-package-agreements",
+                    "--disable-interactivity",
+                ])
+                .output()
+                .map_err(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        "Windows Package Manager (winget) was not found. Install App Installer from Microsoft Store and try again.".to_string()
+                    } else {
+                        format!("Could not start winget: {error}")
+                    }
+                })?;
+            if output.status.success() {
+                return Ok(());
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let details = if stderr.is_empty() { stdout } else { stderr };
+            Err(format!(
+                "winget could not install {package_id} ({}): {}",
+                output
+                    .status
+                    .code()
+                    .map_or_else(|| "terminated".to_string(), |code| code.to_string()),
+                if details.is_empty() {
+                    "no additional error details".to_string()
+                } else {
+                    details
+                }
+            ))
+        })
+        .await
+        .map_err(|error| format!("The installer task failed: {error}"))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = package_id;
+        Err("Optional program installation is supported only on Windows.".to_string())
+    }
+}
+
+#[tauri::command]
+fn open_game_launcher(launcher_id: String) -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let protocol = match launcher_id.as_str() {
+            "steam" => "steam",
+            "playnite" => "playnite",
+            "xbox" => "xbox",
+            "gog" => "goggalaxy",
+            "epic" => "com.epicgames.launcher",
+            "ea" => "origin2",
+            "ubisoft" => "uplay",
+            "battle-net" => "battlenet",
+            "riot" => "riotclient",
+            "rockstar" => "rockstar",
+            "itch" => "itch",
+            "amazon-games" => "amazon-games",
+            _ => return Err(format!("Unsupported game launcher: {launcher_id}")),
+        };
+        if let Some(executable) = game_launcher_executable(&launcher_id) {
+            let child = std::process::Command::new(&executable)
+                .spawn()
+                .map_err(|error| {
+                    format!(
+                        "Could not open the {launcher_id} launcher at {}: {error}",
+                        executable.display()
+                    )
+                })?;
+            launched_game_app_processes()
+                .lock()
+                .map_err(|_| "Launcher process tracking is unavailable.".to_string())?
+                .insert(
+                    launcher_id,
+                    LaunchedGameAppProcess {
+                        process_id: child.id(),
+                        executable,
+                    },
+                );
+            return Ok(true);
+        }
+        if !game_launcher_protocol_registered(protocol) {
+            return Ok(false);
+        }
+        let uri = match launcher_id.as_str() {
+            "steam" => "steam://open/main",
+            "playnite" => "playnite://",
+            "xbox" => "xbox:",
+            "gog" => "goggalaxy://open",
+            "epic" => "com.epicgames.launcher://",
+            "ea" => "origin2://",
+            "ubisoft" => "uplay://",
+            "battle-net" => "battlenet://",
+            "riot" => "riotclient://",
+            "rockstar" => "rockstar://",
+            "itch" => "itch://",
+            "amazon-games" => "amazon-games://",
+            _ => return Err(format!("Unsupported game launcher: {launcher_id}")),
+        };
+        std::process::Command::new("explorer.exe")
+            .arg(uri)
+            .spawn()
+            .map(|_| true)
+            .map_err(|error| format!("Could not open the {launcher_id} launcher: {error}"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = launcher_id;
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+fn close_game_launcher(launcher_id: String) -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let process = launched_game_app_processes()
+            .lock()
+            .map_err(|_| "Launcher process tracking is unavailable.".to_string())?
+            .get(&launcher_id)
+            .map(|process| (process.process_id, process.executable.clone()));
+        let Some((process_id, executable)) = process else {
+            return Ok(false);
+        };
+        let executable = executable.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "$p = Get-Process -Id {process_id} -ErrorAction SilentlyContinue; \
+             if ($null -eq $p) {{ exit 0 }}; \
+             if ($p.Path -ine '{executable}') {{ exit 4 }}; \
+             if (-not $p.CloseMainWindow()) {{ exit 2 }}; \
+             if (-not $p.WaitForExit(7000)) {{ exit 3 }}"
+        );
+        let status = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Could not request a graceful close: {error}"))?;
+        if !status.success() {
+            return Err(
+                "The launcher did not close. It may have unsaved work; close it manually."
+                    .to_string(),
+            );
+        }
+        launched_game_app_processes()
+            .lock()
+            .map_err(|_| "Launcher process tracking is unavailable.".to_string())?
+            .remove(&launcher_id);
+        Ok(true)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = launcher_id;
+        Ok(false)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn find_vscode_executable(configured_path: &str) -> Option<std::path::PathBuf> {
+    let configured = if configured_path.trim().is_empty() {
+        None
+    } else {
+        let path = std::path::PathBuf::from(configured_path.trim());
+        Some(if path.is_dir() {
+            path.join("Code.exe")
+        } else {
+            path
+        })
+    };
+    let mut candidates = Vec::new();
+    if let Some(path) = configured {
+        candidates.push(path);
+    }
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        candidates.push(
+            std::path::PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("Microsoft VS Code")
+                .join("Code.exe"),
+        );
+    }
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        candidates.push(
+            std::path::PathBuf::from(program_files)
+                .join("Microsoft VS Code")
+                .join("Code.exe"),
+        );
+    }
+    candidates.into_iter().find(|path| {
+        path.is_file()
+            && path
+                .file_name()
+                .is_some_and(|name| name.eq_ignore_ascii_case("code.exe"))
+    })
+}
+
+#[tauri::command]
+fn open_vscode(executable_path: String, workspace_path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let executable = find_vscode_executable(&executable_path).ok_or_else(|| {
+            "VS Code was not found. Install VS Code or set its Code.exe path in Developer settings."
+                .to_string()
+        })?;
+        let workspace = workspace_path.trim();
+        let mut command = std::process::Command::new(&executable);
+        command.arg("--reuse-window");
+        if !workspace.is_empty() {
+            let path = std::path::Path::new(workspace);
+            if !path.is_dir() {
+                return Err("The Developer workspace path must be an existing folder.".to_string());
+            }
+            command.arg(path);
+        }
+        command.spawn().map(|_| ()).map_err(|error| {
+            format!(
+                "Could not open VS Code at {}: {error}",
+                executable.display()
+            )
+        })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (executable_path, workspace_path);
+        Err("VS Code launching is currently available in OpenJarvis Desktop on Windows.".into())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn find_playnite_library_path() -> Option<std::path::PathBuf> {
+    let roaming = std::env::var("APPDATA")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .map(|path| path.join("Playnite"));
+    let portable =
+        find_playnite_executable().and_then(|path| path.parent().map(std::path::Path::to_path_buf));
+    [roaming, portable]
+        .into_iter()
+        .flatten()
+        .map(|path| {
+            path.join("ExtensionsData")
+                .join("OpenJarvisBridge")
+                .join("library.json")
+        })
+        .find(|path| path.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn read_playnite_library() -> Result<Vec<serde_json::Value>, String> {
+    let path = find_playnite_library_path().ok_or_else(|| {
+        "No Playnite library export was found. Open or restart Playnite with the OpenJarvis Bridge enabled, then refresh.".to_string()
+    })?;
+    let size = std::fs::metadata(&path)
+        .map_err(|error| format!("Could not inspect the Playnite library: {error}"))?
+        .len();
+    if size > 20 * 1024 * 1024 {
+        return Err("The Playnite library export is larger than 20 MB.".to_string());
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read the Playnite library: {error}"))?;
+    let text = text.trim_start_matches('\u{feff}');
+    let value: serde_json::Value = serde_json::from_str(text)
+        .map_err(|error| format!("The Playnite library export is invalid JSON: {error}"))?;
+    match value {
+        serde_json::Value::Array(games) => Ok(games),
+        serde_json::Value::Object(object) => Ok(vec![serde_json::Value::Object(object)]),
+        _ => Err("The Playnite library export must contain a JSON object or array.".to_string()),
+    }
+}
+
+#[tauri::command]
+fn get_playnite_library() -> Result<Vec<serde_json::Value>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        read_playnite_library()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Playnite library access is available in OpenJarvis Desktop on Windows.".into())
+    }
+}
+
+fn is_valid_playnite_game_id(game_id: &str) -> bool {
+    game_id.len() == 36
+        && game_id.bytes().enumerate().all(|(index, byte)| {
+            if [8, 13, 18, 23].contains(&index) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
+}
+
+#[tauri::command]
+fn launch_playnite_game(game_id: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if !is_valid_playnite_game_id(&game_id) {
+            return Err("The Playnite game ID is invalid.".to_string());
+        }
+        if !read_playnite_library()?.iter().any(|game| {
+            game.get("id").and_then(serde_json::Value::as_str) == Some(game_id.as_str())
+        }) {
+            return Err(
+                "That game is no longer present in the Playnite library. Refresh and try again."
+                    .to_string(),
+            );
+        }
+        std::process::Command::new("explorer.exe")
+            .arg(format!("playnite://playnite/start/{game_id}"))
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Could not launch the Playnite game: {error}"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = game_id;
+        Err("Launching Playnite games is available in OpenJarvis Desktop on Windows.".into())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn find_vlc_executable() -> Option<std::path::PathBuf> {
+    let configured = std::env::var("VLC_PATH").ok().map(std::path::PathBuf::from);
+    let mut candidates = Vec::new();
+    if let Some(path) = configured {
+        if path.is_dir() {
+            candidates.push(path.join("vlc.exe"));
+        } else {
+            candidates.push(path);
+        }
+    }
+    for root in [
+        std::env::var("ProgramFiles").ok(),
+        std::env::var("ProgramFiles(x86)").ok(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        candidates.push(
+            std::path::PathBuf::from(root)
+                .join("VideoLAN")
+                .join("VLC")
+                .join("vlc.exe"),
+        );
+    }
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        candidates.push(
+            std::path::PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("VideoLAN")
+                .join("VLC")
+                .join("vlc.exe"),
+        );
+    }
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+#[tauri::command]
+fn play_media_url(url: String) -> Result<(), String> {
+    let parsed =
+        reqwest::Url::parse(&url).map_err(|_| "The media stream URL is invalid.".to_string())?;
+    if !["http", "https", "rtsp", "rtmp", "udp"].contains(&parsed.scheme())
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return Err(
+            "Use a stream URL with a supported protocol and no embedded credentials.".to_string(),
+        );
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let vlc = find_vlc_executable().ok_or_else(|| {
+            "VLC was not found. Install VLC or set VLC_PATH to vlc.exe, then try again.".to_string()
+        })?;
+        std::process::Command::new(vlc)
+            .args(["--one-instance", "--playlist-enqueue"])
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Could not open the stream in VLC: {error}"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(
+            "Opening TV streams in VLC is currently available in OpenJarvis Desktop on Windows."
+                .into(),
+        )
+    }
+}
+
+#[tauri::command]
+async fn fetch_media_document(url: String, kind: String) -> Result<String, String> {
+    if url.len() > 2048 {
+        return Err("The source URL is too long.".to_string());
+    }
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "The source URL is invalid.".to_string())?;
+    if !["http", "https"].contains(&parsed.scheme())
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return Err("Use an HTTP or HTTPS source URL without embedded credentials.".to_string());
+    }
+    let max_bytes = match kind.as_str() {
+        "playlist" => 4 * 1024 * 1024,
+        "guide" => 24 * 1024 * 1024,
+        _ => return Err("The media source type is not supported.".to_string()),
+    };
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(25))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .map_err(|error| format!("Could not prepare the media source request: {error}"))?;
+    let mut response = client
+        .get(parsed)
+        .header(reqwest::header::USER_AGENT, "OpenJarvis Desktop")
+        .send()
+        .await
+        .map_err(|error| format!("Could not load the media source: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "The media source returned HTTP {}.",
+            response.status()
+        ));
+    }
+    if response
+        .content_length()
+        .is_some_and(|size| size > max_bytes as u64)
+    {
+        return Err(format!(
+            "The media source exceeds the {max_bytes} byte size limit."
+        ));
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| format!("Could not read the media source: {error}"))?
+    {
+        if body.len() + chunk.len() > max_bytes {
+            return Err(format!(
+                "The media source exceeds the {max_bytes} byte size limit."
+            ));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let text = String::from_utf8(body)
+        .map_err(|_| "The media source is not valid UTF-8 text.".to_string())?;
+    Ok(text.trim_start_matches('\u{feff}').to_string())
+}
+
+#[cfg(test)]
+mod playnite_tests {
+    use super::{is_valid_playnite_game_id, playnite_candidates_from};
+    use std::path::PathBuf;
+
+    #[test]
+    fn playnite_candidates_include_default_install_locations() {
+        let candidates = playnite_candidates_from(
+            Some("C:\\Users\\test\\AppData\\Local"),
+            Some("C:\\Program Files"),
+            Some("C:\\Program Files (x86)"),
+            None,
+            None,
+        );
+
+        assert!(candidates.contains(
+            &PathBuf::from("C:\\Users\\test\\AppData\\Local")
+                .join("Programs")
+                .join("Playnite")
+                .join("Playnite.DesktopApp.exe")
+        ));
+        assert!(candidates.contains(
+            &PathBuf::from("C:\\Program Files")
+                .join("Playnite")
+                .join("Playnite.DesktopApp.exe")
+        ));
+    }
+
+    #[test]
+    fn configured_playnite_path_is_checked_first() {
+        let configured = PathBuf::from("D:\\Apps\\Playnite.DesktopApp.exe");
+        let candidates =
+            playnite_candidates_from(None, None, None, Some(configured.to_str().unwrap()), None);
+        assert_eq!(candidates.first(), Some(&configured));
+    }
+
+    #[test]
+    fn project_portable_playnite_is_a_fallback_candidate() {
+        let portable = PathBuf::from("C:\\OpenJarvis\\tools\\PlaynitePortable");
+        let candidates = playnite_candidates_from(None, None, None, None, Some(&portable));
+        assert_eq!(
+            candidates.last(),
+            Some(&portable.join("Playnite.DesktopApp.exe"))
+        );
+    }
+
+    #[test]
+    fn playnite_game_ids_must_be_guid_shaped() {
+        assert!(is_valid_playnite_game_id(
+            "01234567-89ab-cdef-0123-456789abcdef"
+        ));
+        assert!(!is_valid_playnite_game_id("not-a-game-id"));
+        assert!(!is_valid_playnite_game_id(
+            "01234567-89ab-cdef-0123-456789abcdeg"
+        ));
+    }
+}
+
 #[tauri::command]
 async fn check_health(api_url: String) -> Result<serde_json::Value, String> {
     let url = format!(
@@ -3450,6 +4204,22 @@ pub fn run() {
             start_backend,
             stop_backend,
             reset_inference_source,
+            get_playnite_status,
+            open_playnite,
+            install_optional_program,
+            open_game_launcher,
+            close_game_launcher,
+            open_vscode,
+            get_playnite_library,
+            launch_playnite_game,
+            fetch_media_document,
+            play_media_url,
+            steam::get_steam_status,
+            steam::get_steam_library,
+            steam::save_steam_api_key,
+            steam::get_steam_api_key_status,
+            steam::open_steam,
+            steam::launch_steam_game,
             check_health,
             fetch_energy,
             fetch_telemetry,
@@ -3498,7 +4268,7 @@ mod tests {
         boot_plan, default_local_model, discard_pending_inference_setup_at,
         format_extension_import_failure, format_missing_rust_toolchain, format_port_unavailable,
         format_uv_sync_failure, format_uv_sync_spawn_error, managed_cloud_key_names,
-        matching_installed_model, model_names_match, normalize_host,
+        matching_installed_model, model_names_match, normalize_host, optional_program_package_id,
         parse_configured_inference_config, parse_ollama_model_names,
         persist_confirmed_inference_config_at, preferred_installed_model,
         project_root_near_executable, reload_cloud_keys_for_owned_backend_at,
@@ -3514,6 +4284,30 @@ mod tests {
     #[test]
     fn atlas_cloud_key_is_loaded_with_managed_desktop_keys() {
         assert!(managed_cloud_key_names().contains(&"ATLASCLOUD_API_KEY".to_string()));
+    }
+
+    #[test]
+    fn optional_program_installs_are_allowlisted() {
+        let expected = [
+            ("steam", "Valve.Steam"),
+            ("playnite", "Playnite.Playnite"),
+            ("epic", "EpicGames.EpicGamesLauncher"),
+            ("gog", "GOG.Galaxy"),
+            ("ea", "ElectronicArts.EADesktop"),
+            ("ubisoft", "Ubisoft.Connect"),
+            ("battle-net", "Blizzard.BattleNet"),
+            ("obs-studio", "OBSProject.OBSStudio"),
+            ("vlc", "VideoLAN.VLC"),
+            ("prism-launcher", "PrismLauncher.PrismLauncher"),
+            ("discord", "Discord.Discord"),
+            ("telegram", "Telegram.TelegramDesktop"),
+            ("slack", "SlackTechnologies.Slack"),
+        ];
+        for (program_id, package_id) in expected {
+            assert_eq!(optional_program_package_id(program_id), Some(package_id));
+        }
+        assert_eq!(optional_program_package_id("unknown"), None);
+        assert_eq!(optional_program_package_id("whatsapp"), None);
     }
 
     #[derive(Default)]

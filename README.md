@@ -92,14 +92,20 @@ list the files in my workspace
 
 ---
 
-## 4. Make a ready-to-run installer for friends
+## 4. Build Windows x64 installers
 
-In VS Code: **Terminal → Run Task → Jarvis: Build .exe** (or double-click `build_exe.bat`).
+Run `install.bat` first to prepare the legacy app's 64-bit Python environment. Install
+Node.js, Rust stable with the `x86_64-pc-windows-msvc` target, Visual Studio C++ build
+tools, and NSIS. Then run `build_installers.bat` to build both independent products:
 
-It builds `dist\OpenJarvis\OpenJarvis.exe`, installs Inno Setup if needed, and creates
-**`Output\OpenJarvis-Setup.exe`**. Send that one file to anyone with Windows 10/11:
-no Python needed, no admin rights needed. On first launch Jarvis asks for *their own*
-Emergent LLM key.
+- Legacy Tkinter app: `Output\OpenJarvis-Setup-x64.exe`
+- Tauri desktop app: `frontend\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\`
+
+`build_exe.bat` builds only the legacy app. The installers are per-user and do not
+require Python on the destination PC. The legacy app stores its settings and memory
+under `%APPDATA%\OpenJarvis`, so uninstalling the app does not remove that user data.
+On first launch, the Tauri app offers supported account connections and individually
+selected optional program installs before opening the main interface.
 
 ---
 
@@ -125,11 +131,45 @@ reloads it. **Save first (Ctrl+S).**
 This project's `.vscode/settings.json` already turns this on. For other projects, click
 Settings → **Enable VS Code 'fix this'** once.
 
-## 8. Playnite games
+## 8. Games, social, and media
 
-Jarvis finds Playnite and connects to it automatically. If Playnite isn't installed, say
-**"install Playnite"** or use Settings → Install Playnite. **Open or restart Playnite once**
-so it shares your library, then try:
+The Chat page has Games, Social, and Media controls at the top. Games includes Steam and
+Playnite libraries plus launchers for Xbox, GOG Galaxy, Epic, EA, Ubisoft Connect,
+Battle.net, Riot, Rockstar, itch.io, Amazon Games, GeForce NOW, and Amazon Luna. Cloud
+gaming services open in their official browser apps. On Windows Desktop, OpenJarvis
+tries the installed launcher first and falls back to its official website. Configure which
+apps appear in Settings; Developer Mode reveals all hub launchers.
+
+Social services, including TikTok, open in their own browser pages. OpenJarvis does not access
+private feeds unless a supported connector is separately linked and authorized.
+
+On OpenJarvis Desktop for Windows, Steam can browse local games and launch installed
+titles. For your online library and current-game status, open Settings → Steam and add your
+SteamID64 plus a Steam Web API key. The profile must be public; the key is stored in the
+operating system credential store and is never sent to the AI model.
+
+Steam context in chat is off by default. When enabled in Settings, each standard chat request
+can include your current game and up to 20 of your most-played titles. This game metadata is
+sent to the selected model along with your message.
+
+With hands-free voice active, say **"Jarvis, open [app]"** for an enabled hub app, then
+**"Return to Jarvis"** to bring OpenJarvis back. Jarvis requests a graceful close only for a
+directly launched, trackable game launcher; browser tabs opened by the web app can be closed
+by Jarvis. If an external app cannot be safely closed, it is left open and Jarvis reports that.
+Say **"Sleep Jarvis"** to return to wake-word mode. Background speech recognition depends on
+the browser or desktop webview and may stop while another app is foregrounded.
+
+Personal-source context is separately **off by default** in Settings. After connecting a
+supported account in Data Sources, enabling it lets regular chats search connected, indexed
+sources and send up to five relevant excerpts with your prompt to the selected model. Those
+excerpts may contain sensitive personal information; turn the setting off to keep them out of
+regular chat requests. Linking a browser launcher does not grant Jarvis access to its private
+data, and providers without an OpenJarvis connector are not searched.
+
+Playnite's exported library includes installation state, playtime, genres, platforms, source,
+favorites, hidden state, and completion status. Jarvis finds Playnite automatically. If it
+isn't installed, say **"install Playnite"** or use Settings → Install Playnite. **Open or
+restart Playnite once** so it shares your library, then try:
 
 ```
 play Elden Ring
@@ -141,6 +181,47 @@ open Playnite in fullscreen
 The bridge is a small Playnite add-on in `playnite_extension/OpenJarvisBridge`. It saves your
 game list to `%APPDATA%\Playnite\ExtensionsData\OpenJarvisBridge\library.json`.
 Everything stays on your PC.
+
+The Media section opens YouTube, Twitch, Plex, Crave, Crunchyroll, and other streaming services and
+can load a user-provided M3U/M3U8 playlist with an optional XMLTV schedule. Channel streams
+open in VLC; install VLC or set `VLC_PATH` to its `vlc.exe` if it isn't detected automatically.
+Only add playlists and streams you are authorized to access. OpenJarvis does not download,
+scrape, or import videos from streaming websites. The English filter uses playlist language
+metadata and leaves channels without a language tag visible.
+
+The Record tab captures your own screen or gameplay locally using browser screen-share
+permission and lets you download the resulting WebM. It does not need the OpenJarvis backend
+or an AI provider, and recordings are not uploaded. Microphone and shared system audio are
+optional; system audio capture depends on browser, operating system, and the selected share
+source. For live streaming, the tab links to Twitch, YouTube, Kick, TikTok, Facebook, Rumble,
+and Steam broadcast pages, plus OBS Studio, PRISM Live Studio, Streamlabs, StreamYard, and
+Prism Launcher. Prism Launcher is a Minecraft launcher, not PRISM Live Studio. These are
+links, not embedded stream controls.
+Enable each link in Settings → Record and live stream. Local recording works offline after the
+app is installed, but AI chat still requires a backend and a locally installed model to work
+without internet.
+
+The Remote tab includes Steam Link, Chrome Remote Desktop, AnyDesk, TeamViewer, RustDesk,
+and Parsec. OpenJarvis Desktop first tries the installed application for services with a
+registered app link and falls back to the official site if unavailable; the browser version
+opens the official site. These are launch links, not remote-control connections. Configure
+the service on both devices and only access devices you own or are authorized to use. Enable
+each entry in Settings → Remote access and play.
+
+The main-page hub also includes Stores and AI sections. Configure hub launchers in Settings;
+only enabled apps appear unless Developer Mode is on. Social services open in your browser,
+but private feeds and account authentication are not integrated. Media streaming services and
+stores are launch links rather than unified provider catalogs; the TV guide combines only your
+own M3U/M3U8 playlist and optional XMLTV schedule. The AI section lists cloud providers with configured API keys and authorized local models.
+Base44, Emergent, and Microsoft Copilot can also be enabled as website launchers in Settings;
+they use their own sign-in and are not connected as OpenJarvis chat model providers.
+
+Developer Mode reveals additional hub entries and the Developer tab. It can open an existing
+VS Code installation with an optional workspace folder; it does not download or embed VS Code
+or grant Chat additional tools.
+
+Speech settings include Kokoro's curated American and British English voices. Cloud TTS
+backends use their configured voices and credentials.
 
 ---
 

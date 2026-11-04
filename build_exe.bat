@@ -1,16 +1,23 @@
 @echo off
 REM ================================================================
-REM  Build OpenJarvis.exe + OpenJarvis-Setup.exe on this Windows PC
+REM  Build the legacy OpenJarvis app and its x64 NSIS installer
 REM  Run AFTER install.bat has succeeded.
 REM ================================================================
 setlocal
 cd /d "%~dp0"
 if not exist .venv\Scripts\python.exe (
     echo [X] Run install.bat first.
-    pause
+    if not defined BUILD_INSTALLERS_NO_PAUSE pause
     exit /b 1
 )
 call .venv\Scripts\activate.bat
+
+python -c "import struct,sys; sys.exit(0 if struct.calcsize('P') == 8 else 1)"
+if errorlevel 1 (
+    echo [X] A 64-bit Python environment is required to build the x64 installer.
+    if not defined BUILD_INSTALLERS_NO_PAUSE pause
+    exit /b 1
+)
 
 echo [+] Installing PyInstaller
 pip install pyinstaller --quiet
@@ -29,7 +36,7 @@ pyinstaller --noconfirm --clean --windowed --name OpenJarvis ^
     jarvis.py
 if errorlevel 1 (
     echo [X] PyInstaller build failed. See the messages above.
-    pause
+    if not defined BUILD_INSTALLERS_NO_PAUSE pause
     exit /b 1
 )
 
@@ -38,44 +45,44 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\verify_product
 if errorlevel 1 (
     echo [X] A debug-enabled libcurl artifact was found in the production bundle.
     echo     Rebuild libcurl in Release mode before packaging.
-    pause
+    if not defined BUILD_INSTALLERS_NO_PAUSE pause
     exit /b 1
 )
 echo [+] Built dist\OpenJarvis\OpenJarvis.exe
 
-call :find_iscc
-if not defined ISCC (
-    echo [+] Installing Inno Setup (makes the Setup.exe installer)
-    winget install -e --id JRSoftware.InnoSetup --accept-source-agreements --accept-package-agreements
-    call :find_iscc
-)
-if not defined ISCC (
-    echo [!] Inno Setup not found. You can still share the dist\OpenJarvis folder as a zip.
-    pause
-    exit /b 0
+call :find_makensis
+if not defined MAKENSIS (
+    echo [X] NSIS was not found. Install NSIS or set NSIS_HOME to its installation folder.
+    echo     The installer is not built until makensis.exe is available.
+    if not defined BUILD_INSTALLERS_NO_PAUSE pause
+    exit /b 1
 )
 
-echo [+] Building OpenJarvis-Setup.exe
-"%ISCC%" installer.iss
+echo [+] Building the x64 NSIS installer
+if not exist Output mkdir Output
+"%MAKENSIS%" /V2 installer.nsi
 if errorlevel 1 (
-    echo [X] Setup build failed.
-    pause
+    echo [X] NSIS setup build failed.
+    if not defined BUILD_INSTALLERS_NO_PAUSE pause
     exit /b 1
 )
 
 echo.
 echo  ============================================================
-echo    Done!  Share this file with friends:
-echo      %CD%\Output\OpenJarvis-Setup.exe
-echo    They don't need Python. On first launch Jarvis asks for
-echo    their own Emergent LLM key.
+echo    Done! Share this x64 installer:
+echo      %CD%\Output\OpenJarvis-Setup-x64.exe
+echo    It installs per-user and does not require Python on the
+echo    destination PC. User settings and memory are kept in AppData.
 echo  ============================================================
-pause
+if not defined BUILD_INSTALLERS_NO_PAUSE pause
 exit /b 0
 
-:find_iscc
-set "ISCC="
-if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
-if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
-if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+:find_makensis
+set "MAKENSIS="
+if defined NSIS_HOME if exist "%NSIS_HOME%\makensis.exe" set "MAKENSIS=%NSIS_HOME%\makensis.exe"
+if not defined MAKENSIS if exist "%ProgramFiles%\NSIS\makensis.exe" set "MAKENSIS=%ProgramFiles%\NSIS\makensis.exe"
+if not defined MAKENSIS if exist "%ProgramFiles(x86)%\NSIS\makensis.exe" set "MAKENSIS=%ProgramFiles(x86)%\NSIS\makensis.exe"
+if not defined MAKENSIS (
+    for /f "delims=" %%I in ('where makensis.exe 2^>nul') do if not defined MAKENSIS set "MAKENSIS=%%I"
+)
 exit /b 0
