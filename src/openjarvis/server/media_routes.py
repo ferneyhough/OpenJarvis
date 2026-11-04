@@ -17,9 +17,9 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -45,6 +45,21 @@ AUDIO_FORMATS = {"mp3", "wav", "ogg", "flac", "aac", "m4a"}
 VIDEO_FORMATS = {"mp4", "webm", "mkv", "avi", "mov", "gif"}
 
 _gen_lock = threading.Lock()
+_download_lock = threading.Lock()
+_downloads: Dict[str, Dict[str, str]] = {
+    "image": {"status": "idle", "error": ""},
+    "video": {"status": "idle", "error": ""},
+}
+
+# Free hosted generators opened when local models are not selected.
+FREE_SITES = {
+    "image": "https://www.craiyon.com/",
+    "video": "https://huggingface.co/spaces/ByteDance/AnimateDiff-Lightning",
+}
+
+
+class ModelDownloadRequest(BaseModel):
+    kind: Literal["image", "video"]
 _jobs: Dict[str, Dict[str, Any]] = {}
 _pipes: Dict[str, Any] = {}
 
@@ -257,6 +272,86 @@ async def job_status(job_id: str):
     if job is None:
         raise HTTPException(404, "Unknown job")
     return job
+
+
+def _local_only(request: Request) -> None:
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(403, "Local requests only")
+
+
+def download_models(kind: str) -> None:
+    """Download the model files for ``kind`` ('image' or 'video') into the cache."""
+    from huggingface_hub import hf_hub_download, snapshot_download
+
+    cache = str(MODELS_CACHE)
+    patterns = ["*.json", "*.txt", "*fp16.safetensors"]
+    if kind == "image":
+        snapshot_download(IMAGE_REPO, allow_patterns=patterns, cache_dir=cache)
+    elif kind == "video":
+        snapshot_download(
+            VIDEO_BASE_REPO,
+            allow_patterns=patterns,
+            ignore_patterns=["safety_checker/*"],
+            cache_dir=cache,
+        )
+        hf_hub_download(VIDEO_ADAPTER_REPO, VIDEO_ADAPTER_FILE, cache_dir=cache)
+        snapshot_download(
+            VIDEO_ADAPTER_CONFIG_REPO,
+            allow_patterns=["config.json"],
+            cache_dir=cache,
+        )
+    else:
+        raise ValueError(f"Unknown model kind: {kind}")
+
+
+def _download_worker(kind: str) -> None:
+    state = _downloads[kind]
+    try:
+        download_models(kind)
+        state.update(status="done", error="")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Model download failed for %s", kind)
+        state.update(status="error", error=str(exc)[:300])
+
+
+@media_router.get("/models/status")
+async def models_status():
+    ready = {
+        "image": _models_ready(IMAGE_REPO),
+        "video": _models_ready(VIDEO_BASE_REPO) and _models_ready(VIDEO_ADAPTER_REPO),
+    }
+    return {
+        k: {
+            "ready": ready[k] and _downloads[k]["status"] != "downloading",
+            "status": _downloads[k]["status"],
+            "error": _downloads[k]["error"],
+        }
+        for k in ("image", "video")
+    }
+
+
+@media_router.post("/models/download")
+async def models_download(req: ModelDownloadRequest, request: Request):
+    _local_only(request)
+    state = _downloads[req.kind]
+    with _download_lock:
+        if state["status"] == "downloading":
+            return {"status": "downloading"}
+        state.update(status="downloading", error="")
+    threading.Thread(target=_download_worker, args=(req.kind,), daemon=True).start()
+    return {"status": "downloading"}
+
+
+@media_router.post("/open-site")
+async def open_free_site(req: ModelDownloadRequest, request: Request):
+    """Open a free hosted generator in the default browser (local only)."""
+    _local_only(request)
+    import webbrowser
+
+    url = FREE_SITES[req.kind]
+    webbrowser.open(url)
+    return {"url": url}
 
 
 @media_router.get("/files/{name}")

@@ -91,12 +91,19 @@ native window. Chat needs Ollama with `qwen3.5:4b` (`install.bat` installs both)
 - **Voice:** one global voice, Kokoro `bm_george`, everywhere. Models download into `models\`.
 - **Chat toolbar:** model picker, Ask/Agent/Plan/Edit modes, tool permissions, file/image
   attach, edit/resend/regenerate on messages, and slash commands (`/help`).
-- **AI image:** `/image <prompt>` (sd-turbo, local; minutes on CPU).
-- **AI video:** `/video <prompt>` (AnimateDiff-Lightning; very slow on CPU, about 20 min).
+- **AI image / video:** the **Image** and **Video** buttons (or `/image`, `/video`) open a free
+  hosted generator in your browser by default. To generate locally, turn on Developer Mode in
+  Settings and select *Local image/video generation model*; the model (image ~2 GB, video
+  ~3 GB) downloads on demand into `models\` and Jarvis announces it by voice. Local image
+  takes minutes on CPU and video about 20 min (sd-turbo, AnimateDiff-Lightning).
 - **Convert:** the **Convert…** dropdown or `/convert <format>` converts audio/video via the
   bundled ffmpeg (`imageio-ffmpeg`). Output files are in `%USERPROFILE%\.openjarvis\media`.
-- Download the image/video models with `python scripts\download_media_models.py` and the
-  voice models with `python scripts\download_voice_models.py`.
+- Optional manual downloads: `python scripts\download_media_models.py [image|video|all]` and
+  `python scripts\download_voice_models.py`.
+- **Optional dependencies and sizes:** local generation needs `pip install -r requirements-media.txt`
+  (diffusers 28 MB, imageio-ffmpeg 106 MB, others <5 MB) plus models downloaded on demand
+  (image ~2.4 GB, video ~3–5 GB). Core voice models in `models\` are ~490 MB (Kokoro ~330 MB,
+  Whisper ~150 MB). `install.bat` asks before installing the optional packages.
 
 ### Try these
 

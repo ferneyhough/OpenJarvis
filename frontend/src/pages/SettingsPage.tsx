@@ -46,6 +46,7 @@ import {
 import { getSteamApiKeyStatus, saveSteamApiKey } from '../lib/steam';
 import { gameLaunchers } from '../lib/game-launchers';
 import { openVSCode } from '../lib/developer';
+import { ensureLocalMediaModel } from '../lib/mediaModels';
 import {
   COLOR_THEMES,
   DEFAULT_THEME_ID,
@@ -790,6 +791,40 @@ function DeveloperSettings({ onSaved }: { onSaved: () => void }) {
             </button>
           </SettingRow>
           {error && <p role="alert" className="pt-2 text-xs" style={{ color: 'var(--color-error)' }}>{error}</p>}
+          {(['image', 'video'] as const).map((kind) => {
+            const key = kind === 'image' ? 'localImageModel' : 'localVideoModel';
+            return (
+              <SettingRow
+                key={kind}
+                label={`Local ${kind} generation model`}
+                description={
+                  kind === 'image'
+                    ? 'Stable Diffusion Turbo (~2 GB). Off = the Image button opens a free website instead; nothing is downloaded. Turning this on downloads it and announces it by voice.'
+                    : 'SD 1.5 + AnimateDiff-Lightning (~3 GB, very slow on CPU). Off = the Video button opens a free website instead; nothing is downloaded. Turning this on downloads it and announces it by voice.'
+                }
+              >
+                <input
+                  type="checkbox"
+                  aria-label={`Local ${kind} generation model`}
+                  checked={settings[key]}
+                  onChange={(event) => {
+                    const on = event.target.checked;
+                    updateSettings({ [key]: on });
+                    onSaved();
+                    if (on) {
+                      ensureLocalMediaModel(kind).then((ok) => {
+                        if (!ok) updateSettings({ [key]: false });
+                      }).catch((e) => {
+                        updateSettings({ [key]: false });
+                        setError(e instanceof Error ? e.message : String(e));
+                      });
+                    }
+                  }}
+                  className="h-4 w-4 accent-[var(--color-accent)]"
+                />
+              </SettingRow>
+            );
+          })}
         </>
       )}
     </Section>

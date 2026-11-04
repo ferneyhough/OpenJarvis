@@ -39,7 +39,7 @@ import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
 import { useHandsFree } from '../../hooks/useHandsFree';
 import { ChatToolbar, CHAT_MODES, MODE_PROMPTS, type Attachment } from './ChatToolbar';
-import { generateMedia, convertMedia } from '../../lib/api';
+import { generateMedia, convertMedia, openFreeMediaSite } from '../../lib/api';
 import type {
   ChatMessage,
   MessageTelemetry,
@@ -306,6 +306,18 @@ export function InputArea() {
       case '/image':
       case '/video': {
         const kind = cmd.toLowerCase() === '/image' ? 'image' : 'video';
+        const localOn = kind === 'image'
+          ? st().settings.localImageModel
+          : st().settings.localVideoModel;
+        if (!localOn) {
+          try {
+            await openFreeMediaSite(kind);
+            toast.info(`Opened a free ${kind} generator in your browser. For local generation, enable it in Settings › Developer Mode.`);
+          } catch (e) {
+            toast.error(`Could not open the browser: ${e instanceof Error ? e.message : e}`);
+          }
+          return;
+        }
         if (!arg) {
           toast.error(`Usage: /${kind} <prompt>`);
           return;
@@ -1077,6 +1089,14 @@ export function InputArea() {
           onAttach={() => fileInputRef.current?.click()}
           onRemove={(id) => setAttachments((p) => p.filter((a) => a.id !== id))}
           onCommand={(cmd) => {
+            const s = useAppStore.getState().settings;
+            if (
+              (cmd === '/image' && !s.localImageModel)
+              || (cmd === '/video' && !s.localVideoModel)
+            ) {
+              void runSlash(cmd);
+              return;
+            }
             setInput(`${cmd} `);
             textareaRef.current?.focus();
           }}

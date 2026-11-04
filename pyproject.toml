@@ -185,7 +185,7 @@ speech = [
     "soundfile>=0.12",
 ]
 speech-deepgram = ["deepgram-sdk>=3.0"]
-imagegen = [
+imagegen = [   # optional; ~150 MB packages, models (2-5 GB) download on demand
     "accelerate>=0.30",
     "peft>=0.10",
     "pillow>=10.2.0",

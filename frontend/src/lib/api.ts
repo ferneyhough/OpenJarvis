@@ -441,6 +441,36 @@ export interface MediaResult {
   name?: string;
 }
 
+export interface MediaModelStatus {
+  ready: boolean;
+  status: 'idle' | 'downloading' | 'done' | 'error';
+  error: string;
+}
+
+export async function fetchMediaModelStatus(): Promise<Record<'image' | 'video', MediaModelStatus>> {
+  const res = await apiFetch('/v1/media/models/status');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function downloadMediaModel(kind: 'image' | 'video'): Promise<void> {
+  const res = await apiFetch('/v1/media/models/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  });
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+}
+
+export async function openFreeMediaSite(kind: 'image' | 'video'): Promise<void> {
+  const res = await apiFetch('/v1/media/open-site', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  });
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+}
+
 export async function generateMedia(
   kind: 'image' | 'video',
   prompt: string,

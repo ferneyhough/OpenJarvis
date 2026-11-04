@@ -61,10 +61,17 @@ pip install -e . pywebview "kokoro>=0.9" soundfile "misaki[en]" faster-whisper -
 echo [+] Downloading voice and hands-free models into .\models
 python scripts\download_voice_models.py
 
-echo [+] Installing image/video generation and converter packages
-pip install diffusers accelerate peft pillow imageio imageio-ffmpeg python-multipart --quiet
-echo [+] Downloading image and video models (about 5 GB, one time)
-python scripts\download_media_models.py
+echo.
+set /p WANTMEDIA="Install optional local image/video generation packages (~150 MB + models on demand)? [y/N] "
+if /i "!WANTMEDIA!"=="y" (
+    echo [+] Installing image/video generation and converter packages
+    pip install -r requirements-media.txt --quiet
+) else (
+    echo [-] Skipped. Later: pip install -r requirements-media.txt
+)
+echo [+] Image/video models are NOT downloaded by default.
+echo     Enable them in Settings ^> Developer Mode ^> Local image/video generation,
+echo     or run: python scripts\download_media_models.py all
 
 where ollama >nul 2>&1
 if errorlevel 1 (

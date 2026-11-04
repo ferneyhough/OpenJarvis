@@ -1,0 +1,13 @@
+# OPTIONAL: local AI image/video generation and audio/video conversion.
+# Install:  pip install -r requirements-media.txt
+# Not needed if you use the free website option (the default).
+# Sizes are approximate installed sizes (torch is already present via the core install).
+diffusers>=0.30          # ~28 MB
+accelerate>=0.30         # ~2 MB
+peft>=0.10               # ~3 MB
+imageio>=2.34            # ~1 MB
+imageio-ffmpeg>=0.5      # ~106 MB (bundled ffmpeg, used by Convert)
+python-multipart>=0.0.9  # <1 MB
+# Models are downloaded on demand (Settings > Developer Mode):
+#   image: stabilityai/sd-turbo                       ~2.4 GB
+#   video: SD 1.5 + AnimateDiff-Lightning             ~3-5 GB

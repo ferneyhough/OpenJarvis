@@ -124,6 +124,8 @@ interface Settings {
   allowShell: boolean;
   allowWeb: boolean;
   allowFiles: boolean;
+  localImageModel: boolean;
+  localVideoModel: boolean;
 }
 
 function loadSettings(): Settings {
@@ -155,6 +157,8 @@ function loadSettings(): Settings {
     allowShell: false,
     allowWeb: true,
     allowFiles: true,
+    localImageModel: false,
+    localVideoModel: false,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
