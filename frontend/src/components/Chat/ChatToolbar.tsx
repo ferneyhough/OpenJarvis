@@ -69,21 +69,7 @@ export function ChatToolbar({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <div role="group" aria-label="Mode" className="flex flex-wrap items-center gap-1">
-          {CHAT_AGENTS.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              title={m.hint}
-              aria-pressed={settings.chatMode === m.id}
-              onClick={() => updateSettings({ chatMode: m.id })}
-              className="rounded-full px-2.5 py-1 cursor-pointer"
-              style={pill(settings.chatMode === m.id)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>        <label
+<label
           className="relative inline-flex items-center rounded-full px-2.5 py-1 cursor-pointer"
           style={{ ...pill(false), background: 'var(--color-bg-secondary)', maxWidth: 260 }}
           title={`${getAgent(settings.chatMode).hint} - ${models.length} model${models.length === 1 ? '' : 's'} available`}
@@ -119,7 +105,23 @@ export function ChatToolbar({
               ))}
             </optgroup>
           </select>
-        </label>        <div className="relative">
+        </label>
+        <div role="group" aria-label="Mode" className="flex flex-wrap items-center gap-1">
+          {CHAT_AGENTS.filter((m) => m.id === 'debug').map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              title={m.hint}
+              aria-pressed={settings.chatMode === m.id}
+              onClick={() => updateSettings({ chatMode: m.id })}
+              className="rounded-full px-2.5 py-1 cursor-pointer"
+              style={pill(settings.chatMode === m.id)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+<div className="relative">
           <button
             type="button"
             onClick={() => setPermsOpen((v) => !v)}
@@ -155,6 +157,16 @@ export function ChatToolbar({
                   </button>
                 ))}
               </div>
+              <label className="flex items-center gap-2 cursor-pointer font-semibold pb-1 mb-1" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <input
+                  type="checkbox"
+                  checked={perms.every((p) => Boolean(settings[p.key]))}
+                  onChange={(e) =>
+                    updateSettings(Object.fromEntries(perms.map((p) => [p.key, e.target.checked])))
+                  }
+                />
+                <span style={{ color: 'var(--color-text)' }}>Allow all</span>
+              </label>
               {perms.map((p) => (
                 <label key={p.key} className="flex items-center gap-2 cursor-pointer">
                   <input
