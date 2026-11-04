@@ -381,8 +381,10 @@ async def open_link(req: OpenLinkRequest, request: Request):
     parsed = urlparse(req.url)
     if parsed.scheme != "https" or parsed.hostname not in LINK_HOSTS:
         raise HTTPException(400, "Link not allowed")
-    webbrowser.open(req.url)
-    return {"url": req.url}
+    opened = webbrowser.open(req.url)
+    if not opened:
+        raise HTTPException(500, "No browser could be opened")
+    return {"url": req.url, "opened": True}
 
 
 @media_router.get("/music")
