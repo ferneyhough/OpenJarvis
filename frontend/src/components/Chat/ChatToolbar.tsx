@@ -81,23 +81,43 @@ export function ChatToolbar({
               {m.label}
             </button>
           ))}
-        </div>        <span style={{ color: 'var(--color-text-tertiary)' }}>Model</span>
-        <select
-          aria-label="Model"
-          title={`${models.length} model${models.length === 1 ? '' : 's'} available`}
-          value={selectedModel}
-          disabled={disabled}
-          onChange={(e) => setSelectedModel(e.target.value)}
-          className="rounded-full px-2.5 py-1 cursor-pointer"
-          style={{ ...pill(false), background: 'var(--color-bg-secondary)', maxWidth: 200 }}
+        </div>        <label
+          className="relative inline-flex items-center rounded-full px-2.5 py-1 cursor-pointer"
+          style={{ ...pill(false), background: 'var(--color-bg-secondary)', maxWidth: 260 }}
+          title={`${getAgent(settings.chatMode).hint} - ${models.length} model${models.length === 1 ? '' : 's'} available`}
         >
-          {!selectedModel && <option value="">Pick model…</option>}
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.id}
-            </option>
-          ))}
-        </select>        <div className="relative">
+          <span className="truncate">
+            {getAgent(settings.chatMode).label} · {selectedModel || 'Pick model…'}
+          </span>
+          <select
+            aria-label="Agent and model"
+            value={selectedModel ? `model:${selectedModel}` : ''}
+            disabled={disabled}
+            onChange={(e) => {
+              const [kind, ...rest] = e.target.value.split(':');
+              const v = rest.join(':');
+              if (kind === 'agent') updateSettings({ chatMode: v as typeof settings.chatMode });
+              else if (kind === 'model') setSelectedModel(v);
+            }}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          >
+            {!selectedModel && <option value="">Pick model…</option>}
+            <optgroup label="Agent">
+              {CHAT_AGENTS.map((a) => (
+                <option key={a.id} value={`agent:${a.id}`}>
+                  {settings.chatMode === a.id ? '✓ ' : ''}{a.label} - {a.hint}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Model">
+              {models.map((m) => (
+                <option key={m.id} value={`model:${m.id}`}>
+                  {m.id}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </label>        <div className="relative">
           <button
             type="button"
             onClick={() => setPermsOpen((v) => !v)}
