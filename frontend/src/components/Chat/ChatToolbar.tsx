@@ -21,6 +21,7 @@ export const MODE_PLACEHOLDERS: Record<string, string> = {
   auto: 'Ask or describe a task - Jarvis picks the right agent...',
   ask: 'Ask anything...',
   agent: 'Describe a task for Jarvis to carry out...',
+  autopilot: 'Describe a goal - Jarvis will run it start to finish...',
   plan: 'Describe what to plan...',
   edit: 'Paste text or code and say what to change...',
   explore: 'Ask how something works...',

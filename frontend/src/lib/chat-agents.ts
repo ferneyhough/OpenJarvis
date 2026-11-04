@@ -2,6 +2,7 @@ export type ChatMode =
   | 'auto'
   | 'ask'
   | 'agent'
+  | 'autopilot'
   | 'plan'
   | 'edit'
   | 'explore'
@@ -40,6 +41,14 @@ export const CHAT_AGENTS: readonly ChatAgent[] = [
     action: 'Working through the task step by step',
     prompt:
       'You are in Agent mode. Break the request into steps, carry them out, and report what you did and the result.',
+  },
+  {
+    id: 'autopilot',
+    label: 'Autopilot',
+    hint: 'Works autonomously from start to finish without stopping to ask',
+    action: 'Working autonomously to completion',
+    prompt:
+      'You are in Autopilot mode. Work autonomously from start to finish on the request. Do not stop to ask clarifying questions: make reasonable assumptions, state them briefly, complete every step, and finish with a summary of what you did, the result, and anything the user should double-check.',
   },
   {
     id: 'plan',
