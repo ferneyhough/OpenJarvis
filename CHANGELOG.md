@@ -9,6 +9,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Chat: combined Agent/Model select (Auto, Ask, Pro, Autopilot, Plan, Edit, Explore, Review, Research, Debug); enabled pills are highlighted.
+- Permissions: Allow / Manual / Sandbox modes plus "Allow all" (shell and web limits are prompt-level only).
+- Attach files or a whole folder with a visible explorer below the chat box.
+- Music player with voice control, Browsers tab, and launching installed desktop apps.
+- `tests/deployment/test_windows_scripts.py` enforces the `.bat` script pattern.
+
+### Changed
+- `run.bat` / `install.bat` / build scripts `cd` to their own folder; Windows scripts are CRLF via `.gitattributes`.
+- `install.bat` builds the web UI (installing Node via winget if needed).
+- `env/` and `.vs/` are untracked; set `CARGO_TARGET_DIR` outside OneDrive to keep Rust build output out of sync.
+
+## [Unreleased]
+
+### Added
 
 **Windows desktop app** — `jarvis_desktop.py` opens the web UI in a native
 WebView2 window. Voice is a single global Kokoro `bm_george` voice; the
