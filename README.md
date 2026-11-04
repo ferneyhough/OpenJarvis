@@ -249,6 +249,23 @@ or grant Chat additional tools.
 Speech settings include Kokoro's curated American and British English voices. Cloud TTS
 backends use their configured voices and credentials.
 
+### Chat agents, permissions and attachments
+
+The toolbar select picks an agent and a model together. Agents are Auto (routes each message by
+keyword), Ask, Pro (step by step), Autopilot (works autonomously), Plan, Edit, Explore, Review,
+Research and Debug. Enabled toolbar pills are highlighted. Permissions has Allow, Manual (asks
+before each send) and Sandbox modes plus "Allow all"; shell and web limits are prompt-level
+guidance, not hard blocks. Attach files or a whole folder and browse them in the explorer below
+the chat box (large, binary and `node_modules`-style content is skipped).
+
+### Paths and disk space
+
+All scripts (`run.bat`, `install.bat`, `build_*.bat`) start in their own folder and use `.venv`;
+`tests/deployment/test_windows_scripts.py` enforces this. `install.bat` also builds the web UI.
+Rust build output is large: set `CARGO_TARGET_DIR` to a folder outside OneDrive and run
+`cargo clean` when you need the space back. NTFS compression (`compact /c /s /i /q <folder>`)
+works well on `tools` and `node_modules` but not on model files.
+
 ---
 
 ## Config reference (`config.json`)
