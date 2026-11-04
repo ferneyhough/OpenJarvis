@@ -45,6 +45,7 @@ import {
 } from '../lib/api';
 import { getSteamApiKeyStatus, saveSteamApiKey } from '../lib/steam';
 import { gameLaunchers } from '../lib/game-launchers';
+import { MUSIC_APPS } from '../lib/music-commands';
 import { openVSCode } from '../lib/developer';
 import { ensureLocalMediaModel } from '../lib/mediaModels';
 import {
@@ -619,6 +620,15 @@ const hubIntegrationGroups = [
     ],
   },
   {
+    title: 'Music',
+    apps: MUSIC_APPS.map((app) => ({
+      id: `music-${app.id}`,
+      name: app.label,
+      url: app.url,
+      auth: `Activate to show ${app.label} in the Music section and its player. Once activated it stays visible. OpenJarvis opens the desktop app when installed, otherwise the website; sign in there.`,
+    })),
+  },
+  {
     title: 'Stores',
     apps: [
       { id: 'gg-deals', name: 'GG.deals', url: 'https://gg.deals/', auth: 'Open deal pages in your browser; sign in there if you use a GG.deals account.' },
@@ -635,6 +645,7 @@ const hubIntegrationGroups = [
 
 export function AppIntegrationsSettings() {
   const enabledApps = useAppStore((state) => state.settings.hubEnabledApps);
+  const developerMode = useAppStore((state) => state.settings.developerModeEnabled);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const toggleApp = (id: string, enabled: boolean) => {
     const next = new Set(enabledApps);
@@ -645,7 +656,7 @@ export function AppIntegrationsSettings() {
 
   return (
     <>
-      {hubIntegrationGroups.map((group) => (
+      {hubIntegrationGroups.filter((group) => group.title !== 'Music' || developerMode).map((group) => (
         <Section key={group.title} title={group.title}>
           <p className="mb-2 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
             These are launch links and visibility controls, not account connections. Sign in with each provider separately; OpenJarvis cannot verify browser sign-in. Private feeds and unsupported provider APIs are not connected.

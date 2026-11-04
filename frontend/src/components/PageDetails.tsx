@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 import { fetchManagedAgents, fetchMediaLibrary, fetchNativeApps, getBase, openAllowedLink, type ManagedAgent } from '../lib/api';
+import { MUSIC_APPS } from '../lib/music-commands';
 import { listConnectors } from '../lib/connectors-api';
 import type { ConnectorInfo } from '../types/connectors';
 
@@ -35,27 +36,13 @@ const DEALS = [
   { label: 'IsThereAnyDeal', url: 'https://isthereanydeal.com/deals/' },
 ];
 
-export const MUSIC = [
-  { label: 'YouTube Music', url: 'https://music.youtube.com/' },
-  { label: 'Spotify', url: 'https://open.spotify.com/' },
-  { label: 'Apple Music', url: 'https://music.apple.com/' },
-  { label: 'Amazon Music', url: 'https://music.amazon.com/' },
-  { label: 'Tidal', url: 'https://listen.tidal.com/' },
-  { label: 'SoundCloud', url: 'https://soundcloud.com/' },
-  { label: 'Audible', url: 'https://www.audible.com/' },
-  { label: 'Deezer', url: 'https://www.deezer.com/' },
-  { label: 'Pandora', url: 'https://www.pandora.com/' },
-  { label: 'Bandcamp', url: 'https://bandcamp.com/' },
-  { label: 'Qobuz', url: 'https://play.qobuz.com/' },
-  { label: 'Mixcloud', url: 'https://www.mixcloud.com/' },
-  { label: 'Internet Archive Audio', url: 'https://archive.org/details/audio' },
-];
+
 
 const FEEDS = [
-  { label: 'Reddit Ã¢â‚¬â€œ r/LocalLLaMA', url: 'https://www.reddit.com/r/LocalLLaMA/' },
-  { label: 'Reddit Ã¢â‚¬â€œ r/StableDiffusion', url: 'https://www.reddit.com/r/StableDiffusion/' },
-  { label: 'YouTube Ã¢â‚¬â€œ AI', url: 'https://www.youtube.com/results?search_query=ai+news' },
-  { label: 'X / Twitter Ã¢â‚¬â€œ AI', url: 'https://x.com/search?q=AI&f=live' },
+  { label: 'Reddit – r/LocalLLaMA', url: 'https://www.reddit.com/r/LocalLLaMA/' },
+  { label: 'Reddit – r/StableDiffusion', url: 'https://www.reddit.com/r/StableDiffusion/' },
+  { label: 'YouTube – AI', url: 'https://www.youtube.com/results?search_query=ai+news' },
+  { label: 'X / Twitter – AI', url: 'https://x.com/search?q=AI&f=live' },
   { label: 'Hacker News', url: 'https://news.ycombinator.com/' },
 ];
 
@@ -140,6 +127,11 @@ function AppRow({ item, installed }: { item: AppLink; installed: boolean }) {
       )}
     </li>
   );
+}
+
+export function useEnabledMusicApps() {
+  const enabled = useAppStore((s) => s.settings.hubEnabledApps);
+  return MUSIC_APPS.filter((a) => enabled.includes(`music-${a.id}`));
 }
 
 export function Links({ items }: { items: AppLink[] }) {
@@ -310,17 +302,17 @@ export function PageDetails() {
               <ul className="flex flex-col gap-1">
                 {pathname === '/data-sources' && connectors.map((c) => (
                   <li key={c.connector_id}>
-                    <Row>{c.display_name} <span style={muted}>Ã‚Â· {c.connected ? 'connected' : 'not connected'}</span></Row>
+                    <Row>{c.display_name} <span style={muted}>· {c.connected ? 'connected' : 'not connected'}</span></Row>
                   </li>
                 ))}
                 {pathname === '/agents' && agents.map((a) => (
-                  <li key={a.id}><Row>{a.name} <span style={muted}>Ã‚Â· {a.agent_type} Ã‚Â· {a.status}</span></Row></li>
+                  <li key={a.id}><Row>{a.name} <span style={muted}>· {a.agent_type} · {a.status}</span></Row></li>
                 ))}
                 {models.length === 0 && <li style={muted}>No models loaded.</li>}
                 {models.map((m) => (
                   <li key={m.id}>
                     <Row active={m.id === selectedModel} onClick={() => setSelectedModel(m.id)}>
-                      {m.id} <span style={muted}>Ã‚Â· {m.owned_by}</span>{m.id === selectedModel ? ' Ã¢Å“â€œ' : ''}
+                      {m.id} <span style={muted}>· {m.owned_by}</span>{m.id === selectedModel ? ' ✓' : ''}
                     </Row>
                   </li>
                 ))}
@@ -337,7 +329,7 @@ export function PageDetails() {
                         <img src={`${getBase()}${m.url}`} alt={m.name} className="h-16 w-16 rounded object-cover" />
                       ) : (
                         <span className="flex h-16 w-24 items-center justify-center rounded px-1 text-center" style={{ border, color: 'var(--color-text)' }}>
-                          {m.kind === 'video' ? 'Ã°Å¸Å½Â¬' : 'Ã°Å¸Å½Âµ'} {m.name.slice(0, 14)}
+                          {m.kind === 'video' ? '🎬' : '🎵'} {m.name.slice(0, 14)}
                         </span>
                       )}
                     </a>

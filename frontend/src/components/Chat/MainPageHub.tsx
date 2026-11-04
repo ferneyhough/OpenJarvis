@@ -1220,8 +1220,7 @@ function DeveloperPanel() {
 
 function MusicPanel() {
   const openPlayer = useMusicStore((s) => s.openPlayer);
-  return (
-    <div className="space-y-3 px-4 pb-4">
+  const apps = useEnabledMusicApps();
       <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
         Play local files and playlists in the Jarvis player, or open a music app. Say &ldquo;Jarvis open Spotify&rdquo;, &ldquo;pause&rdquo;, &ldquo;next&rdquo; or &ldquo;Jarvis return&rdquo;.
       </p>
@@ -1233,7 +1232,11 @@ function MusicPanel() {
       >
         <Music2 size={14} /> Open music player
       </button>
-      <div className="text-xs"><Links items={MUSIC} /></div>
+      <div className="text-xs">
+        {apps.length
+          ? <Links items={apps} />
+          : <p style={{ color: 'var(--color-text-tertiary)' }}>No music apps activated yet. Turn on Developer Mode, then activate apps in Settings → Music. Activated apps stay here afterwards.</p>}
+      </div>
     </div>
   );
 }

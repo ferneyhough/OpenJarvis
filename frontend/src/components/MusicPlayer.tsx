@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchServerMusic } from '../lib/api';
-import { Links, MUSIC } from './PageDetails';
+import { Links, useEnabledMusicApps } from './PageDetails';
 import {
   registerEmbedFrame, serverMusicUrl, trackFromAppUrl, useMusicStore, type Track,
 } from '../lib/music';
@@ -36,6 +36,7 @@ function IconBtn({
 /** Floating music player: transport controls, queue, local files and playlists. */
 export function MusicPlayer() {
   const s = useMusicStore();
+  const enabledApps = useEnabledMusicApps();
   const [panel, setPanel] = useState<'queue' | 'library' | 'apps'>('library');
   const [serverFiles, setServerFiles] = useState<{ root: string; files: string[] } | null>(null);
   const [plName, setPlName] = useState('');
@@ -206,7 +207,9 @@ export function MusicPlayer() {
             </ul>
           )}
 
-          {panel === 'apps' && <Links items={MUSIC} />}
+          {panel === 'apps' && (enabledApps.length
+            ? <Links items={enabledApps} />
+            : <p style={muted}>No music apps activated. Turn on Developer Mode, then Settings → Music to activate apps.</p>)}
 
           {panel === 'library' && (
             <div className="flex flex-col gap-2">
