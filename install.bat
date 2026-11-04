@@ -23,8 +23,12 @@ for /f "tokens=2" %%v in ('python --version') do set PYVER=%%v
 echo [+] Python detected: !PYVER!
 
 echo [+] Creating virtual environment (.venv)
-python -m venv .venv
-if errorlevel 1 (
+if exist .venv\Scripts\activate.bat (
+    echo [+] Reusing existing .venv
+) else (
+    python -m venv .venv
+)
+if not exist .venv\Scripts\activate.bat (
     echo [X] venv creation failed.
     pause
     exit /b 1

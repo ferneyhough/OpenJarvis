@@ -4,14 +4,14 @@ Free:    Google speech recognition (STT) + Windows SAPI voice via pyttsx3 (TTS).
 Premium automatically falls back to free if it fails.
 Wake word: always detected with the free recognizer so idle listening costs nothing.
 """
+import asyncio
 import io
 import os
+import queue
 import sys
+import threading
 import time
 import wave
-import queue
-import asyncio
-import threading
 from pathlib import Path
 
 # Keep voice models inside the install folder.
@@ -104,6 +104,7 @@ class Voice:
             winsound.PlaySound(wav_bytes, winsound.SND_MEMORY)
             return
         import tempfile
+
         import pygame
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             f.write(wav_bytes)
