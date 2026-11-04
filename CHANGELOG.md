@@ -20,9 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `install.bat` builds the web UI (installing Node via winget if needed).
 - `env/` and `.vs/` are untracked; set `CARGO_TARGET_DIR` outside OneDrive to keep Rust build output out of sync.
 
-## [Unreleased]
-
-### Added
+### Added (earlier)
 
 **Windows desktop app** — `jarvis_desktop.py` opens the web UI in a native
 WebView2 window. Voice is a single global Kokoro `bm_george` voice; the
