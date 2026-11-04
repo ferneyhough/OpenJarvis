@@ -34,7 +34,7 @@ import { fetchMediaDocument, playMediaUrl } from '../../lib/media';
 import { parseM3U, parseXMLTV, type GuideProgram, type M3UChannel } from '../../lib/media-guide';
 import { useAppStore } from '../../lib/store';
 import { useMusicStore } from '../../lib/music';
-import { Links, MUSIC } from '../PageDetails';
+import { Links, useEnabledMusicApps } from '../PageDetails';
 import { getCloudKeyStatus } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
 import { openHubService } from '../../lib/hub-voice';
@@ -1221,6 +1221,8 @@ function DeveloperPanel() {
 function MusicPanel() {
   const openPlayer = useMusicStore((s) => s.openPlayer);
   const apps = useEnabledMusicApps();
+  return (
+    <div className="space-y-3 px-4 pb-4">
       <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
         Play local files and playlists in the Jarvis player, or open a music app. Say &ldquo;Jarvis open Spotify&rdquo;, &ldquo;pause&rdquo;, &ldquo;next&rdquo; or &ldquo;Jarvis return&rdquo;.
       </p>
@@ -1245,6 +1247,7 @@ export function MainPageHub() {
   const [section, setSection] = useState<HubSection | null>(null);
   const [visitedSections, setVisitedSections] = useState<Set<HubSection>>(() => new Set());
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
+  const musicApps = useEnabledMusicApps();
   useEffect(() => {
     if (!developerModeEnabled && section === 'developer') setSection(null);
   }, [developerModeEnabled, section]);
@@ -1262,9 +1265,11 @@ export function MainPageHub() {
         <ActionButton active={section === 'social'} onClick={() => selectSection('social')}>
           <ArrowUpRight size={15} /> Social
         </ActionButton>
-        <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
-          <Music2 size={15} /> Music
-        </ActionButton>
+        {(developerModeEnabled || musicApps.length > 0) && (
+          <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
+            <Music2 size={15} /> Music
+          </ActionButton>
+        )}
         <ActionButton active={section === 'media'} onClick={() => selectSection('media')}>
           <Tv size={15} /> Media
         </ActionButton>
