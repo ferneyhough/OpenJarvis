@@ -106,22 +106,7 @@ export function ChatToolbar({
             </optgroup>
           </select>
         </label>
-        <div role="group" aria-label="Mode" className="flex flex-wrap items-center gap-1">
-          {CHAT_AGENTS.filter((m) => m.id === 'debug').map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              title={m.hint}
-              aria-pressed={settings.chatMode === m.id}
-              onClick={() => updateSettings({ chatMode: m.id })}
-              className="rounded-full px-2.5 py-1 cursor-pointer"
-              style={pill(settings.chatMode === m.id)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-<div className="relative">
+        <div className="relative">
           <button
             type="button"
             onClick={() => setPermsOpen((v) => !v)}
