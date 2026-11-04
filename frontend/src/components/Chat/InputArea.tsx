@@ -40,6 +40,7 @@ import { useSpeech } from '../../hooks/useSpeech';
 import { useHandsFree } from '../../hooks/useHandsFree';
 import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { resolveAgent } from '../../lib/chat-agents';
+import { resolvePermissions } from '../../lib/permissions';
 import { generateMedia, convertMedia, openFreeMediaSite, openAllowedLink } from '../../lib/api';
 import { MUSIC_APPS, isShortReturnCommand, parseMusicVoiceCommand } from '../../lib/music-commands';
 import { runMusicAction } from '../../lib/music-actions';
@@ -414,6 +415,13 @@ export function InputArea() {
       return;
     }
 
+    const baseSettings = useAppStore.getState().settings;
+    const perm = resolvePermissions(
+      baseSettings.permissionMode,
+      baseSettings,
+      (m) => window.confirm(m),
+    );
+
     setInput('');
 
     let convId = activeId;
@@ -493,7 +501,7 @@ export function InputArea() {
     });
 
     try {
-      const currentSettings = useAppStore.getState().settings;
+      const currentSettings = { ...useAppStore.getState().settings, ...perm };
       const systemContexts: string[] = [];
 
       if (!deepResearch && currentSettings.personalSourcesEnabled) {

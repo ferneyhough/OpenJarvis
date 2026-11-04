@@ -17,6 +17,7 @@ import type {
 import type { ManagedAgent } from './api';
 import { isEmbedOnlyModel } from './model-capabilities';
 import type { ChatMode } from './chat-agents';
+import type { PermissionMode } from './permissions';
 import { serializeToolCallArguments } from './tool-call';
 
 export interface CachedConnector {
@@ -122,6 +123,7 @@ interface Settings {
   hubEnabledApps: string[];
   personalSourcesEnabled: boolean;
   chatMode: ChatMode;
+  permissionMode: PermissionMode;
   allowShell: boolean;
   allowWeb: boolean;
   allowFiles: boolean;
@@ -155,6 +157,7 @@ function loadSettings(): Settings {
     hubEnabledApps: [],
     personalSourcesEnabled: false,
     chatMode: 'auto',
+    permissionMode: 'allow',
     allowShell: false,
     allowWeb: true,
     allowFiles: true,

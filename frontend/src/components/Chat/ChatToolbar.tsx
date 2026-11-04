@@ -2,6 +2,7 @@ import { Paperclip, X, Shield, Image as ImageIcon, Film } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../lib/store';
 import { CHAT_AGENTS, getAgent } from '../../lib/chat-agents';
+import { PERMISSION_MODES } from '../../lib/permissions';
 
 export interface Attachment {
   id: string;
@@ -128,6 +129,7 @@ export function ChatToolbar({
             title="Tool permissions"
           >
             <Shield size={12} /> Permissions
+            {settings.permissionMode !== 'allow' && ` · ${settings.permissionMode === 'manual' ? 'Manual' : 'Sandbox'}`}
           </button>
           {permsOpen && (
             <div
@@ -138,6 +140,21 @@ export function ChatToolbar({
                 boxShadow: 'var(--shadow-sm)',
               }}
             >
+              <div role="group" aria-label="Permission mode" className="flex gap-1 mb-1">
+                {PERMISSION_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    title={m.hint}
+                    aria-pressed={settings.permissionMode === m.id}
+                    onClick={() => updateSettings({ permissionMode: m.id })}
+                    className="rounded-full px-2 py-0.5 cursor-pointer"
+                    style={pill(settings.permissionMode === m.id)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
               {perms.map((p) => (
                 <label key={p.key} className="flex items-center gap-2 cursor-pointer">
                   <input
