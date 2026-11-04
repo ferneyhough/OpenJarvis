@@ -354,6 +354,27 @@ async def open_free_site(req: ModelDownloadRequest, request: Request):
     return {"url": url}
 
 
+@media_router.get("/library")
+async def media_library():
+    """List generated/converted files, newest first."""
+    kinds = {
+        ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image",
+        ".mp4": "video", ".webm": "video", ".mkv": "video", ".mov": "video",
+        ".mp3": "audio", ".wav": "audio", ".ogg": "audio", ".flac": "audio",
+    }
+    items = []
+    if MEDIA_DIR.is_dir():
+        for p in MEDIA_DIR.iterdir():
+            kind = kinds.get(p.suffix.lower())
+            if p.is_file() and kind and not p.name.startswith("upload-"):
+                items.append((p.stat().st_mtime, kind, p.name))
+    items.sort(reverse=True)
+    return [
+        {"name": n, "kind": k, "url": f"/v1/media/files/{n}", "modified": m}
+        for m, k, n in items[:100]
+    ]
+
+
 @media_router.get("/files/{name}")
 async def get_file(name: str):
     path = MEDIA_DIR / _safe_name(name)

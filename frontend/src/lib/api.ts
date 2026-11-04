@@ -471,6 +471,12 @@ export async function openFreeMediaSite(kind: 'image' | 'video'): Promise<void> 
   if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
 }
 
+export async function fetchMediaLibrary(): Promise<Array<{ name: string; kind: 'image' | 'video' | 'audio'; url: string; modified: number }>> {
+  const res = await apiFetch('/v1/media/library');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function generateMedia(
   kind: 'image' | 'video',
   prompt: string,
