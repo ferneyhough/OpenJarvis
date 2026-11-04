@@ -12,11 +12,11 @@ import { CommandPalette } from './components/CommandPalette';
 import { SetupScreen } from './components/SetupScreen';
 import { Toaster } from './components/ui/sonner';
 import { useAppStore } from './lib/store';
+import { applyAppearance, APPEARANCE_EVENT } from './lib/themes';
 import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri } from './lib/api';
 import { OptInModal } from './components/OptInModal';
-import { UpdateChecker } from './components/Desktop/UpdateChecker';
 import { track, hashId } from './lib/analytics';
-import { offerAnalyticsChoice } from './lib/analytics-invitation';
+import { markAnalyticsChoiceSeen } from './lib/analytics-invitation';
 
 export default function App() {
   const [setupDone, setSetupDone] = useState(!isTauri());
@@ -48,13 +48,17 @@ export default function App() {
   const markOptInModalSeen = useAppStore((s) => s.markOptInModalSeen);
   const savings = useAppStore((s) => s.savings);
 
-  // Apply theme class to <html>
+  // Apply theme, color palette and custom background
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('dark', 'light');
-    if (settings.theme === 'dark') root.classList.add('dark');
-    else if (settings.theme === 'light') root.classList.add('light');
-  }, [settings.theme]);
+    const apply = () => applyAppearance({
+      theme: settings.theme,
+      colorTheme: settings.colorTheme,
+      backgroundOpacity: settings.backgroundOpacity,
+    });
+    apply();
+    window.addEventListener(APPEARANCE_EVENT, apply);
+    return () => window.removeEventListener(APPEARANCE_EVENT, apply);
+  }, [settings.theme, settings.colorTheme, settings.backgroundOpacity]);
 
   // Sync overlay conversations into the main app
   const importOverlay = useAppStore((s) => s.importOverlayConversation);
@@ -118,13 +122,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, [optInEnabled, optInDisplayName, optInEmail, optInAnonId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Wait for desktop setup before fetching identity or marking the dialog seen.
-  useEffect(() => offerAnalyticsChoice({
+  // Do not interrupt launch with the optional giveaway and analytics dialog.
+  useEffect(() => markAnalyticsChoiceSeen({
     ready: setupDone,
     sharingModalSeen: optInModalSeen,
-    open: () => setOptInModalOpen(true),
     markSharingModalSeen: markOptInModalSeen,
-  }), [setupDone, optInModalSeen, setOptInModalOpen, markOptInModalSeen]);
+  }), [setupDone, optInModalSeen, markOptInModalSeen]);
 
   // Fire model_changed when the user switches models. First mount is
   // not a "change" — only emit when both prev and current are real and
@@ -181,7 +184,6 @@ export default function App() {
 
   return (
     <>
-      <UpdateChecker />
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<ChatPage />} />

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 describe('desktop cloud provider settings', () => {
   it('offers Atlas Cloud key storage alongside its provider status', async () => {
     vi.stubGlobal('localStorage', { getItem: () => null });
-    vi.stubGlobal('window', { __TAURI_INTERNALS__: {} });
+    vi.stubGlobal('window', { __TAURI_INTERNALS__: {}, location: { hash: '#api-keys' } });
     const { SettingsPage } = await import('./SettingsPage');
     const html = renderToStaticMarkup(<SettingsPage />);
 

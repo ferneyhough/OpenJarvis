@@ -7,20 +7,18 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import App from './App';
 import { initApiBase } from './lib/api';
 import { initAnalytics } from './lib/analytics';
+import { applyAppearance } from './lib/themes';
 import './index.css';
 
 function applyTheme() {
   try {
     const raw = localStorage.getItem('openjarvis-settings');
     const settings = raw ? JSON.parse(raw) : {};
-    const theme = settings.theme || 'system';
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-    } else if (theme === 'light') {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
-    }
+    applyAppearance({
+      theme: settings.theme || 'system',
+      colorTheme: settings.colorTheme,
+      backgroundOpacity: settings.backgroundOpacity,
+    });
   } catch { /* use system default */ }
 }
 

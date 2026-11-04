@@ -2019,6 +2019,70 @@ fn optional_program_package_id(program_id: &str) -> Option<&'static str> {
     }
 }
 
+const OPTIONAL_PROGRAM_IDS: &[&str] = &[
+    "steam",
+    "playnite",
+    "epic",
+    "gog",
+    "ea",
+    "ubisoft",
+    "battle-net",
+    "obs-studio",
+    "vlc",
+    "prism-launcher",
+    "discord",
+    "telegram",
+    "slack",
+];
+
+/// Upgrades every allowlisted optional program that is already installed.
+#[tauri::command]
+async fn update_optional_programs() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return tokio::task::spawn_blocking(move || {
+            let mut results = Vec::new();
+            for program_id in OPTIONAL_PROGRAM_IDS {
+                let Some(package_id) = optional_program_package_id(program_id) else {
+                    continue;
+                };
+                let output = std::process::Command::new("winget")
+                    .args([
+                        "upgrade",
+                        "--id",
+                        package_id,
+                        "--exact",
+                        "--source",
+                        "winget",
+                        "--accept-source-agreements",
+                        "--accept-package-agreements",
+                        "--disable-interactivity",
+                    ])
+                    .output()
+                    .map_err(|error| {
+                        if error.kind() == std::io::ErrorKind::NotFound {
+                            "Windows Package Manager (winget) was not found. Install App Installer from Microsoft Store and try again.".to_string()
+                        } else {
+                            format!("Could not start winget: {error}")
+                        }
+                    })?;
+                let text = String::from_utf8_lossy(&output.stdout).to_lowercase();
+                if output.status.success() && text.contains("successfully installed") {
+                    results.push(package_id.to_string());
+                }
+            }
+            Ok(results)
+        })
+        .await
+        .map_err(|error| format!("The update task failed: {error}"))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("App updates are supported only on Windows.".to_string())
+    }
+}
+
 #[tauri::command]
 async fn install_optional_program(program_id: String) -> Result<(), String> {
     let package_id = optional_program_package_id(&program_id)
@@ -4119,7 +4183,6 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec!["--hidden"]),
         ))
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -4207,6 +4270,7 @@ pub fn run() {
             get_playnite_status,
             open_playnite,
             install_optional_program,
+            update_optional_programs,
             open_game_launcher,
             close_game_launcher,
             open_vscode,

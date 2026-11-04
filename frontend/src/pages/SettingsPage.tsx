@@ -39,15 +39,146 @@ import {
   saveToolCredentials,
   deleteToolCredential,
   isTauri,
+  pullModel,
   type InferenceSource,
   type MemoryStats,
 } from '../lib/api';
-import { isAutoUpdateDisabled, setAutoUpdateDisabled } from '../components/Desktop/UpdateChecker';
 import { getSteamApiKeyStatus, saveSteamApiKey } from '../lib/steam';
 import { gameLaunchers } from '../lib/game-launchers';
 import { openVSCode } from '../lib/developer';
+import {
+  COLOR_THEMES,
+  DEFAULT_THEME_ID,
+  DEFAULT_THEME_TILES,
+  getCustomBackground,
+  setCustomBackground,
+  readImageAsDataUrl,
+} from '../lib/themes';
 
 const CLOUD_KEY_STATUS_CHANGED = 'openjarvis-cloud-key-status-changed';
+
+function BackgroundPicker({
+  opacity,
+  onOpacity,
+  onSaved,
+}: {
+  opacity: number;
+  onOpacity: (value: number) => void;
+  onSaved: () => void;
+}) {
+  const [image, setImage] = useState(() => getCustomBackground());
+  const [error, setError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const choose = async (file?: File) => {
+    if (!file) return;
+    setError('');
+    try {
+      const dataUrl = await readImageAsDataUrl(file);
+      setCustomBackground(dataUrl);
+      setImage(dataUrl);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not use that image.');
+    }
+  };
+
+  const buttonStyle = {
+    background: 'var(--color-bg-tertiary)',
+    border: '1px solid var(--color-border)',
+    color: 'var(--color-text)',
+  };
+
+  return (
+    <>
+      <SettingRow label="Custom background" description={error || 'Use any image as the app background'}>
+        <div className="flex items-center gap-2">
+          {image && (
+            <span
+              style={{ width: 36, height: 24, borderRadius: 4, backgroundImage: `url("${image}")`, backgroundSize: 'cover', backgroundPosition: 'center', border: '1px solid var(--color-border)' }}
+            />
+          )}
+          <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void choose(e.target.files?.[0]); e.target.value = ''; }} />
+          <button onClick={() => inputRef.current?.click()} className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer" style={buttonStyle}>
+            {image ? 'Change image' : 'Choose image'}
+          </button>
+          {image && (
+            <button onClick={() => { setCustomBackground(''); setImage(''); onSaved(); }} className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer" style={buttonStyle}>
+              Remove
+            </button>
+          )}
+        </div>
+      </SettingRow>
+      {image && (
+        <SettingRow label="Panel opacity" description="Lower values show more of the background image">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={opacity}
+            onChange={(e) => onOpacity(Number(e.target.value))}
+            aria-label="Panel opacity"
+          />
+        </SettingRow>
+      )}
+    </>
+  );
+}
+
+function UpdateActionRow({
+  label,
+  description,
+  idleText,
+  run,
+}: {
+  label: string;
+  description: string;
+  idleText: string;
+  run: () => Promise<string>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState('');
+  const onClick = async () => {
+    setBusy(true);
+    setResult('');
+    try {
+      setResult(await run());
+    } catch (error) {
+      setResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <SettingRow label={label} description={result || description}>
+      <button
+        onClick={onClick}
+        disabled={busy}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+        style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)', color: 'var(--color-text)', cursor: busy ? 'default' : 'pointer' }}
+      >
+        <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
+        {busy ? 'Updating...' : idleText}
+      </button>
+    </SettingRow>
+  );
+}
+
+async function updateInstalledApps(): Promise<string> {
+  if (!isTauri()) return 'App updates are available in the desktop app.';
+  const { invoke } = await import('@tauri-apps/api/core');
+  const updated = await invoke<string[]>('update_optional_programs');
+  return updated.length ? `Updated: ${updated.join(', ')}` : 'All apps are up to date.';
+}
+
+async function updateLocalModels(): Promise<string> {
+  const res = await fetch('http://localhost:11434/api/tags');
+  if (!res.ok) throw new Error('Could not reach Ollama.');
+  const names: string[] = ((await res.json()).models || []).map((m: { name: string }) => m.name);
+  if (names.length === 0) return 'No local models to update.';
+  for (const name of names) await pullModel(name);
+  return `Refreshed ${names.length} model${names.length === 1 ? '' : 's'}.`;
+}
 
 function OllamaModelList() {
   const [models, setModels] = useState<Array<{ name: string; size: number }>>([]);
@@ -212,16 +343,42 @@ function CloudProviderStatus({ label, keyName }: { label: string; keyName: strin
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const anchor = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const [open, setOpen] = useState(() => window.location?.hash === `#${anchor}`);
+  useEffect(() => {
+    const onHash = () => {
+      if (window.location.hash === `#${anchor}`) setOpen(true);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [anchor]);
   return (
     <div
-      id={title === 'Inference source' ? 'inference-source' : undefined}
-      className="rounded-xl p-5"
+      id={anchor}
+      className="rounded-xl"
       style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
     >
-      <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
-        {title}
-      </h3>
-      {children}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-5 py-4 text-left cursor-pointer"
+      >
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+          {title}
+        </h3>
+        <span
+          aria-hidden
+          style={{
+            color: 'var(--color-text-tertiary)',
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 150ms',
+          }}
+        >
+          ›
+        </span>
+      </button>
+      {open && <div className="px-5 pb-5">{children}</div>}
     </div>
   );
 }
@@ -706,27 +863,6 @@ export function SettingsPage() {
   const [ttsBackend, setTtsBackend] = useState<{ available: boolean; backend?: string; voice_id?: string } | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => !isAutoUpdateDisabled());
-  const [updateCheckState, setUpdateCheckState] = useState<'idle' | 'checking' | 'available' | 'latest'>('idle');
-
-  const handleAutoUpdateToggle = useCallback((enabled: boolean) => {
-    setAutoUpdateEnabled(enabled);
-    setAutoUpdateDisabled(!enabled);
-  }, []);
-
-  const handleCheckNow = useCallback(async () => {
-    if (!(window as any).__TAURI_INTERNALS__) return;
-    setUpdateCheckState('checking');
-    try {
-      const { check } = await import('@tauri-apps/plugin-updater');
-      const update = await check();
-      setUpdateCheckState(update ? 'available' : 'latest');
-      setTimeout(() => setUpdateCheckState('idle'), 4000);
-    } catch {
-      setUpdateCheckState('idle');
-    }
-  }, []);
-
   const [memoryStatus, setMemoryStatus] = useState<MemoryStatus>({ kind: 'loading' });
   const memoryRequestId = useRef(0);
   const [memoryEnabled, setMemoryEnabled] = useState(() => {
@@ -896,7 +1032,7 @@ export function SettingsPage() {
                   return (
                     <button
                       key={opt.value}
-                      onClick={() => { updateSettings({ theme: opt.value }); showSaved(); }}
+                      onClick={() => { updateSettings({ theme: opt.value, colorTheme: DEFAULT_THEME_ID }); showSaved(); }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer"
                       style={{
                         background: isActive ? 'var(--color-surface)' : 'transparent',
@@ -911,6 +1047,43 @@ export function SettingsPage() {
                 })}
               </div>
             </SettingRow>
+            <SettingRow label="Color theme" description={`${COLOR_THEMES.length} themes plus defaults. Picking Light, Dark or System above overrides a theme`}>
+              <span />
+            </SettingRow>
+            <div className="grid grid-cols-3 gap-2 py-3" style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+              {[
+                ...DEFAULT_THEME_TILES.map((d) => ({ id: d.id, name: d.name, bg: d.bg, accent: d.accent, text: d.text, mode: d.mode })),
+                ...COLOR_THEMES.map((t) => ({ id: t.id, name: t.name, bg: t.bg, accent: t.accent, text: t.text, mode: t.mode as ThemeMode })),
+              ].map((t) => {
+                const isDefaultTile = t.id.startsWith('default');
+                const active = isDefaultTile
+                  ? (settings.colorTheme || DEFAULT_THEME_ID) === DEFAULT_THEME_ID && settings.theme === t.mode
+                  : settings.colorTheme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      updateSettings({ colorTheme: isDefaultTile ? DEFAULT_THEME_ID : t.id, theme: t.mode });
+                      showSaved();
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-left cursor-pointer"
+                    style={{
+                      background: t.bg,
+                      color: t.text,
+                      border: active ? '2px solid var(--color-accent)' : '1px solid var(--color-border)',
+                    }}
+                  >
+                    <span style={{ width: 12, height: 12, borderRadius: '50%', background: t.accent, flexShrink: 0 }} />
+                    <span className="truncate">{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <BackgroundPicker
+              opacity={settings.backgroundOpacity}
+              onOpacity={(v) => updateSettings({ backgroundOpacity: v })}
+              onSaved={showSaved}
+            />
             <SettingRow label="Font size">
               <select
                 value={settings.fontSize}
@@ -1432,38 +1605,19 @@ export function SettingsPage() {
 
           {/* Updates */}
           <Section title="Updates">
-            <SettingRow label="Auto-update" description="Check for new desktop builds automatically every 30 minutes">
-              <button
-                onClick={() => handleAutoUpdateToggle(!autoUpdateEnabled)}
-                className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-                style={{ background: autoUpdateEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)' }}
-              >
-                <span
-                  className="inline-block h-3.5 w-3.5 rounded-full transition-transform"
-                  style={{
-                    background: 'white',
-                    transform: autoUpdateEnabled ? 'translateX(18px)' : 'translateX(2px)',
-                  }}
-                />
-              </button>
-            </SettingRow>
-            <SettingRow label="Check for updates" description="Manually check for a new version right now">
-              <button
-                onClick={handleCheckNow}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)', color: 'var(--color-text)', cursor: 'pointer' }}
-                disabled={updateCheckState === 'checking'}
-              >
-                <RefreshCw size={12} className={updateCheckState === 'checking' ? 'animate-spin' : ''} />
-                {updateCheckState === 'checking' && 'Checking...'}
-                {updateCheckState === 'available' && 'Update available — see banner above'}
-                {updateCheckState === 'latest' && 'Already up to date'}
-                {updateCheckState === 'idle' && 'Check now'}
-              </button>
-            </SettingRow>
+            <UpdateActionRow
+              label="Update apps"
+              description="Upgrade installed optional programs (Steam, Discord, OBS, and others) via winget"
+              idleText="Update apps"
+              run={updateInstalledApps}
+            />
+            <UpdateActionRow
+              label="Update models"
+              description="Re-pull your local Ollama models to get the latest versions"
+              idleText="Update models"
+              run={updateLocalModels}
+            />
           </Section>
-
-          {/* About */}
           <Section title="About">
             <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               <p className="mb-2">
