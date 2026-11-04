@@ -66,8 +66,22 @@ def _start_server():
     return proc
 
 
+def _refresh_stale_cache(window) -> None:
+    """Drop cached service workers so the window always shows the latest UI build."""
+    if getattr(_refresh_stale_cache, "done", False):
+        return
+    _refresh_stale_cache.done = True
+    window.evaluate_js(
+        "(async()=>{let n=0;"
+        "if(navigator.serviceWorker){for(const r of await navigator.serviceWorker.getRegistrations()){await r.unregister();n++}}"
+        "if(window.caches){for(const k of await caches.keys()){await caches.delete(k);n++}}"
+        "if(n>0)location.reload();})()"
+    )
+
+
 if __name__ == "__main__":
     _start_server()
     window = webview.create_window("OpenJarvis", URL, width=1280, height=840)
     window.events.loaded += lambda: _allow_microphone(window)
+    window.events.loaded += lambda: _refresh_stale_cache(window)
     webview.start()
