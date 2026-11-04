@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchServerMusic } from '../lib/api';
+import { Links, MUSIC } from './PageDetails';
 import {
   registerEmbedFrame, serverMusicUrl, trackFromAppUrl, useMusicStore, type Track,
 } from '../lib/music';
@@ -35,7 +36,7 @@ function IconBtn({
 /** Floating music player: transport controls, queue, local files and playlists. */
 export function MusicPlayer() {
   const s = useMusicStore();
-  const [panel, setPanel] = useState<'queue' | 'library'>('library');
+  const [panel, setPanel] = useState<'queue' | 'library' | 'apps'>('library');
   const [serverFiles, setServerFiles] = useState<{ root: string; files: string[] } | null>(null);
   const [plName, setPlName] = useState('');
   const [plUrl, setPlUrl] = useState('');
@@ -53,7 +54,20 @@ export function MusicPlayer() {
     }
   }, [s.open, panel, serverFiles]);
 
-  if (!s.open) return null;
+  if (!s.open) {
+    return (
+      <button
+        type="button"
+        onClick={s.openPlayer}
+        aria-label="Open music player"
+        title="Music"
+        className="fixed bottom-4 right-4 z-40 flex h-9 w-9 items-center justify-center rounded-full shadow-lg cursor-pointer"
+        style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
+      >
+        <ListMusic size={16} />
+      </button>
+    );
+  }
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
@@ -159,7 +173,7 @@ export function MusicPlayer() {
 
       <div style={{ borderTop: border }} className="px-3 py-2">
         <div className="mb-1 flex gap-1">
-          {(['library', 'queue'] as const).map((p) => (
+          {(['library', 'queue', 'apps'] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPanel(p)}
@@ -169,7 +183,7 @@ export function MusicPlayer() {
                 color: panel === p ? 'var(--color-accent)' : 'var(--color-text-secondary)',
               }}
             >
-              {p === 'queue' ? <><ListMusic size={11} className="inline" /> Queue ({s.queue.length})</> : 'Library'}
+              {p === 'queue' ? <><ListMusic size={11} className="inline" /> Queue ({s.queue.length})</> : p === 'apps' ? 'Apps' : 'Library'}
             </button>
           ))}
         </div>
@@ -191,6 +205,8 @@ export function MusicPlayer() {
               ))}
             </ul>
           )}
+
+          {panel === 'apps' && <Links items={MUSIC} />}
 
           {panel === 'library' && (
             <div className="flex flex-col gap-2">

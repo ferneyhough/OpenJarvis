@@ -2,18 +2,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../lib/store';
-import { useMusicStore } from '../lib/music';
 import { fetchManagedAgents, fetchMediaLibrary, fetchNativeApps, getBase, openAllowedLink, type ManagedAgent } from '../lib/api';
 import { listConnectors } from '../lib/connectors-api';
 import type { ConnectorInfo } from '../types/connectors';
 
-type Tab = 'fields' | 'library' | 'media' | 'music' | 'deals' | 'feeds' | 'chats';
+type Tab = 'fields' | 'library' | 'media' | 'deals' | 'feeds' | 'chats';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'fields', label: 'Fields' },
   { id: 'library', label: 'Library' },
   { id: 'media', label: 'Images & videos' },
-  { id: 'music', label: 'Music' },
   { id: 'deals', label: 'Store deals' },
   { id: 'feeds', label: 'Social feeds' },
   { id: 'chats', label: 'Chats' },
@@ -37,7 +35,7 @@ const DEALS = [
   { label: 'IsThereAnyDeal', url: 'https://isthereanydeal.com/deals/' },
 ];
 
-const MUSIC = [
+export const MUSIC = [
   { label: 'YouTube Music', url: 'https://music.youtube.com/' },
   { label: 'Spotify', url: 'https://open.spotify.com/' },
   { label: 'Apple Music', url: 'https://music.apple.com/' },
@@ -54,10 +52,10 @@ const MUSIC = [
 ];
 
 const FEEDS = [
-  { label: 'Reddit – r/LocalLLaMA', url: 'https://www.reddit.com/r/LocalLLaMA/' },
-  { label: 'Reddit – r/StableDiffusion', url: 'https://www.reddit.com/r/StableDiffusion/' },
-  { label: 'YouTube – AI', url: 'https://www.youtube.com/results?search_query=ai+news' },
-  { label: 'X / Twitter – AI', url: 'https://x.com/search?q=AI&f=live' },
+  { label: 'Reddit Ã¢â‚¬â€œ r/LocalLLaMA', url: 'https://www.reddit.com/r/LocalLLaMA/' },
+  { label: 'Reddit Ã¢â‚¬â€œ r/StableDiffusion', url: 'https://www.reddit.com/r/StableDiffusion/' },
+  { label: 'YouTube Ã¢â‚¬â€œ AI', url: 'https://www.youtube.com/results?search_query=ai+news' },
+  { label: 'X / Twitter Ã¢â‚¬â€œ AI', url: 'https://x.com/search?q=AI&f=live' },
   { label: 'Hacker News', url: 'https://news.ycombinator.com/' },
 ];
 
@@ -144,7 +142,7 @@ function AppRow({ item, installed }: { item: AppLink; installed: boolean }) {
   );
 }
 
-function Links({ items }: { items: AppLink[] }) {
+export function Links({ items }: { items: AppLink[] }) {
   const [native, setNative] = useState<Record<string, boolean>>({});
   useEffect(() => {
     fetchNativeApps().then(setNative).catch(() => {});
@@ -198,7 +196,6 @@ export function PageDetails() {
   const conversations = useAppStore((s) => s.conversations);
   const activeId = useAppStore((s) => s.activeId);
   const selectConversation = useAppStore((s) => s.selectConversation);
-  const openPlayer = useMusicStore((s) => s.openPlayer);
 
   const page = PAGES[pathname] ?? { title: 'Page', keywords: [] };
 
@@ -313,17 +310,17 @@ export function PageDetails() {
               <ul className="flex flex-col gap-1">
                 {pathname === '/data-sources' && connectors.map((c) => (
                   <li key={c.connector_id}>
-                    <Row>{c.display_name} <span style={muted}>· {c.connected ? 'connected' : 'not connected'}</span></Row>
+                    <Row>{c.display_name} <span style={muted}>Ã‚Â· {c.connected ? 'connected' : 'not connected'}</span></Row>
                   </li>
                 ))}
                 {pathname === '/agents' && agents.map((a) => (
-                  <li key={a.id}><Row>{a.name} <span style={muted}>· {a.agent_type} · {a.status}</span></Row></li>
+                  <li key={a.id}><Row>{a.name} <span style={muted}>Ã‚Â· {a.agent_type} Ã‚Â· {a.status}</span></Row></li>
                 ))}
                 {models.length === 0 && <li style={muted}>No models loaded.</li>}
                 {models.map((m) => (
                   <li key={m.id}>
                     <Row active={m.id === selectedModel} onClick={() => setSelectedModel(m.id)}>
-                      {m.id} <span style={muted}>· {m.owned_by}</span>{m.id === selectedModel ? ' ✓' : ''}
+                      {m.id} <span style={muted}>Ã‚Â· {m.owned_by}</span>{m.id === selectedModel ? ' Ã¢Å“â€œ' : ''}
                     </Row>
                   </li>
                 ))}
@@ -340,25 +337,13 @@ export function PageDetails() {
                         <img src={`${getBase()}${m.url}`} alt={m.name} className="h-16 w-16 rounded object-cover" />
                       ) : (
                         <span className="flex h-16 w-24 items-center justify-center rounded px-1 text-center" style={{ border, color: 'var(--color-text)' }}>
-                          {m.kind === 'video' ? '🎬' : '🎵'} {m.name.slice(0, 14)}
+                          {m.kind === 'video' ? 'Ã°Å¸Å½Â¬' : 'Ã°Å¸Å½Âµ'} {m.name.slice(0, 14)}
                         </span>
                       )}
                     </a>
                   ))}
                 </div>
               )
-            )}
-            {tab === 'music' && (
-              <>
-                <button
-                  onClick={openPlayer}
-                  className="mb-2 rounded px-2.5 py-1 cursor-pointer"
-                  style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
-                >
-                  Open music player
-                </button>
-                <Links items={MUSIC} />
-              </>
             )}
             {tab === 'deals' && <Links items={DEALS} />}
             {tab === 'feeds' && <Links items={FEEDS} />}
