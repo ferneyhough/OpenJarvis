@@ -66,12 +66,14 @@ export function ChatToolbar({
     { key: 'steamContextEnabled', label: 'Steam library' },
   ] as const;
 
+  const permsActive = settings.permissionMode !== 'allow' || perms.some((p) => Boolean(settings[p.key]));
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2 text-xs">
 <label
           className="relative inline-flex items-center rounded-full px-2.5 py-1 cursor-pointer"
-          style={{ ...pill(false), background: 'var(--color-bg-secondary)', maxWidth: 260 }}
+          style={{ ...pill(true), maxWidth: 260 }}
           title={`${getAgent(settings.chatMode).hint} - ${models.length} model${models.length === 1 ? '' : 's'} available`}
         >
           <span className="truncate">
@@ -112,7 +114,7 @@ export function ChatToolbar({
             onClick={() => setPermsOpen((v) => !v)}
             aria-expanded={permsOpen}
             className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 cursor-pointer"
-            style={pill(permsOpen)}
+            style={pill(permsOpen || permsActive)}
             title="Tool permissions"
           >
             <Shield size={12} /> Permissions
