@@ -1,6 +1,7 @@
 import { Paperclip, X, Shield, Image as ImageIcon, Film } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../lib/store';
+import { CHAT_AGENTS, getAgent } from '../../lib/chat-agents';
 
 export interface Attachment {
   id: string;
@@ -10,37 +11,23 @@ export interface Attachment {
   data: string;
 }
 
-export const CHAT_MODES = [
-  { id: 'ask', label: 'Ask', hint: 'Answer questions directly' },
-  { id: 'agent', label: 'Agent', hint: 'Work through tasks step by step, acting autonomously' },
-  { id: 'plan', label: 'Plan', hint: 'Produce a plan before doing anything' },
-  { id: 'edit', label: 'Edit', hint: 'Return precise edits to the supplied text/code' },
-] as const;
+export const CHAT_MODES = CHAT_AGENTS;
 
-export const MODE_PROMPTS: Record<string, string> = {
-  ask: '',
-  agent:
-    'You are in Agent mode. Break the request into steps, carry them out, and report what you did and the result.',
-  plan:
-    'You are in Plan mode. Do not execute anything. Reply with a clear, numbered plan with risks and open questions.',
-  edit:
-    'You are in Edit mode. Reply only with the revised text or code (and a one-line summary of changes). Preserve everything not asked to change.',
-};
-
-export const MODE_STATUS: Record<string, string> = {
-  ask: 'replies directly to your question.',
-  agent: 'works through your request step by step and reports what it did.',
-  plan: 'replies with a numbered plan only, nothing is carried out.',
-  edit: 'replies only with the revised text or code you supplied.',
-};
+export const MODE_PROMPTS: Record<string, string> = Object.fromEntries(
+  CHAT_AGENTS.map((a) => [a.id, a.prompt]),
+);
 
 export const MODE_PLACEHOLDERS: Record<string, string> = {
+  auto: 'Ask or describe a task - Jarvis picks the right agent...',
   ask: 'Ask anything...',
   agent: 'Describe a task for Jarvis to carry out...',
   plan: 'Describe what to plan...',
   edit: 'Paste text or code and say what to change...',
+  explore: 'Ask how something works...',
+  review: 'Paste code or a change to review...',
+  research: 'What should Jarvis research?',
+  debug: 'Paste the error or describe the problem...',
 };
-
 const pill = (active: boolean): React.CSSProperties => ({
   background: active ? 'var(--color-accent-subtle)' : 'transparent',
   border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
@@ -80,6 +67,22 @@ export function ChatToolbar({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span style={{ color: 'var(--color-text-tertiary)' }}>Agent</span>
+        <select
+          aria-label="Agent"
+          title={getAgent(settings.chatMode).hint}
+          value={settings.chatMode}
+          disabled={disabled}
+          onChange={(e) => updateSettings({ chatMode: e.target.value as typeof settings.chatMode })}
+          className="rounded-full px-2.5 py-1 cursor-pointer"
+          style={{ ...pill(true), background: 'var(--color-bg-secondary)' }}
+        >
+          {CHAT_AGENTS.map((a) => (
+            <option key={a.id} value={a.id} title={a.hint}>
+              {a.label}
+            </option>
+          ))}
+        </select>
         <span style={{ color: 'var(--color-text-tertiary)' }}>Model</span>
         <select
           aria-label="Model"
@@ -96,23 +99,7 @@ export function ChatToolbar({
               {m.id}
             </option>
           ))}
-        </select>
-        <div role="group" aria-label="Mode" className="flex items-center gap-1">
-          {CHAT_MODES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              title={m.hint}
-              aria-pressed={settings.chatMode === m.id}
-              onClick={() => updateSettings({ chatMode: m.id })}
-              className="rounded-full px-2.5 py-1 cursor-pointer"
-              style={pill(settings.chatMode === m.id)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-        <div className="relative">
+        </select>        <div className="relative">
           <button
             type="button"
             onClick={() => setPermsOpen((v) => !v)}
@@ -200,7 +187,7 @@ export function ChatToolbar({
         </button>
       </div>
       <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        {CHAT_MODES.find((m) => m.id === settings.chatMode)?.label} mode: {MODE_STATUS[settings.chatMode]}
+        {getAgent(settings.chatMode).label}: {getAgent(settings.chatMode).hint}
       </div>
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2">

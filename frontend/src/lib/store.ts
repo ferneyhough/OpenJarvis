@@ -16,6 +16,7 @@ import type {
 } from '../types';
 import type { ManagedAgent } from './api';
 import { isEmbedOnlyModel } from './model-capabilities';
+import type { ChatMode } from './chat-agents';
 import { serializeToolCallArguments } from './tool-call';
 
 export interface CachedConnector {
@@ -120,7 +121,7 @@ interface Settings {
   vscodeExecutablePath: string;
   hubEnabledApps: string[];
   personalSourcesEnabled: boolean;
-  chatMode: 'ask' | 'agent' | 'plan' | 'edit';
+  chatMode: ChatMode;
   allowShell: boolean;
   allowWeb: boolean;
   allowFiles: boolean;
@@ -153,7 +154,7 @@ function loadSettings(): Settings {
     vscodeExecutablePath: '',
     hubEnabledApps: [],
     personalSourcesEnabled: false,
-    chatMode: 'ask',
+    chatMode: 'auto',
     allowShell: false,
     allowWeb: true,
     allowFiles: true,

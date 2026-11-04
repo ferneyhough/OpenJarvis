@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { CHAT_AGENTS } from '../lib/chat-agents';
 import { useLocation, useNavigate } from 'react-router';
 import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../lib/store';
@@ -255,7 +256,7 @@ export function PageDetails() {
                         className="rounded px-2 py-1"
                         style={inputStyle}
                       >
-                        {['ask', 'agent', 'plan', 'edit'].map((m) => <option key={m}>{m}</option>)}
+                        {CHAT_AGENTS.map((a) => <option key={a.id}>{a.id}</option>)}
                       </select>
                     </Field>
                     <Field label="Temperature">

@@ -38,7 +38,8 @@ import {
 import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
 import { useHandsFree } from '../../hooks/useHandsFree';
-import { ChatToolbar, CHAT_MODES, MODE_PROMPTS, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
+import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
+import { resolveAgent } from '../../lib/chat-agents';
 import { generateMedia, convertMedia, openFreeMediaSite, openAllowedLink } from '../../lib/api';
 import { MUSIC_APPS, isShortReturnCommand, parseMusicVoiceCommand } from '../../lib/music-commands';
 import { runMusicAction } from '../../lib/music-actions';
@@ -299,7 +300,7 @@ export function InputArea() {
       case '/mode':
       case '/agent': {
         const m = CHAT_MODES.find((x) => x.id === arg.toLowerCase());
-        if (!m) toast.error('Modes: ask, agent, plan, edit');
+        if (!m) toast.error(`Modes: ${CHAT_MODES.map((x) => x.id).join(', ')}`);
         else {
           st().updateSettings({ chatMode: m.id });
           toast.success(`Mode: ${m.label}`);
@@ -436,12 +437,19 @@ export function InputArea() {
       content: m.id === userMsg.id ? fullContent : m.content,
     }));
 
+    const routed = resolveAgent(useAppStore.getState().settings.chatMode, content);
     const assistantMsg: ChatMessage = {
       id: generateId(),
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
       isResearch: deepResearch || undefined,
+      agent: {
+        id: routed.id,
+        label: routed.label,
+        action: routed.action,
+        auto: useAppStore.getState().settings.chatMode === 'auto',
+      },
     };
     addMessage(convId, assistantMsg);
 
@@ -515,7 +523,7 @@ export function InputArea() {
           toast.error(`Steam context unavailable: ${message}`);
         }
       }
-      const modePrompt = MODE_PROMPTS[currentSettings.chatMode] ?? '';
+      const modePrompt = routed.prompt;
       if (modePrompt) systemContexts.push(modePrompt);
       const denied = [
         !currentSettings.allowShell && 'run shell commands',

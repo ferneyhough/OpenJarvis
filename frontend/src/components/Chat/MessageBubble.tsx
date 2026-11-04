@@ -237,6 +237,22 @@ export function MessageBubble({ message, isLive = false }: Props) {
         />
       )}
 
+      {/* Agent highlight */}
+      {!isUser && message.agent && (
+        <div
+          className="mb-2 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px]"
+          style={{
+            background: 'var(--color-accent-subtle)',
+            border: '1px solid var(--color-accent)',
+            color: 'var(--color-accent)',
+          }}
+          title={message.agent.auto ? 'Auto picked this agent for your message' : 'Agent you selected'}
+        >
+          <strong>{message.agent.label}</strong>
+          <span>{message.agent.auto ? 'auto-selected · ' : ''}{message.agent.action}</span>
+        </div>
+      )}
+
       {/* Tool calls */}
       {message.toolCalls && message.toolCalls.length > 0 && (
         <div className="mb-3 flex flex-col gap-2">

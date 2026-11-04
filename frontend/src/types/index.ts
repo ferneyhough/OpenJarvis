@@ -124,6 +124,7 @@ export interface ChatMessage {
   researchTraces?: ResearchSearchTrace[];
   researchSources?: ResearchSource[];
   isResearch?: boolean;
+  agent?: { id: string; label: string; action: string; auto: boolean };
   usage?: TokenUsage;
   telemetry?: MessageTelemetry;
   audio?: { url: string };
