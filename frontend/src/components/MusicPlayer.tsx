@@ -5,6 +5,8 @@ import {
 import { toast } from 'sonner';
 import { fetchServerMusic } from '../lib/api';
 import { Links, useEnabledMusicApps } from './PageDetails';
+import { MUSIC_APPS } from '../lib/music-commands';
+import { useAppStore } from '../lib/store';
 import {
   registerEmbedFrame, serverMusicUrl, trackFromAppUrl, useMusicStore, type Track,
 } from '../lib/music';
@@ -37,6 +39,8 @@ function IconBtn({
 export function MusicPlayer() {
   const s = useMusicStore();
   const enabledApps = useEnabledMusicApps();
+  const developerMode = useAppStore((s) => s.settings.developerModeEnabled);
+  const appList = developerMode ? MUSIC_APPS : enabledApps;
   const [panel, setPanel] = useState<'queue' | 'library' | 'apps'>('library');
   const [serverFiles, setServerFiles] = useState<{ root: string; files: string[] } | null>(null);
   const [plName, setPlName] = useState('');
@@ -207,8 +211,8 @@ export function MusicPlayer() {
             </ul>
           )}
 
-          {panel === 'apps' && (enabledApps.length
-            ? <Links items={enabledApps} />
+          {panel === 'apps' && (appList.length
+            ? <Links items={appList} />
             : <p style={muted}>No music apps activated. Turn on Developer Mode, then Settings → Music to activate apps.</p>)}
 
           {panel === 'library' && (

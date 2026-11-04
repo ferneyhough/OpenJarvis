@@ -34,6 +34,7 @@ import { fetchMediaDocument, playMediaUrl } from '../../lib/media';
 import { parseM3U, parseXMLTV, type GuideProgram, type M3UChannel } from '../../lib/media-guide';
 import { useAppStore } from '../../lib/store';
 import { useMusicStore } from '../../lib/music';
+import { MUSIC_APPS } from '../../lib/music-commands';
 import { Links, useEnabledMusicApps } from '../PageDetails';
 import { getCloudKeyStatus } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
@@ -1224,7 +1225,9 @@ function MusicPanel() {
   const playTracks = useMusicStore((s) => s.playTracks);
   const addLocalFiles = useMusicStore((s) => s.addLocalFiles);
   const fileRef = useRef<HTMLInputElement>(null);
-  const apps = useEnabledMusicApps();
+  const enabledApps = useEnabledMusicApps();
+  const developerMode = useAppStore((s) => s.settings.developerModeEnabled);
+  const apps = developerMode ? MUSIC_APPS : enabledApps;
   const onFiles = (list: FileList | null) => {
     const tracks = addLocalFiles(Array.from(list ?? []));
     if (tracks.length === 0) {
