@@ -1220,20 +1220,70 @@ function DeveloperPanel() {
 
 function MusicPanel() {
   const openPlayer = useMusicStore((s) => s.openPlayer);
+  const playlists = useMusicStore((s) => s.playlists);
+  const playTracks = useMusicStore((s) => s.playTracks);
+  const addLocalFiles = useMusicStore((s) => s.addLocalFiles);
+  const fileRef = useRef<HTMLInputElement>(null);
   const apps = useEnabledMusicApps();
+  const onFiles = (list: FileList | null) => {
+    const tracks = addLocalFiles(Array.from(list ?? []));
+    if (tracks.length === 0) {
+      toast.error('No audio files found in that selection.');
+      return;
+    }
+    playTracks(tracks);
+    openPlayer();
+  };
   return (
     <div className="space-y-3 px-4 pb-4">
       <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
         Play local files and playlists in the Jarvis player, or open a music app. Say &ldquo;Jarvis open Spotify&rdquo;, &ldquo;pause&rdquo;, &ldquo;next&rdquo; or &ldquo;Jarvis return&rdquo;.
       </p>
-      <button
-        type="button"
-        onClick={openPlayer}
-        className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm"
-        style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
-      >
-        <Music2 size={14} /> Open music player
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={openPlayer}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm"
+          style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
+        >
+          <Music2 size={14} /> Open music player
+        </button>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm"
+          style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
+        >
+          Add local media
+        </button>
+        <button
+          type="button"
+          onClick={openPlayer}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm"
+          style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
+        >
+          Add playlist
+        </button>
+        <input
+          ref={fileRef} type="file" hidden multiple accept="audio/*"
+          onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }}
+        />
+      </div>
+      {playlists.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {playlists.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { playTracks(p.tracks); openPlayer(); }}
+              className="rounded-lg px-2.5 py-1"
+              style={{ border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            >
+              ▶ {p.name} ({p.tracks.length})
+            </button>
+          ))}
+        </div>
+      )}
       <div className="text-xs">
         {apps.length
           ? <Links items={apps} />
@@ -1247,7 +1297,6 @@ export function MainPageHub() {
   const [section, setSection] = useState<HubSection | null>(null);
   const [visitedSections, setVisitedSections] = useState<Set<HubSection>>(() => new Set());
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
-  const musicApps = useEnabledMusicApps();
   useEffect(() => {
     if (!developerModeEnabled && section === 'developer') setSection(null);
   }, [developerModeEnabled, section]);
@@ -1259,17 +1308,15 @@ export function MainPageHub() {
   return (
     <section className="shrink-0 border-b px-4 pt-2" style={{ borderColor: 'var(--color-border)' }} aria-label="Games, social, media, remote access, stores, and AI">
       <nav className="flex flex-wrap items-center gap-2 pb-2" aria-label="Main page sections">
+        <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
+          <Music2 size={15} /> Music
+        </ActionButton>
         <ActionButton active={section === 'games'} onClick={() => selectSection('games')}>
           <Gamepad2 size={15} /> Games
         </ActionButton>
         <ActionButton active={section === 'social'} onClick={() => selectSection('social')}>
           <ArrowUpRight size={15} /> Social
         </ActionButton>
-        {(developerModeEnabled || musicApps.length > 0) && (
-          <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
-            <Music2 size={15} /> Music
-          </ActionButton>
-        )}
         <ActionButton active={section === 'media'} onClick={() => selectSection('media')}>
           <Tv size={15} /> Media
         </ActionButton>
