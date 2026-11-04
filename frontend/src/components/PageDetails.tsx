@@ -6,12 +6,13 @@ import { fetchManagedAgents, fetchMediaLibrary, getBase, type ManagedAgent } fro
 import { listConnectors } from '../lib/connectors-api';
 import type { ConnectorInfo } from '../types/connectors';
 
-type Tab = 'fields' | 'library' | 'media' | 'deals' | 'feeds' | 'chats';
+type Tab = 'fields' | 'library' | 'media' | 'music' | 'deals' | 'feeds' | 'chats';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'fields', label: 'Fields' },
   { id: 'library', label: 'Library' },
   { id: 'media', label: 'Images & videos' },
+  { id: 'music', label: 'Music' },
   { id: 'deals', label: 'Store deals' },
   { id: 'feeds', label: 'Social feeds' },
   { id: 'chats', label: 'Chats' },
@@ -33,6 +34,22 @@ const DEALS = [
   { label: 'GOG deals', url: 'https://www.gog.com/en/games?discounted=true' },
   { label: 'Humble Bundle', url: 'https://www.humblebundle.com/store/promo/deals' },
   { label: 'IsThereAnyDeal', url: 'https://isthereanydeal.com/deals/' },
+];
+
+const MUSIC = [
+  { label: 'YouTube Music', url: 'https://music.youtube.com/' },
+  { label: 'Spotify', url: 'https://open.spotify.com/' },
+  { label: 'Apple Music', url: 'https://music.apple.com/' },
+  { label: 'Amazon Music', url: 'https://music.amazon.com/' },
+  { label: 'Tidal', url: 'https://listen.tidal.com/' },
+  { label: 'SoundCloud', url: 'https://soundcloud.com/' },
+  { label: 'Audible', url: 'https://www.audible.com/' },
+  { label: 'Deezer', url: 'https://www.deezer.com/' },
+  { label: 'Pandora', url: 'https://www.pandora.com/' },
+  { label: 'Bandcamp', url: 'https://bandcamp.com/' },
+  { label: 'Qobuz', url: 'https://play.qobuz.com/' },
+  { label: 'Mixcloud', url: 'https://www.mixcloud.com/' },
+  { label: 'Internet Archive Audio', url: 'https://archive.org/details/audio' },
 ];
 
 const FEEDS = [
@@ -264,6 +281,7 @@ export function PageDetails() {
                 </div>
               )
             )}
+            {tab === 'music' && <Links items={MUSIC} />}
             {tab === 'deals' && <Links items={DEALS} />}
             {tab === 'feeds' && <Links items={FEEDS} />}
             {tab === 'chats' && (
