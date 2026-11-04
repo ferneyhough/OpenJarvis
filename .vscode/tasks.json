@@ -79,18 +79,6 @@
 			],
 			"isBackground": true,
 			"problemMatcher": []
-		},
-		{
-			"label": "Load UI project context",
-			"type": "shell",
-			"command": "C:\\Users\\Administrator\\.copilot\\skills\\impeccable\\scripts\\impeccable.cmd",
-			"args": [
-				"context",
-				"--target",
-				"frontend\\src"
-			],
-			"isBackground": false,
-			"problemMatcher": []
 		}
 	]
 }

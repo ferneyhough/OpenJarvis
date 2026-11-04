@@ -9,6 +9,7 @@ Output/
 jarvis.log
 /tools/PlaynitePortable/
 env/
+.vs/
 .pytest_cache/
 .ruff_cache/
 frontend/node_modules/

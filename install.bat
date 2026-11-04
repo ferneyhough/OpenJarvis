@@ -3,6 +3,7 @@ REM ================================================================
 REM  OPEN JARVIS — Windows one-click installer (CMD / PowerShell)
 REM ================================================================
 setlocal ENABLEDELAYEDEXPANSION
+cd /d "%~dp0"
 
 echo.
 echo  ============================================================
@@ -61,6 +62,12 @@ pip install -e . pywebview "kokoro>=0.9" soundfile "misaki[en]" faster-whisper -
 echo [+] Downloading voice and hands-free models into .\models
 python scripts\download_voice_models.py
 
+if exist src\openjarvis\server\static\index.html (
+    echo [+] Web UI already built
+) else (
+    call :build_ui
+)
+
 echo.
 set /p WANTMEDIA="Install optional local image/video generation packages (~150 MB + models on demand)? [y/N] "
 if /i "!WANTMEDIA!"=="y" (
@@ -78,6 +85,7 @@ if errorlevel 1 (
     echo [+] Installing Ollama for local chat
     winget install -e --id Ollama.Ollama --accept-package-agreements --accept-source-agreements --silent
 )
+if exist "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" set "PATH=%LOCALAPPDATA%\Programs\Ollama;%PATH%"
 ollama pull qwen3.5:4b
 echo.
 echo  ============================================================
@@ -89,3 +97,29 @@ echo      2. Run:  run.bat
 echo  ============================================================
 echo.
 pause
+exit /b 0
+
+:build_ui
+echo [+] Building the web UI (needs Node.js)
+where npm.cmd >nul 2>nul
+if errorlevel 1 (
+    echo [+] Node.js not found. Installing Node.js LTS
+    winget install -e --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements --silent
+    if exist "%ProgramFiles%\nodejs\npm.cmd" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+)
+where npm.cmd >nul 2>nul
+if errorlevel 1 (
+    echo [!] Node.js is unavailable, so the web UI was not built.
+    echo     Install Node.js LTS from https://nodejs.org/ then re-run install.bat.
+    exit /b 0
+)
+pushd frontend
+call npm ci --no-audit --no-fund
+if errorlevel 1 (
+    popd
+    echo [!] npm ci failed. The web UI was not built.
+    exit /b 0
+)
+call npm run build
+popd
+exit /b 0
