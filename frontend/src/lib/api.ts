@@ -488,10 +488,29 @@ export async function openAllowedLink(url: string): Promise<'app' | 'browser'> {
   return data.via === 'app' ? 'app' : 'browser';
 }
 
-export async function fetchNativeApps(): Promise<Record<string, boolean>> {
-  const res = await apiFetch('/v1/media/native-apps');
+export async function fetchNativeApps(urls: string[]): Promise<Record<string, boolean>> {
+  const res = await apiFetch('/v1/media/native-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ urls }),
+  });
   if (!res.ok) return {};
   return res.json();
+}
+
+/** Open a service in its installed desktop app, else its website. */
+export async function launchApp(url: string): Promise<'app' | 'browser'> {
+  try {
+    return await openAllowedLink(url);
+  } catch {
+    if (isTauri()) {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+    return 'browser';
+  }
 }
 
 export async function fetchMediaLibrary(): Promise<Array<{ name: string; kind: 'image' | 'video' | 'audio'; url: string; modified: number }>> {

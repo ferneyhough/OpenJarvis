@@ -1,4 +1,4 @@
-import { isTauri } from './api';
+import { isTauri, launchApp } from './api';
 
 export const gameLaunchers = [
   {
@@ -155,15 +155,8 @@ export function isReturnToJarvisVoiceCommand(text: string): boolean {
 }
 
 async function openExternal(url: string): Promise<Window | null> {
-  if (isTauri()) {
-    const { open } = await import('@tauri-apps/plugin-shell');
-    await open(url);
-    return null;
-  }
-  const openedWindow = window.open(url, '_blank');
-  if (!openedWindow) throw new Error('The browser blocked opening a new tab.');
-  openedWindow.opener = null;
-  return openedWindow;
+  await launchApp(url);
+  return null;
 }
 
 export async function openGameLauncher(id: GameLauncherId): Promise<'desktop' | 'web'> {

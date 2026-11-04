@@ -13,7 +13,6 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import threading
 import time
 import uuid
@@ -23,6 +22,8 @@ from typing import Any, Dict, Literal, Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+from openjarvis.server import app_launch
 
 logger = logging.getLogger(__name__)
 
@@ -358,54 +359,24 @@ async def open_free_site(req: ModelDownloadRequest, request: Request):
     return {"url": url}
 
 
-LINK_HOSTS = {
-    "music.youtube.com", "open.spotify.com", "music.apple.com", "music.amazon.com",
-    "listen.tidal.com", "soundcloud.com", "www.audible.com", "www.deezer.com",
-    "www.pandora.com", "bandcamp.com", "play.qobuz.com", "www.mixcloud.com",
-    "archive.org", "store.steampowered.com", "store.epicgames.com", "www.gog.com",
-    "www.humblebundle.com", "isthereanydeal.com", "www.reddit.com", "www.youtube.com",
-    "x.com", "news.ycombinator.com",
-}
-
-
 class OpenLinkRequest(BaseModel):
     url: str = Field(max_length=500)
     prefer_app: bool = True
 
 
-# host -> (URL scheme the desktop app registers, URI used to launch it).
-NATIVE_APPS: dict[str, tuple[str, str]] = {
-    "open.spotify.com": ("spotify", "spotify:"),
-    "listen.tidal.com": ("tidal", "tidal://"),
-    "music.apple.com": ("music", "music://"),
-    "music.amazon.com": ("amazonmusic", "amazonmusic://"),
-    "www.deezer.com": ("deezer", "deezer://"),
-    "www.audible.com": ("audible", "audible://"),
-    "store.steampowered.com": ("steam", "steam://store"),
-    "store.epicgames.com": ("com.epicgames.launcher", "com.epicgames.launcher://store"),
-    "www.gog.com": ("goggalaxy", "goggalaxy://"),
-}
+class NativeStatusRequest(BaseModel):
+    urls: list[str] = Field(max_length=200)
 
 
-def _native_installed(scheme: str) -> bool:
-    """True when a desktop app has registered this URL scheme (Windows)."""
-    if sys.platform != "win32":
-        return False
-    import winreg
-
-    try:
-        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, scheme) as key:
-            winreg.QueryValueEx(key, "URL Protocol")
-        return True
-    except OSError:
-        return False
-
-
-@media_router.get("/native-apps")
-async def native_apps(request: Request):
-    """Which allow-listed services have an installed desktop app (local only)."""
+@media_router.post("/native-status")
+async def native_status(req: NativeStatusRequest, request: Request):
+    """Map each URL to whether its desktop app is installed (local only)."""
     _local_only(request)
-    return {host: _native_installed(s) for host, (s, _) in NATIVE_APPS.items()}
+    return {
+        u: app_launch.is_allowed(u)
+        and app_launch.is_installed(app_launch.match_native(u))
+        for u in req.urls
+    }
 
 
 @media_router.post("/open-link")
@@ -413,22 +384,16 @@ async def open_link(req: OpenLinkRequest, request: Request):
     """Open an allow-listed link in its desktop app if installed, else the browser."""
     _local_only(request)
     import webbrowser
-    from urllib.parse import urlparse
 
-    parsed = urlparse(req.url)
-    if parsed.scheme != "https" or parsed.hostname not in LINK_HOSTS:
+    if not app_launch.is_allowed(req.url):
         raise HTTPException(400, "Link not allowed")
-    native = NATIVE_APPS.get(parsed.hostname or "")
-    if req.prefer_app and native and _native_installed(native[0]):
-        try:
-            os.startfile(native[1])  # type: ignore[attr-defined]
-            return {"url": req.url, "opened": True, "via": "app"}
-        except OSError:
-            pass
+    native = app_launch.match_native(req.url)
+    installed = app_launch.is_installed(native)
+    if req.prefer_app and installed and app_launch.launch_native(native):
+        return {"url": req.url, "opened": True, "via": "app"}
     if not webbrowser.open(req.url):
         raise HTTPException(500, "No browser could be opened")
     return {"url": req.url, "opened": True, "via": "browser"}
-
 
 @media_router.get("/music")
 async def list_music():

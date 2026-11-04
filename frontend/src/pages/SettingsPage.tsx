@@ -629,6 +629,18 @@ const hubIntegrationGroups = [
     })),
   },
   {
+    title: 'Browsers',
+    apps: [
+      { id: 'browser-chrome', name: 'Google Chrome', url: 'https://www.google.com/chrome/', auth: 'Activate to show Chrome in Browsers. Opens the installed browser, otherwise its download site.' },
+      { id: 'browser-edge', name: 'Microsoft Edge', url: 'https://www.microsoft.com/edge/', auth: 'Activate to show Edge in Browsers. Opens the installed browser, otherwise its site.' },
+      { id: 'browser-firefox', name: 'Firefox', url: 'https://www.mozilla.org/firefox/', auth: 'Activate to show Firefox in Browsers. Opens the installed browser, otherwise its download site.' },
+      { id: 'browser-brave', name: 'Brave', url: 'https://brave.com/', auth: 'Activate to show Brave in Browsers. Opens the installed browser, otherwise its download site.' },
+      { id: 'browser-opera', name: 'Opera', url: 'https://www.opera.com/', auth: 'Activate to show Opera in Browsers. Opens the installed browser, otherwise its download site.' },
+      { id: 'browser-vivaldi', name: 'Vivaldi', url: 'https://vivaldi.com/', auth: 'Activate to show Vivaldi in Browsers. Opens the installed browser, otherwise its download site.' },
+      { id: 'browser-tor', name: 'Tor Browser', url: 'https://www.torproject.org/', auth: 'Activate to show Tor Browser in Browsers. Opens it from your Desktop install, otherwise its download site.' },
+    ],
+  },
+  {
     title: 'Stores',
     apps: [
       { id: 'gg-deals', name: 'GG.deals', url: 'https://gg.deals/', auth: 'Open deal pages in your browser; sign in there if you use a GG.deals account.' },

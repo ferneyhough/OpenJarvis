@@ -1,4 +1,4 @@
-import { isTauri } from './api';
+import { isTauri, launchApp } from './api';
 import { clearLastLaunchedGameLauncher } from './game-launchers';
 
 export interface HubVoiceApp {
@@ -6,12 +6,19 @@ export interface HubVoiceApp {
   name: string;
   url: string;
   settingsId: string;
-  category: 'social' | 'media' | 'record' | 'remote' | 'stores' | 'ai';
+  category: 'social' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'browsers';
   aliases: string[];
   apiKey?: string;
 }
 
 export const hubVoiceApps: HubVoiceApp[] = [
+  { id: 'browser-chrome', name: 'Google Chrome', url: 'https://www.google.com/chrome/', settingsId: 'browser-chrome', category: 'browsers', aliases: ['chrome', 'google chrome'] },
+  { id: 'browser-edge', name: 'Microsoft Edge', url: 'https://www.microsoft.com/edge/', settingsId: 'browser-edge', category: 'browsers', aliases: ['edge', 'microsoft edge'] },
+  { id: 'browser-firefox', name: 'Firefox', url: 'https://www.mozilla.org/firefox/', settingsId: 'browser-firefox', category: 'browsers', aliases: ['firefox', 'fire fox'] },
+  { id: 'browser-brave', name: 'Brave', url: 'https://brave.com/', settingsId: 'browser-brave', category: 'browsers', aliases: ['brave', 'brave browser'] },
+  { id: 'browser-opera', name: 'Opera', url: 'https://www.opera.com/', settingsId: 'browser-opera', category: 'browsers', aliases: ['opera', 'opera browser'] },
+  { id: 'browser-vivaldi', name: 'Vivaldi', url: 'https://vivaldi.com/', settingsId: 'browser-vivaldi', category: 'browsers', aliases: ['vivaldi'] },
+  { id: 'browser-tor', name: 'Tor Browser', url: 'https://www.torproject.org/', settingsId: 'browser-tor', category: 'browsers', aliases: ['tor', 'tor browser'] },
   { id: 'discord', name: 'Discord', url: 'https://discord.com/app', settingsId: 'discord', category: 'social', aliases: ['discord'] },
   { id: 'telegram', name: 'Telegram', url: 'https://web.telegram.org/', settingsId: 'telegram', category: 'social', aliases: ['telegram'] },
   { id: 'whatsapp', name: 'WhatsApp', url: 'https://web.whatsapp.com/', settingsId: 'whatsapp', category: 'social', aliases: ['whatsapp', 'whats app'] },
@@ -111,13 +118,6 @@ export function parseHubAppVoiceCommand(text: string): HubVoiceApp | null {
 
 export async function openHubVoiceApp(app: HubVoiceApp): Promise<Window | null> {
   clearLastLaunchedGameLauncher();
-  if (isTauri()) {
-    const { open } = await import('@tauri-apps/plugin-shell');
-    await open(app.url);
-    return null;
-  }
-  const openedWindow = window.open(app.url, '_blank');
-  if (!openedWindow) throw new Error('The browser blocked opening a new tab.');
-  openedWindow.opener = null;
-  return openedWindow;
+  await launchApp(app.url);
+  return null;
 }

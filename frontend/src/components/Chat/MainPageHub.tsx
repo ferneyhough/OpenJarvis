@@ -24,10 +24,11 @@ import {
   Users,
   Video,
   Music2,
+  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
-import { isTauri } from '../../lib/api';
+import { isTauri, launchApp } from '../../lib/api';
 import { getPlayniteLibrary, launchPlayniteGame, type PlayniteGame } from '../../lib/playnite';
 import { getSteamLibrary, launchSteamGame, type SteamLibrary } from '../../lib/steam';
 import { fetchMediaDocument, playMediaUrl } from '../../lib/media';
@@ -36,7 +37,7 @@ import { useAppStore } from '../../lib/store';
 import { useMusicStore } from '../../lib/music';
 import { MUSIC_APPS } from '../../lib/music-commands';
 import { Links, useEnabledMusicApps } from '../PageDetails';
-import { getCloudKeyStatus } from '../../lib/api';
+import { getCloudKeyStatus, fetchNativeApps } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
 import { openHubService } from '../../lib/hub-voice';
 import {
@@ -45,7 +46,7 @@ import {
   type GameLauncherId,
 } from '../../lib/game-launchers';
 
-type HubSection = 'games' | 'social' | 'music' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
+type HubSection = 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
 type GameSource = 'steam' | 'playnite';
 
 interface HubService {
@@ -56,6 +57,16 @@ interface HubService {
   description: string;
   icon: typeof Tv;
 }
+
+const browserApps: HubService[] = [
+  { id: 'browser-chrome', name: 'Google Chrome', url: 'https://www.google.com/chrome/', color: '#4285f4', description: 'Fast, widely supported browser.', icon: Globe },
+  { id: 'browser-edge', name: 'Microsoft Edge', url: 'https://www.microsoft.com/edge/', color: '#0f7bd8', description: 'Built-in Windows browser.', icon: Globe },
+  { id: 'browser-firefox', name: 'Firefox', url: 'https://www.mozilla.org/firefox/', color: '#ff7139', description: 'Privacy-focused open-source browser.', icon: Globe },
+  { id: 'browser-brave', name: 'Brave', url: 'https://brave.com/', color: '#fb542b', description: 'Browser with built-in ad and tracker blocking.', icon: Globe },
+  { id: 'browser-opera', name: 'Opera', url: 'https://www.opera.com/', color: '#ff1b2d', description: 'Browser with a built-in sidebar and VPN.', icon: Globe },
+  { id: 'browser-vivaldi', name: 'Vivaldi', url: 'https://vivaldi.com/', color: '#ef3939', description: 'Highly customizable browser.', icon: Globe },
+  { id: 'browser-tor', name: 'Tor Browser', url: 'https://www.torproject.org/', color: '#7d4698', description: 'Privacy browser that routes traffic through Tor.', icon: Globe },
+];
 
 const socialApps: HubService[] = [
   { id: 'discord', name: 'Discord', url: 'https://discord.com/app', color: '#5865f2', description: 'Communities, servers, and direct messages.', icon: MessageCircle },
@@ -142,12 +153,7 @@ function appArtwork(color: string): string {
 }
 
 async function openExternal(url: string) {
-  if (isTauri()) {
-    const { open } = await import('@tauri-apps/plugin-shell');
-    await open(url);
-    return;
-  }
-  window.open(url, '_blank', 'noopener,noreferrer');
+  await launchApp(url);
 }
 
 function ActionButton({
@@ -558,7 +564,7 @@ function GamesPanel() {
   );
 }
 
-function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; category: 'social' | 'stores' | 'media' | 'record' | 'remote' | 'ai' }) {
+function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; category: 'social' | 'stores' | 'media' | 'record' | 'remote' | 'ai' | 'browsers' }) {
   const navigate = useNavigate();
   const enabledApps = useAppStore((state) => state.settings.hubEnabledApps);
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
@@ -566,6 +572,12 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
     ? apps
     : apps.filter((app) => developerModeEnabled || enabledApps.includes(app.id));
   const [selectedId, setSelectedId] = useState<string | null>(visibleApps[0]?.id ?? null);
+  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const urlKey = visibleApps.map((app) => app.url).join('|');
+  useEffect(() => {
+    if (!urlKey) return;
+    fetchNativeApps(urlKey.split('|')).then(setInstalled).catch(() => {});
+  }, [urlKey]);
   const [opening, setOpening] = useState('');
   const selectedApp = visibleApps.find((app) => app.id === selectedId) ?? visibleApps[0];
 
@@ -573,11 +585,7 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
     setSelectedId(app.id);
     setOpening(app.id);
     try {
-      if (category === 'remote') {
-        await openHubService(app.id, app.url);
-      } else {
-        await openExternal(app.url);
-      }
+      await openExternal(app.url);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -589,7 +597,7 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
     <div className="space-y-3 px-4 pb-4">
       {visibleApps.length === 0 ? (
         <p className="py-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          Set up apps in Settings → {category === 'social' ? 'Social' : category === 'stores' ? 'Stores' : category === 'media' ? 'Media' : category === 'record' ? 'Record and live stream' : category === 'remote' ? 'Remote access and play' : 'API Keys'} to show them here.
+          Set up apps in Settings → {category === 'social' ? 'Social' : category === 'stores' ? 'Stores' : category === 'media' ? 'Media' : category === 'record' ? 'Record and live stream' : category === 'remote' ? 'Remote access and play' : category === 'browsers' ? 'Browsers' : 'API Keys'} to show them here.
           <button type="button" onClick={() => navigate('/settings')} className="ml-1 underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Open Settings</button>
         </p>
       ) : (
@@ -605,6 +613,11 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
             >
               <span className="text-lg font-semibold text-white">{selectedApp.name}</span>
               <span className="text-xs text-white/85">{selectedApp.description}</span>
+              <span className="mt-0.5 text-[11px] text-white/75">
+                {installed[selectedApp.url]
+                  ? 'Desktop app found — opens the app.'
+                  : 'Desktop app not found — opens the website.'}
+              </span>
               {category === 'social' && (
                 <span className="mt-1 text-[11px] text-white/75">
                   Feed previews are not available in OpenJarvis yet. Open the service to see its feed; OpenJarvis does not access private content.
@@ -623,7 +636,7 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
                   onFocus={() => setSelectedId(app.id)}
                   onClick={() => void openLink(app)}
                   aria-pressed={selectedApp?.id === app.id}
-                  title={`Open ${app.name}`}
+                  title={installed[app.url] ? `Open ${app.name} app` : `Open ${app.name} website`}
                   className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                   style={{
                     color: selectedApp?.id === app.id ? app.color : 'var(--color-text-secondary)',
@@ -646,6 +659,10 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
 
 function SocialPanel() {
   return <ConnectedServicesPanel apps={socialApps} category="social" />;
+}
+
+function BrowsersPanel() {
+  return <ConnectedServicesPanel apps={browserApps} category="browsers" />;
 }
 
 function StoresPanel() {
@@ -1314,6 +1331,9 @@ export function MainPageHub() {
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
         </ActionButton>
+        <ActionButton active={section === 'browsers'} onClick={() => selectSection('browsers')}>
+          <Globe size={15} /> Browsers
+        </ActionButton>
         <ActionButton active={section === 'games'} onClick={() => selectSection('games')}>
           <Gamepad2 size={15} /> Games
         </ActionButton>
@@ -1342,6 +1362,7 @@ export function MainPageHub() {
         )}
       </nav>
       <div className={`max-h-[42vh] overflow-y-auto pb-2 ${section ? '' : 'hidden'}`}>
+        {visitedSections.has('browsers') && <div hidden={section !== 'browsers'}><BrowsersPanel /></div>}
         {visitedSections.has('games') && <div hidden={section !== 'games'}><GamesPanel /></div>}
         {visitedSections.has('social') && <div hidden={section !== 'social'}><SocialPanel /></div>}
         {visitedSections.has('music') && <div hidden={section !== 'music'}><MusicPanel /></div>}

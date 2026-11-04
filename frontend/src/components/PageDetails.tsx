@@ -137,12 +137,12 @@ export function useEnabledMusicApps() {
 export function Links({ items }: { items: AppLink[] }) {
   const [native, setNative] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    fetchNativeApps().then(setNative).catch(() => {});
-  }, []);
+    fetchNativeApps(items.map((i) => i.url)).then(setNative).catch(() => {});
+  }, [items]);
   return (
     <ul className="flex flex-col gap-1.5">
       {items.map((i) => (
-        <AppRow key={i.url} item={i} installed={!!native[new URL(i.url).hostname]} />
+        <AppRow key={i.url} item={i} installed={!!native[i.url]} />
       ))}
     </ul>
   );
