@@ -55,7 +55,14 @@ if not exist config.json (
 )
 
 echo [+] Installing OpenJarvis web UI, desktop window and voice (Kokoro / Whisper)
-pip install -e . pywebview "kokoro>=0.9" soundfile "misaki[en]" faster-whisper --quiet
+pip install -e ".[desktop]" pywebview pynput --quiet
+if errorlevel 1 (
+    echo [X] Installing OpenJarvis failed. See the pip output above.
+    pause
+    exit /b 1
+)
+REM Kokoro 0.9 requires Python < 3.13 and misaki's spaCy deps fail to build on 3.13.
+pip install "kokoro>=0.9; python_version < '3.13'" "misaki[en]; python_version < '3.13'" --quiet
 echo [+] Downloading voice and hands-free models into .\models
 python scripts\download_voice_models.py
 
@@ -112,6 +119,10 @@ if errorlevel 1 (
 )
 pushd frontend
 call npm ci --no-audit --no-fund
+if errorlevel 1 (
+    echo [+] Retrying without the Node.js version check in frontend\.npmrc
+    call npm ci --no-audit --no-fund --engine-strict=false
+)
 if errorlevel 1 (
     popd
     echo [!] npm ci failed. The web UI was not built.
