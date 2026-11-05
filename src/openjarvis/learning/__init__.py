@@ -2,28 +2,42 @@
 
 from __future__ import annotations
 
+from importlib import import_module
+from typing import Any
+
 from openjarvis.learning._stubs import (
     QueryAnalyzer,
     RewardFunction,
     RouterPolicy,
     RoutingContext,
 )
-from openjarvis.learning.agents.agent_evolver import AgentConfigEvolver
-from openjarvis.learning.learning_orchestrator import LearningOrchestrator
-from openjarvis.learning.optimize.llm_optimizer import LLMOptimizer
-from openjarvis.learning.optimize.optimizer import OptimizationEngine
-from openjarvis.learning.optimize.store import OptimizationStore
-from openjarvis.learning.routing.complexity import (
-    ComplexityQueryAnalyzer,
-    score_complexity,
-)
-from openjarvis.learning.routing.heuristic_reward import HeuristicRewardFunction
-from openjarvis.learning.routing.router import (
-    HeuristicRouter,
-    build_routing_context,
-)
-from openjarvis.learning.training.data import TrainingDataMiner
-from openjarvis.learning.training.lora import HAS_TORCH, LoRATrainer, LoRATrainingConfig
+
+_LAZY_EXPORTS = {
+    "AgentConfigEvolver": "openjarvis.learning.agents.agent_evolver",
+    "LearningOrchestrator": "openjarvis.learning.learning_orchestrator",
+    "LLMOptimizer": "openjarvis.learning.optimize.llm_optimizer",
+    "OptimizationEngine": "openjarvis.learning.optimize.optimizer",
+    "OptimizationStore": "openjarvis.learning.optimize.store",
+    "ComplexityQueryAnalyzer": "openjarvis.learning.routing.complexity",
+    "score_complexity": "openjarvis.learning.routing.complexity",
+    "HeuristicRewardFunction": "openjarvis.learning.routing.heuristic_reward",
+    "HeuristicRouter": "openjarvis.learning.routing.router",
+    "build_routing_context": "openjarvis.learning.routing.router",
+    "TrainingDataMiner": "openjarvis.learning.training.data",
+    "HAS_TORCH": "openjarvis.learning.training.lora",
+    "LoRATrainer": "openjarvis.learning.training.lora",
+    "LoRATrainingConfig": "openjarvis.learning.training.lora",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Load heavier learning components only when explicitly requested."""
+    module_name = _LAZY_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value
+    return value
 
 
 def ensure_registered() -> None:

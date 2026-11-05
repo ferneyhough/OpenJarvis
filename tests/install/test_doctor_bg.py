@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from openjarvis.cli.doctor_cmd import doctor
 
+_MODEL_ID = "qwen3.5-9b" if os.name == "nt" else "qwen3.5:9b"
+
 
 def test_doctor_shows_bg_section_when_state_present(tmp_openjarvis_home: Path) -> None:
     (tmp_openjarvis_home / ".state" / "extension-built").write_text("")
-    (tmp_openjarvis_home / ".state" / "models" / "qwen3.5:9b.ready").write_text("")
+    (tmp_openjarvis_home / ".state" / "models" / f"{_MODEL_ID}.ready").write_text("")
     runner = CliRunner()
     result = runner.invoke(doctor, [], catch_exceptions=False)
     assert "Background tasks" in result.output
     assert "Rust extension" in result.output
-    assert "qwen3.5:9b" in result.output
+    assert _MODEL_ID in result.output
     assert "ready" in result.output
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +15,10 @@ from openjarvis.telemetry.energy_rapl import (
 from tests.telemetry.energy_test_helpers import (
     assert_close_sets_uninitialized,
     assert_sample_result_basics,
+)
+
+pytestmark = pytest.mark.skipif(
+    platform.system() != "Linux", reason="RAPL monitoring uses Linux sysfs"
 )
 
 _PLAT = "openjarvis.telemetry.energy_rapl.platform.system"

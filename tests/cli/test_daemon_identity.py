@@ -31,10 +31,11 @@ def linux_process(tmp_path, monkeypatch):
     read_bytes = Path.read_bytes
 
     def proc_text(path, *args, **kwargs):
-        if str(path).startswith("/proc/"):
+        path_text = str(path).replace("\\", "/")
+        if path_text.startswith("/proc/"):
             if not process["readable"]:
                 raise PermissionError("procfs unavailable")
-            if str(path) == "/proc/sys/kernel/random/boot_id":
+            if path_text == "/proc/sys/kernel/random/boot_id":
                 return process["boot_id"] + "\n"
             if path.name == "stat" and path.parent.name.isdecimal():
                 pid = int(path.parent.name)
@@ -45,7 +46,8 @@ def linux_process(tmp_path, monkeypatch):
         return read_text(path, *args, **kwargs)
 
     def proc_bytes(path, *args, **kwargs):
-        if str(path).startswith("/proc/"):
+        path_text = str(path).replace("\\", "/")
+        if path_text.startswith("/proc/"):
             if not process["readable"]:
                 raise PermissionError("procfs unavailable")
             assert path.name == "cmdline"
@@ -197,7 +199,7 @@ def test_legacy_migration_rechecks_identity_after_reading_command(
 
     def recycled_after_read(path, *args, **kwargs):
         result = read_bytes(path, *args, **kwargs)
-        if str(path) == "/proc/4321/cmdline":
+        if str(path).replace("\\", "/") == "/proc/4321/cmdline":
             linux_process["starts"][4321] += 1
         return result
 

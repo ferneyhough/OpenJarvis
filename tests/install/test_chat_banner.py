@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from openjarvis.cli import _bg_state
 from openjarvis.cli._chat_banner import render_startup_banner
 
+_MODEL_ID = "qwen3.5-9b" if os.name == "nt" else "qwen3.5:9b"
+
 
 def test_banner_empty_when_all_ready(tmp_openjarvis_home: Path) -> None:
     (tmp_openjarvis_home / ".state" / "extension-built").write_text("")
-    (tmp_openjarvis_home / ".state" / "models" / "qwen3.5:9b.ready").write_text("")
+    (tmp_openjarvis_home / ".state" / "models" / f"{_MODEL_ID}.ready").write_text("")
     s = _bg_state.get_status()
     banner = render_startup_banner(s)
     assert banner == ""
@@ -27,10 +30,10 @@ def test_banner_shows_rust_building(tmp_openjarvis_home: Path) -> None:
 def test_banner_shows_model_downloading(tmp_openjarvis_home: Path) -> None:
     (tmp_openjarvis_home / ".state" / "extension-built").write_text("")
     models_dir = tmp_openjarvis_home / ".state" / "models"
-    (models_dir / "qwen3.5:9b.downloading").write_text("")
+    (models_dir / f"{_MODEL_ID}.downloading").write_text("")
     s = _bg_state.get_status()
     banner = render_startup_banner(s)
-    assert "qwen3.5:9b" in banner
+    assert _MODEL_ID in banner
     assert "downloading" in banner.lower()
 
 

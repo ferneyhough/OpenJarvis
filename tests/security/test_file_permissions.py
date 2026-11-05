@@ -7,6 +7,12 @@ import stat
 import tempfile
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    os.name != "posix", reason="POSIX permission bits are not portable"
+)
+
 
 class TestSecureMkdir:
     """secure_mkdir should create directories with 0o700."""

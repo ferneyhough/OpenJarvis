@@ -4,14 +4,25 @@ from __future__ import annotations
 
 import os
 import shlex
+import subprocess
+import sys
 import tempfile
 
-from openjarvis.core import get_python_executable
 from openjarvis.security.subprocess_sandbox import (
     build_safe_env,
     kill_process_tree,
     run_sandboxed,
 )
+
+
+def _python_command(code: str) -> str:
+    args = [sys.executable, "-c", code]
+    return (
+        subprocess.list2cmdline(args)
+        if os.name == "nt"
+        else shlex.join(args)
+    )
+
 
 # ---------------------------------------------------------------------------
 # build_safe_env tests
@@ -34,6 +45,10 @@ class TestBuildSafeEnv:
             "TMPDIR",
             "TZ",
         }
+        if os.name == "nt":
+            safe_keys.update(
+                {"COMSPEC", "SYSTEMROOT", "WINDIR", "PATHEXT", "TEMP", "TMP"}
+            )
         for key in env:
             assert key in safe_keys
 
@@ -66,21 +81,27 @@ class TestBuildSafeEnv:
 
 class TestRunSandboxed:
     def test_simple_echo(self) -> None:
-        result = run_sandboxed("echo hello", timeout=10.0)
+        result = run_sandboxed(_python_command("print('hello')"), timeout=10.0)
         assert result.returncode == 0
         assert "hello" in result.stdout
         assert not result.timed_out
         assert not result.killed
 
     def test_timeout_kills_process(self) -> None:
-        result = run_sandboxed("sleep 60", timeout=1.0)
+        result = run_sandboxed(
+            _python_command("import time; time.sleep(60)"), timeout=1.0
+        )
         assert result.timed_out
         assert result.killed
         assert result.returncode == -1
 
     def test_working_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = run_sandboxed("pwd", working_dir=tmpdir, timeout=10.0)
+            result = run_sandboxed(
+                _python_command("import os; print(os.getcwd())"),
+                working_dir=tmpdir,
+                timeout=10.0,
+            )
             assert result.returncode == 0
             assert tmpdir in result.stdout.strip()
 
@@ -88,7 +109,9 @@ class TestRunSandboxed:
         os.environ["TEST_SECRET"] = "super_secret_value"
         try:
             result = run_sandboxed(
-                'echo "val=$TEST_SECRET"',
+                _python_command(
+                    "import os; print(os.environ.get('TEST_SECRET', ''))"
+                ),
                 timeout=10.0,
             )
             assert result.returncode == 0
@@ -99,7 +122,7 @@ class TestRunSandboxed:
     def test_output_truncation(self) -> None:
         # Generate output larger than max_output_bytes
         result = run_sandboxed(
-            f"{shlex.quote(get_python_executable())} -c \"print('A' * 200)\"",
+            _python_command("print('A' * 200)"),
             timeout=10.0,
             max_output_bytes=50,
         )
@@ -107,7 +130,7 @@ class TestRunSandboxed:
         assert len(result.stdout) <= 50
 
     def test_non_zero_exit_code(self) -> None:
-        result = run_sandboxed("exit 42", timeout=10.0)
+        result = run_sandboxed(_python_command("raise SystemExit(42)"), timeout=10.0)
         assert result.returncode == 42
         assert not result.timed_out
 
