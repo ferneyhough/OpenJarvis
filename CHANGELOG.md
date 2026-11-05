@@ -14,7 +14,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Attach files or a whole folder with a visible explorer below the chat box.
 - Music player with voice control, Browsers tab, and launching installed desktop apps.
 - `tests/deployment/test_windows_scripts.py` enforces the `.bat` script pattern.
-- `emergent` chat engine (OpenAI-compatible, key in the `EMERGENT_API_KEY` env var). Emergent only allows external use of its Universal Key after more than $5 in lifetime purchases.
 
 ### Changed
 - `run.bat` / `install.bat` / build scripts `cd` to their own folder; Windows scripts are CRLF via `.gitattributes`.
