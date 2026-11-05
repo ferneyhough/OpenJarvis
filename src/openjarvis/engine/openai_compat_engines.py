@@ -42,6 +42,29 @@ def normalize_openai_base_url(url: str) -> str:
     return base
 
 
+class EmergentEngine(_OpenAICompatibleEngine):
+    """Emergent Universal Key proxy (OpenAI-compatible, key in EMERGENT_API_KEY).
+
+    Emergent only allows external use of the key for accounts with more than
+    $5 in lifetime purchases; otherwise it answers 403 UK_EXTERNAL_ACCESS_NOT_ELIGIBLE.
+    """
+
+    engine_id = "emergent"
+    _default_host = "https://integrations.emergentagent.com/llm"
+    _api_prefix = ""
+    _fallback_models = ("gpt-4o-mini", "gpt-4.1-mini")
+
+    def health(self) -> bool:
+        # Without a key there is nothing to probe; skip the remote call.
+        return bool(self._api_key)
+
+    def list_models(self) -> list[str]:
+        return super().list_models() or list(self._fallback_models)
+
+
+EngineRegistry.register("emergent")(EmergentEngine)
+
+
 class OpenAICompatEngine(_OpenAICompatibleEngine):
     """Generic engine for an explicitly-provided OpenAI-compatible endpoint.
 
@@ -56,6 +79,7 @@ class OpenAICompatEngine(_OpenAICompatibleEngine):
 
 
 __all__ = [name for name, _, _ in _ENGINES.values()] + [
+    "EmergentEngine",
     "OpenAICompatEngine",
     "normalize_openai_base_url",
 ]
