@@ -1397,3 +1397,239 @@ export async function setInferenceSource(
 export const stageInferenceSource = (
   src: InferenceSource & { apiKey?: string },
 ): Promise<void> => setInferenceSource(src, { pending: true });
+
+// ---------------------------------------------------------------------------
+// Media guide (TV schedule, movie/show catalog, local media, links)
+// ---------------------------------------------------------------------------
+
+export interface TvEpisode {
+  id: number | null;
+  name: string | null;
+  season: number | null;
+  number: number | null;
+  airdate: string | null;
+  airtime: string | null;
+  runtime: number | null;
+  network: string | null;
+  show: {
+    id: number | null;
+    name: string | null;
+    genres: string[];
+    rating: number | null;
+    image: string | null;
+    url: string | null;
+  };
+  summary: string;
+  image: string | null;
+  url: string | null;
+}
+
+export interface TvGuideResponse {
+  country: string;
+  date: string;
+  episodes: TvEpisode[];
+}
+
+export interface GuideItem {
+  imdb_id: string;
+  name: string | null;
+  year: string | null;
+  poster: string | null;
+  genres: string[];
+  rating: number | string | null;
+  description: string;
+  type?: string;
+}
+
+export interface GuideMeta extends GuideItem {
+  id?: string;
+}
+
+export interface GuideMetaDetail {
+  meta: GuideMeta;
+  trailers: Array<{ name?: string; url?: string; kind?: string }>;
+  imdb_url: string;
+}
+
+export interface LocalMediaFile {
+  name: string;
+  filename: string;
+  path: string;
+  kind: 'video' | 'audio';
+  size: number;
+  size_str: string;
+  modified: number;
+  season: number | null;
+  episode: number | null;
+}
+
+export interface LocalMediaGroup {
+  name: string;
+  root: string;
+  folder: string;
+  count: number;
+  items: LocalMediaFile[];
+}
+
+export interface LocalMediaResponse {
+  roots: string[];
+  groups: LocalMediaGroup[];
+}
+
+export interface GuideLink {
+  id: string;
+  title: string;
+  url: string;
+  category: string;
+  note: string;
+  created?: number;
+}
+
+export async function fetchTvGuide(country = 'US', date?: string): Promise<TvGuideResponse> {
+  const params = new URLSearchParams({ country });
+  if (date) params.set('date', date);
+  const res = await apiFetch(`/v1/guide/tv?${params}`);
+  if (!res.ok) throw new Error(`TV guide failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchGuideCatalog(type: 'movie' | 'series'): Promise<{ type: string; items: GuideItem[] }> {
+  const res = await apiFetch(`/v1/guide/catalog/${type}`);
+  if (!res.ok) throw new Error(`Catalog failed: ${res.status}`);
+  return res.json();
+}
+
+export async function searchGuide(q: string, type: 'movie' | 'series' | 'all' = 'all'): Promise<{ query: string; items: GuideItem[] }> {
+  const params = new URLSearchParams({ q, type });
+  const res = await apiFetch(`/v1/guide/search?${params}`);
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchGuideMeta(type: 'movie' | 'series', imdbId: string): Promise<GuideMetaDetail> {
+  const res = await apiFetch(`/v1/guide/meta/${type}/${encodeURIComponent(imdbId)}`);
+  if (!res.ok) throw new Error(`Details failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchLocalMedia(): Promise<LocalMediaResponse> {
+  const res = await apiFetch(`/v1/guide/local`);
+  if (!res.ok) throw new Error(`Local media failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchGuideLinks(): Promise<{ links: GuideLink[] }> {
+  const res = await apiFetch(`/v1/guide/links`);
+  if (!res.ok) throw new Error(`Links failed: ${res.status}`);
+  return res.json();
+}
+
+export async function addGuideLink(body: { title: string; url: string; category?: string; note?: string }): Promise<{ link: GuideLink }> {
+  const res = await apiFetch(`/v1/guide/links`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Add link failed: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteGuideLink(id: string): Promise<void> {
+  const res = await apiFetch(`/v1/guide/links/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Delete link failed: ${res.status}`);
+}
+
+// ---------------------------------------------------------------------------
+// Games (Steam library, custom games, Playnite interop)
+// ---------------------------------------------------------------------------
+
+export interface SteamGame {
+  id: string;
+  kind: 'steam';
+  appid: string;
+  title: string;
+  install_dir: string;
+  installed: boolean;
+  cover: string;
+}
+
+export interface CustomGame {
+  id: string;
+  kind: 'custom';
+  title: string;
+  exe: string;
+  args: string;
+  working_dir?: string;
+  cover?: string;
+  created?: number;
+}
+
+export interface PlayniteInfo {
+  installed: boolean;
+  exe: string | null;
+  config_dir: string | null;
+  library_path: string | null;
+  scheme_registered: boolean;
+  library_readable: boolean;
+}
+
+export interface GamesLibrary {
+  steam: SteamGame[];
+  custom: CustomGame[];
+  playnite: PlayniteInfo;
+}
+
+export interface GamesStatus {
+  steam: { installed: boolean; libraries: string[]; game_count: number };
+  playnite: PlayniteInfo;
+  custom_count: number;
+}
+
+export async function fetchGamesStatus(): Promise<GamesStatus> {
+  const res = await apiFetch(`/v1/games/status`);
+  if (!res.ok) throw new Error(`Games status failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchGamesLibrary(): Promise<GamesLibrary> {
+  const res = await apiFetch(`/v1/games/library`);
+  if (!res.ok) throw new Error(`Games library failed: ${res.status}`);
+  return res.json();
+}
+
+export async function launchGame(body: {
+  kind: 'steam' | 'custom' | 'playnite' | 'exe';
+  appid?: string;
+  id?: string;
+  path?: string;
+  args?: string;
+}): Promise<{ launched: string }> {
+  const res = await apiFetch(`/v1/games/launch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Launch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function addCustomGame(body: {
+  title: string;
+  exe: string;
+  args?: string;
+  cover_url?: string;
+  working_dir?: string;
+}): Promise<{ game: CustomGame }> {
+  const res = await apiFetch(`/v1/games/custom`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Add game failed: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteCustomGame(id: string): Promise<void> {
+  const res = await apiFetch(`/v1/games/custom/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Delete game failed: ${res.status}`);
+}

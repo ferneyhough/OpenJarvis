@@ -17,6 +17,7 @@ import {
   Loader2,
   ScrollText,
   Database,
+  Tv,
   WifiOff,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
@@ -77,6 +78,7 @@ export function Sidebar() {
     { path: '/', icon: MessageSquare, label: 'Chat' },
     { path: '/dashboard', icon: BarChart3, label: 'Dashboard' },
     { path: '/data-sources', icon: Database, label: 'Data Sources' },
+    { path: '/media', icon: Tv, label: 'Media' },
     { path: '/agents', icon: Bot, label: 'Agents' },
     { path: '/logs', icon: ScrollText, label: 'Logs' },
     { path: '/settings', icon: Settings, label: 'Settings' },

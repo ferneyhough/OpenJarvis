@@ -183,6 +183,9 @@ speech = [
     "numpy>=1.24",
     "sounddevice>=0.5",
     "soundfile>=0.12",
+    # `jarvis dictate` global hotkey + type-at-cursor delivery.
+    "pynput>=1.7",
+    "pyperclip>=1.8",
 ]
 speech-deepgram = ["deepgram-sdk>=3.0"]
 imagegen = [   # optional; ~150 MB packages, models (2-5 GB) download on demand
@@ -199,6 +202,8 @@ desktop-app = [
     "soundfile",
     "misaki[en]",
     "faster-whisper>=1.0",
+    "pynput>=1.7",
+    "pyperclip>=1.8",
 ]
 eval-wandb = ["wandb>=0.17"]
 eval-sheets = ["gspread>=6.0", "google-auth>=2.0"]
