@@ -30,9 +30,10 @@ logger = logging.getLogger(__name__)
 media_router = APIRouter(prefix="/v1/media", tags=["media"])
 
 _ROOT = Path(__file__).resolve().parents[3]
-MODELS_CACHE = Path(
-    os.environ.get("OPENJARVIS_MODELS_DIR", str(_ROOT / "models" / "huggingface"))
-) / "hub"
+MODELS_CACHE = (
+    Path(os.environ.get("OPENJARVIS_MODELS_DIR", str(_ROOT / "models" / "huggingface")))
+    / "hub"
+)
 MEDIA_DIR = Path(
     os.environ.get("OPENJARVIS_MEDIA_DIR", str(Path.home() / ".openjarvis" / "media"))
 )
@@ -65,6 +66,8 @@ FREE_SITES = {
 
 class ModelDownloadRequest(BaseModel):
     kind: Literal["image", "video"]
+
+
 _jobs: Dict[str, Dict[str, Any]] = {}
 _pipes: Dict[str, Any] = {}
 
@@ -395,6 +398,7 @@ async def open_link(req: OpenLinkRequest, request: Request):
         raise HTTPException(500, "No browser could be opened")
     return {"url": req.url, "opened": True, "via": "browser"}
 
+
 @media_router.get("/music")
 async def list_music():
     """List audio files in the music folder (~/Music or OPENJARVIS_MUSIC_DIR)."""
@@ -425,9 +429,18 @@ async def music_file(path: str):
 async def media_library():
     """List generated/converted files, newest first."""
     kinds = {
-        ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image",
-        ".mp4": "video", ".webm": "video", ".mkv": "video", ".mov": "video",
-        ".mp3": "audio", ".wav": "audio", ".ogg": "audio", ".flac": "audio",
+        ".png": "image",
+        ".jpg": "image",
+        ".jpeg": "image",
+        ".gif": "image",
+        ".mp4": "video",
+        ".webm": "video",
+        ".mkv": "video",
+        ".mov": "video",
+        ".mp3": "audio",
+        ".wav": "audio",
+        ".ogg": "audio",
+        ".flac": "audio",
     }
     items = []
     if MEDIA_DIR.is_dir():

@@ -1185,6 +1185,10 @@ class ServerConfig:
             "https://tauri.localhost",
         ]
     )
+    # When true, no cloud service may be contacted: engine discovery skips
+    # cloud engines, speech/TTS fall back to local backends only, direct
+    # cloud model routing is refused, and external analytics stay off.
+    offline_mode: bool = False
 
 
 @dataclass(slots=True)
@@ -1826,6 +1830,14 @@ class JarvisConfig:
         self.__dict__["_config_source_path"] = Path(value)
 
     @property
+    def offline_mode(self) -> bool:
+        """True when cloud services must not be contacted.
+
+        Set via ``[server] offline_mode`` in ``config.toml``.
+        """
+        return bool(getattr(self.server, "offline_mode", False))
+
+    @property
     def memory(self) -> StorageConfig:
         """Backward-compatible accessor — canonical location is tools.storage."""
         return self.tools.storage
@@ -2165,6 +2177,27 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
         apply_security_profile(cfg.security, cfg.server)
 
     return cfg
+
+
+def persist_offline_mode(enabled: bool, path: Optional[Path] = None) -> Path:
+    """Write ``[server] offline_mode`` to ``config.toml``; return the path.
+
+    Used by the server's ``/v1/offline-mode`` endpoint so the toggle survives
+    restarts. *path* defaults to the env-aware config location.
+    """
+    import tomlkit
+
+    config_path = Path(path) if path is not None else get_config_path()
+    if config_path.exists():
+        doc = tomlkit.parse(config_path.read_text(encoding="utf-8"))
+    else:
+        doc = tomlkit.document()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+    if "server" not in doc:
+        doc["server"] = tomlkit.table()
+    doc["server"]["offline_mode"] = bool(enabled)
+    config_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    return config_path
 
 
 # ---------------------------------------------------------------------------

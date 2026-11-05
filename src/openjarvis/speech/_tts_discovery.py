@@ -38,11 +38,14 @@ def get_tts_backend(
     preferred: str = "",
     *,
     attempted: Optional[set[str]] = None,
+    offline: bool = False,
 ) -> Optional[Any]:
     """Return the first healthy TTS backend, preferring *preferred*.
 
     ``attempted`` lets a caller carry state across calls so a backend that
-    already failed is not retried; it is mutated in place.
+    already failed is not retried; it is mutated in place. ``offline``
+    restricts selection to the local Kokoro backend — cloud TTS is never
+    tried, even when *preferred* names one.
     """
     # Import triggers built-in backend registration only when voice output is
     # actually requested.
@@ -51,7 +54,8 @@ def get_tts_backend(
 
     seen = attempted if attempted is not None else set()
 
-    for key in dict.fromkeys((preferred, *TTS_BACKEND_ORDER)):
+    ordered = ("kokoro",) if offline else (preferred, *TTS_BACKEND_ORDER)
+    for key in dict.fromkeys(k for k in ordered if k):
         if not key or key in seen:
             continue
         seen.add(key)

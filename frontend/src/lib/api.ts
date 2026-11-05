@@ -572,6 +572,50 @@ export async function fetchSpeechHealth(): Promise<SpeechHealth> {
 }
 
 // ---------------------------------------------------------------------------
+// Offline mode
+// ---------------------------------------------------------------------------
+
+export async function getOfflineMode(): Promise<boolean> {
+  try {
+    const res = await apiFetch(`/v1/offline-mode`);
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data?.enabled);
+  } catch {
+    return false;
+  }
+}
+
+export async function setOfflineMode(enabled: boolean): Promise<boolean> {
+  const res = await apiFetch(`/v1/offline-mode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`Failed to set offline mode: ${res.status}`);
+  const data = await res.json();
+  return Boolean(data?.enabled);
+}
+
+// Mirrors the backend cloud-model prefixes in server/cloud_router.py plus the
+// engine keys that only serve cloud traffic. Used to hide cloud entries from
+// pickers even before the server-side /v1/models filter catches up.
+const CLOUD_MODEL_PREFIXES = [
+  'gpt-', 'o1-', 'o3-', 'o4-', 'chatgpt-', 'claude-', 'gemini-',
+  'MiniMax-', 'atlascloud/', 'openrouter/',
+];
+const LOCAL_HF_ORGS = ['mlx-community/', 'bartowski/', 'unsloth/', 'lmstudio-community/'];
+
+export function isCloudModelId(modelId: string, ownedBy?: string): boolean {
+  if (ownedBy === 'litellm' || ownedBy === 'cloud') return true;
+  if (modelId === 'gpt-oss' || modelId.startsWith('gpt-oss:') || modelId.startsWith('gpt-oss-')) {
+    return false;
+  }
+  if (LOCAL_HF_ORGS.some((org) => modelId.startsWith(org))) return false;
+  return CLOUD_MODEL_PREFIXES.some((p) => modelId.startsWith(p)) || modelId.includes('/');
+}
+
+// ---------------------------------------------------------------------------
 // Agent Manager
 // ---------------------------------------------------------------------------
 

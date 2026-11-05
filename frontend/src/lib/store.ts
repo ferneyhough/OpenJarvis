@@ -129,6 +129,7 @@ interface Settings {
   allowFiles: boolean;
   localImageModel: boolean;
   localVideoModel: boolean;
+  offlineMode: boolean;
 }
 
 function loadSettings(): Settings {
@@ -163,6 +164,7 @@ function loadSettings(): Settings {
     allowFiles: true,
     localImageModel: false,
     localVideoModel: false,
+    offlineMode: false,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);

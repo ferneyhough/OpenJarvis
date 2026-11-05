@@ -63,17 +63,16 @@ def get_speech_backend(config: "JarvisConfig") -> Optional["SpeechBackend"]:
 
     backend_key = config.speech.backend
 
-    if backend_key != "auto":
-        backend = _create_backend(backend_key, config)
-        if backend is None:
-            return None
-        try:
-            return backend if backend.health() else None
-        except Exception:
-            return None
+    # Offline mode: local Whisper only — cloud STT backends are never tried,
+    # even when ``speech.backend`` names one explicitly.
+    if getattr(config, "offline_mode", False):
+        order = ["faster-whisper"]
+    elif backend_key != "auto":
+        order = [backend_key]
+    else:
+        order = DISCOVERY_ORDER
 
-    # Auto-discovery: try each in priority order
-    for key in DISCOVERY_ORDER:
+    for key in order:
         backend = _create_backend(key, config)
         if backend is None:
             continue

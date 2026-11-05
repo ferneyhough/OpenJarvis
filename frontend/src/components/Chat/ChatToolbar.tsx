@@ -1,6 +1,7 @@
 import { Paperclip, Folder, Shield, Image as ImageIcon, Film } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../lib/store';
+import { isCloudModelId } from '../../lib/api';
 import { CHAT_AGENTS, getAgent } from '../../lib/chat-agents';
 import { PERMISSION_MODES } from '../../lib/permissions';
 
@@ -100,7 +101,9 @@ export function ChatToolbar({
               ))}
             </optgroup>
             <optgroup label="Model">
-              {models.map((m) => (
+              {models
+                .filter((m) => !settings.offlineMode || !isCloudModelId(m.id, m.owned_by))
+                .map((m) => (
                 <option key={m.id} value={`model:${m.id}`}>
                   {m.id}
                 </option>

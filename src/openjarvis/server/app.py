@@ -467,7 +467,8 @@ def create_app(
         from openjarvis.core.config import load_config
 
         _cfg = config if config is not None else load_config()
-        configure_analytics(app, _cfg)
+        if not getattr(_cfg, "offline_mode", False):
+            configure_analytics(app, _cfg)
     except Exception as _exc:
         logger.debug("Analytics init skipped: %s", _exc)
 

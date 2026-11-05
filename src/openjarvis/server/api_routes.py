@@ -816,6 +816,21 @@ async def websocket_chat_stream(websocket: WebSocket):
                 )
                 continue
 
+            ws_config = getattr(websocket.app.state, "config", None)
+            if ws_config is not None and getattr(ws_config, "offline_mode", False):
+                from openjarvis.server.cloud_router import is_cloud_model
+
+                if is_cloud_model(str(model)):
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "detail": (
+                                "Offline mode is enabled; cloud models are unavailable."
+                            ),
+                        },
+                    )
+                    continue
+
             messages = [{"role": "user", "content": message}]
 
             # This WS path streams straight from the engine (no agent /
@@ -1091,7 +1106,10 @@ async def _resolve_tts_backend(request: Request):
                 config = load_config()
 
             preferred, _, _ = voice_preferences(config)
-            return get_tts_backend(preferred)
+            return get_tts_backend(
+                preferred,
+                offline=bool(getattr(config, "offline_mode", False)),
+            )
 
         task = asyncio.create_task(asyncio.to_thread(discover))
         app.state.tts_resolution_task = task

@@ -17,9 +17,11 @@ import {
   Loader2,
   ScrollText,
   Database,
+  WifiOff,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { useAppStore } from '../../lib/store';
+import { fetchModels, setOfflineMode } from '../../lib/api';
 
 export function Sidebar() {
   const navigate = useNavigate();
@@ -37,6 +39,25 @@ export function Sidebar() {
 
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
+  const setModels = useAppStore((s) => s.setModels);
+  const offlineMode = settings.offlineMode;
+
+  const toggleOfflineMode = async () => {
+    const next = !offlineMode;
+    updateSettings({ offlineMode: next });
+    try {
+      await setOfflineMode(next);
+    } catch {
+      // Server unreachable — the local flag still filters the UI; the
+      // server-side flag stays unchanged until the next successful sync.
+    }
+    // Refresh the model list so cloud entries appear/disappear immediately.
+    try {
+      setModels(await fetchModels());
+    } catch {
+      // Keep the existing list if the backend is down.
+    }
+  };
 
   const ThemeIcon = settings.theme === 'light' ? Sun : settings.theme === 'dark' ? Moon : Monitor;
   const nextTheme = settings.theme === 'light' ? 'dark' : settings.theme === 'dark' ? 'system' : 'light';
@@ -196,6 +217,52 @@ export function Sidebar() {
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
+                <div key={item.path} className="contents">
+                {item.path === '/settings' && (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={offlineMode}
+                    onClick={() => void toggleOfflineMode()}
+                    className="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer"
+                    style={{
+                      background: offlineMode ? 'var(--color-accent-subtle)' : 'transparent',
+                      color: offlineMode ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!offlineMode) e.currentTarget.style.background = 'var(--color-bg-secondary)';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!offlineMode) e.currentTarget.style.background = 'transparent';
+                    }}
+                    title="Offline mode: use only local models, speech, and voice — no cloud services"
+                  >
+                    {offlineMode && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full"
+                        style={{
+                          background: 'var(--color-accent)',
+                          boxShadow: '0 0 8px var(--color-accent-glow)',
+                        }}
+                      />
+                    )}
+                    <WifiOff size={16} style={offlineMode ? { color: 'var(--color-accent)' } : undefined} />
+                    <span className="flex-1">Offline mode</span>
+                    <span
+                      aria-hidden="true"
+                      className="relative h-4 w-7 rounded-full transition-colors"
+                      style={{
+                        background: offlineMode ? 'var(--color-accent)' : 'var(--color-border)',
+                      }}
+                    >
+                      <span
+                        className="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all"
+                        style={{ left: offlineMode ? '14px' : '2px' }}
+                      />
+                    </span>
+                  </button>
+                )}
                 <button
                   key={item.path}
                   onClick={() => navigate(item.path)}
@@ -225,6 +292,7 @@ export function Sidebar() {
                   <item.icon size={16} style={isActive ? { color: 'var(--color-accent)' } : undefined} />
                   {item.label}
                 </button>
+                </div>
               );
             })}
           </nav>

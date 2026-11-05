@@ -136,7 +136,16 @@ def discover_engines(config: JarvisConfig) -> List[Tuple[str, InferenceEngine]]:
 
     def _probe(key: str) -> Tuple[str, InferenceEngine] | None:
         try:
+            cls = EngineRegistry.get(key)
+            if getattr(config, "offline_mode", False) and getattr(
+                cls, "is_cloud", False
+            ):
+                return None
             engine = _make_engine(key, config)
+            if getattr(config, "offline_mode", False) and getattr(
+                engine, "is_cloud", False
+            ):
+                return None
             if engine.health():
                 return (key, engine)
         except Exception as exc:
@@ -196,6 +205,10 @@ def get_engine(
     """
 
     def _usable(engine: InferenceEngine) -> bool:
+        if getattr(config, "offline_mode", False) and getattr(
+            engine, "is_cloud", False
+        ):
+            return False
         return engine.health() and (model is None or engine.can_serve(model))
 
     if engine_key:

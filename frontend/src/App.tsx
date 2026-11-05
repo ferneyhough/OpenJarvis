@@ -13,7 +13,7 @@ import { SetupScreen } from './components/SetupScreen';
 import { Toaster } from './components/ui/sonner';
 import { useAppStore } from './lib/store';
 import { applyAppearance, APPEARANCE_EVENT } from './lib/themes';
-import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri } from './lib/api';
+import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri, getOfflineMode } from './lib/api';
 import { OptInModal } from './components/OptInModal';
 import { track, hashId } from './lib/analytics';
 import { markAnalyticsChoiceSeen } from './lib/analytics-invitation';
@@ -83,6 +83,17 @@ export default function App() {
   useEffect(() => {
     fetchServerInfo().then(setServerInfo).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reconcile offline mode with the server's enforced flag on launch. The
+  // server persists the toggle to config.toml, so it is the source of truth;
+  // when unreachable we keep the locally stored preference.
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  useEffect(() => {
+    getOfflineMode().then((enabled) => {
+      const current = useAppStore.getState().settings.offlineMode;
+      if (enabled !== current) updateSettings({ offlineMode: enabled });
+    });
+  }, [updateSettings]);
 
   // Poll savings and optionally share to Supabase
   useEffect(() => {

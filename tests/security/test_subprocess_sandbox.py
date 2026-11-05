@@ -17,11 +17,7 @@ from openjarvis.security.subprocess_sandbox import (
 
 def _python_command(code: str) -> str:
     args = [sys.executable, "-c", code]
-    return (
-        subprocess.list2cmdline(args)
-        if os.name == "nt"
-        else shlex.join(args)
-    )
+    return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
 
 
 # ---------------------------------------------------------------------------
@@ -109,9 +105,7 @@ class TestRunSandboxed:
         os.environ["TEST_SECRET"] = "super_secret_value"
         try:
             result = run_sandboxed(
-                _python_command(
-                    "import os; print(os.environ.get('TEST_SECRET', ''))"
-                ),
+                _python_command("import os; print(os.environ.get('TEST_SECRET', ''))"),
                 timeout=10.0,
             )
             assert result.returncode == 0

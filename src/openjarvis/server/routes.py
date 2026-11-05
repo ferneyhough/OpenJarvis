@@ -161,6 +161,17 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
     engine = request.app.state.engine
     agent = getattr(request.app.state, "agent", None)
     model = request_body.model
+
+    app_config = getattr(request.app.state, "config", None)
+    if app_config is not None and _offline_blocks_model(engine, model, app_config):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Offline mode is enabled; cloud models are unavailable. "
+                "Pick a local model or turn off offline mode in Settings."
+            ),
+        )
+
     use_server_agent = (
         agent is not None
         and not request_body.tools
@@ -454,6 +465,22 @@ def _uses_direct_cloud_router(engine: Any, model: str) -> bool:
     from openjarvis.server.cloud_router import is_cloud_model
 
     return is_cloud_model(model) and _engine_key_for_model(engine, model) != "litellm"
+
+
+def _offline_blocks_model(engine: Any, model: str, config: Any) -> bool:
+    """True when offline mode forbids serving *model*.
+
+    Covers both the direct cloud router (model-name prefixes) and models
+    owned by cloud engines such as ``litellm``/``cloud`` inside a
+    ``MultiEngine``.
+    """
+    if not getattr(config, "offline_mode", False):
+        return False
+    from openjarvis.server.cloud_router import is_cloud_model
+
+    if is_cloud_model(model):
+        return True
+    return _engine_key_for_model(engine, model) in ("cloud", "litellm")
 
 
 def _handle_direct(
@@ -1119,11 +1146,21 @@ async def list_models(request: Request) -> ModelListResponse:
     # Fall back to direct Ollama query only when the engine returns nothing.
     engine = request.app.state.engine
     all_ids = await asyncio.to_thread(engine.list_models)
-    model_ids = [
-        m
-        for m in all_ids
-        if not is_cloud_model(m) or _engine_key_for_model(engine, m) == "litellm"
-    ]
+    app_config = getattr(request.app.state, "config", None)
+    if getattr(app_config, "offline_mode", False):
+        # Offline: hide every cloud-routed model, including LiteLLM-owned
+        # provider-qualified IDs that don't match the cloud prefixes.
+        model_ids = [
+            m
+            for m in all_ids
+            if not is_cloud_model(m) and _engine_key_for_model(engine, m) != "litellm"
+        ]
+    else:
+        model_ids = [
+            m
+            for m in all_ids
+            if not is_cloud_model(m) or _engine_key_for_model(engine, m) == "litellm"
+        ]
     if not model_ids:
         model_ids = await list_local_models()
 
@@ -1145,6 +1182,44 @@ async def list_models(request: Request) -> ModelListResponse:
             for mid in model_ids
         ],
     )
+
+
+@router.get("/v1/offline-mode")
+async def get_offline_mode(request: Request):
+    """Return whether offline mode is currently enforced by this server."""
+    config = getattr(request.app.state, "config", None)
+    return {"enabled": bool(getattr(config, "offline_mode", False))}
+
+
+@router.post("/v1/offline-mode")
+async def set_offline_mode(request: Request):
+    """Toggle offline mode at runtime and persist it to ``config.toml``.
+
+    Enforcement is per-request (engine/speech discovery, cloud routing, and
+    model listing all consult ``config.offline_mode``), so the new value takes
+    effect immediately without a server restart.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    enabled = bool(body.get("enabled", True)) if isinstance(body, dict) else True
+
+    config = getattr(request.app.state, "config", None)
+    if config is not None:
+        config.server.offline_mode = enabled
+
+    from openjarvis.core.config import persist_offline_mode
+
+    config_path = getattr(config, "_config_path", None) if config is not None else None
+    try:
+        persist_offline_mode(enabled, path=config_path)
+    except Exception:
+        logging.getLogger("openjarvis.server").warning(
+            "Offline mode toggle could not be persisted to config.toml",
+            exc_info=True,
+        )
+    return {"enabled": enabled}
 
 
 @router.post("/v1/models/pull")
