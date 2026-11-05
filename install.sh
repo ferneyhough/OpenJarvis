@@ -40,9 +40,6 @@ fi
 echo "[+] Upgrading pip"
 $PIP install --upgrade pip --quiet
 
-echo "[+] Installing emergentintegrations"
-$PIP install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ --quiet
-
 echo "[+] Installing dependencies"
 $PIP install -r requirements.txt || {
     echo ""

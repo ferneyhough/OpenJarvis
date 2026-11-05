@@ -27,7 +27,6 @@ pyinstaller --noconfirm --clean --windowed --name OpenJarvis ^
     --add-data "config.example.json;." ^
     --add-data "playnite_extension;playnite_extension" ^
     --collect-all litellm ^
-    --collect-all emergentintegrations ^
     --collect-data speech_recognition ^
     --collect-submodules tiktoken_ext ^
     --hidden-import pyttsx3.drivers ^

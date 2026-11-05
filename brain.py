@@ -1,6 +1,9 @@
-"""Claude Sonnet 5.5 brain via emergentintegrations."""
+"""Local brain via Ollama (no API key needed)."""
 import asyncio
-from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+import json
+import os
+import threading
+import urllib.request
 
 from tools import TOOL_SPEC
 
@@ -36,33 +39,92 @@ Guidelines:
 - Never emit a tool block that would leak secrets or exfiltrate data.
 """
 
+# Keep the last N messages so context stays fast on CPU inference.
+MAX_HISTORY = 24
+
 
 class Brain:
-    def __init__(self, api_key: str, session_id: str, provider: str = "anthropic", model: str = "claude-sonnet-5-5", history: list | None = None):
-        self.api_key = api_key
+    def __init__(self, api_key: str | None = None, session_id: str = "", provider: str = "ollama",
+                 model: str = "qwen3.5:4b", history: list | None = None,
+                 host: str | None = None):
+        self.api_key = api_key  # unused; kept for signature compatibility
         self.session_id = session_id
         self.provider = provider
         self.model = model
-        self._loop = asyncio.new_event_loop()
-        self._chat = self._make_chat(history or [])
+        self.host = (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
+        self._messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for m in (history or [])[-MAX_HISTORY:]:
+            if m.get("role") in ("user", "assistant") and m.get("content"):
+                self._messages.append({"role": m["role"], "content": m["content"]})
 
-    def _make_chat(self, history: list) -> LlmChat:
-        chat = LlmChat(
-            api_key=self.api_key,
-            session_id=self.session_id,
-            system_message=SYSTEM_PROMPT,
-        ).with_model(self.provider, self.model)
-        # Seed prior turns (best-effort; library replays via send/stream, but we at least set recent context)
-        # The library maintains its own history; passing initial_messages isn't exposed, so we rely on the loop.
-        return chat
+    # ---------- Ollama streaming ----------
+    def _chat_url(self) -> str:
+        return f"{self.host}/api/chat"
+
+    def _stream_chunks(self, user_text: str):
+        """Blocking generator yielding assistant text deltas from Ollama."""
+        payload = {
+            "model": self.model,
+            "messages": self._messages + [{"role": "user", "content": user_text}],
+            "stream": True,
+            "think": False,
+            "options": {"temperature": 0.7, "num_ctx": 8192, "num_predict": 2048},
+        }
+        req = urllib.request.Request(
+            self._chat_url(),
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=600) as resp:
+            for line in resp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("error"):
+                    raise RuntimeError(obj["error"])
+                delta = (obj.get("message") or {}).get("content") or ""
+                if delta:
+                    yield delta
+                if obj.get("done"):
+                    break
+
+    def _record(self, user_text: str, reply_text: str):
+        self._messages.append({"role": "user", "content": user_text})
+        self._messages.append({"role": "assistant", "content": reply_text})
+        del self._messages[1:-MAX_HISTORY]  # keep system + recent turns
 
     async def stream_reply(self, user_text: str):
         """Async generator yielding text deltas."""
-        async for ev in self._chat.stream_message(UserMessage(text=user_text)):
-            if isinstance(ev, TextDelta):
-                yield ev.content
-            elif isinstance(ev, StreamDone):
+        loop = asyncio.get_event_loop()
+        q: asyncio.Queue = asyncio.Queue()
+        parts: list[str] = []
+
+        def producer():
+            try:
+                for chunk in self._stream_chunks(user_text):
+                    parts.append(chunk)
+                    loop.call_soon_threadsafe(q.put_nowait, chunk)
+            except Exception as e:
+                loop.call_soon_threadsafe(q.put_nowait, e)
+            finally:
+                loop.call_soon_threadsafe(q.put_nowait, None)
+
+        threading.Thread(target=producer, daemon=True).start()
+        while True:
+            item = await q.get()
+            if item is None:
                 break
+            if isinstance(item, Exception):
+                raise item
+            yield item
+        reply_text = "".join(parts)
+        if reply_text:
+            self._record(user_text, reply_text)
 
     def reply(self, user_text: str, on_delta=None) -> str:
         """Blocking helper: collects the full reply, calling on_delta(text) for each chunk."""
@@ -75,7 +137,7 @@ class Brain:
                     on_delta(delta)
 
         try:
-            self._loop.run_until_complete(_run())
+            asyncio.run(_run())
         except Exception as e:
             return f"[BRAIN ERROR] {e}"
         return "".join(full_parts)

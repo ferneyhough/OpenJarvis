@@ -1,7 +1,6 @@
-"""Voice I/O.
-Premium: OpenAI Whisper (STT) + OpenAI TTS via the Emergent key.
-Free:    Google speech recognition (STT) + Windows SAPI voice via pyttsx3 (TTS).
-Premium automatically falls back to free if it fails.
+"""Voice I/O — fully local.
+STT: faster-whisper 'base' (int8 CPU) with Google speech recognition fallback.
+TTS: Kokoro 'bm_george' (local) with Windows SAPI voice fallback.
 Wake word: always detected with the free recognizer so idle listening costs nothing.
 """
 import asyncio
@@ -17,7 +16,6 @@ from pathlib import Path
 # Keep voice models inside the install folder.
 os.environ.setdefault("HF_HOME", str(Path(__file__).resolve().parent / "models" / "huggingface"))
 
-PREMIUM_VOICES = ["onyx", "echo", "fable", "alloy", "ash", "coral", "nova", "sage", "shimmer"]
 GEORGE_VOICE = "bm_george"
 GEORGE_SPEED = 0.9
 
@@ -37,6 +35,7 @@ class Voice:
         self._recognizer = None
         self._mic = None
         self._kokoro = None
+        self._whisper = None
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._loop.run_forever, daemon=True).start()
         threading.Thread(target=self._tts_worker, daemon=True).start()
@@ -44,10 +43,6 @@ class Voice:
     # ---------- helpers ----------
     def _run(self, coro, timeout=60):
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout)
-
-    def _premium(self) -> bool:
-        key = self.cfg.get("emergent_llm_key", "")
-        return bool(self.cfg.get("premium_voice", True)) and key.startswith("sk-")
 
     # ---------- TTS ----------
     def _init_sapi(self):
@@ -81,22 +76,26 @@ class Voice:
             print(f"[voice] {self.last_error}")
             return False
 
-    def _speak_premium(self, text: str) -> bool:
+    def _local_transcribe(self, audio) -> str:
+        """Transcribe captured audio with local faster-whisper (int8 CPU)."""
+        if self._whisper is None:
+            from faster_whisper import WhisperModel
+            self._whisper = WhisperModel("base", device="cpu", compute_type="int8")
+        import tempfile
+        import numpy as np
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio.get_wav_data())
+            tmp = f.name
         try:
-            from emergentintegrations.llm.openai import OpenAITextToSpeech
-            tts = OpenAITextToSpeech(api_key=self.cfg["emergent_llm_key"])
-            pcm = self._run(tts.generate_speech(
-                text=text[:4000],
-                model=self.cfg.get("premium_tts_model", "tts-1"),
-                voice=self.cfg.get("premium_voice_name", "onyx"),
-                response_format="pcm",
-            ))
-            self._play_wav(pcm_to_wav(pcm))
-            return True
-        except Exception as e:
-            self.last_error = f"premium voice failed, using free voice: {e}"
-            print(f"[voice] {self.last_error}")
-            return False
+            segments, _ = self._whisper.transcribe(
+                tmp, language=self.cfg.get("stt_language", "en-US")[:2] or None,
+                beam_size=1, vad_filter=True)
+            return " ".join(s.text for s in segments).strip()
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
     def _play_wav(self, wav_bytes: bytes):
         if sys.platform == "win32":
@@ -171,15 +170,6 @@ class Voice:
     def _free_transcribe(self, audio) -> str:
         return self._recognizer.recognize_google(audio, language=self.cfg.get("stt_language", "en-US"))
 
-    def _premium_transcribe(self, audio) -> str:
-        from emergentintegrations.llm.openai import OpenAISpeechToText
-        stt = OpenAISpeechToText(api_key=self.cfg["emergent_llm_key"])
-        f = io.BytesIO(audio.get_wav_data())
-        f.name = "speech.wav"
-        lang = self.cfg.get("stt_language", "en-US")[:2]
-        res = self._run(stt.transcribe(file=f, model="whisper-1", response_format="json", language=lang))
-        return (res.text or "").strip()
-
     def listen_once(self, timeout: float = 8.0, phrase_time_limit: float = 25.0) -> str:
         if not self._ensure_mic():
             return ""
@@ -187,11 +177,13 @@ class Voice:
             audio = self._capture(timeout, phrase_time_limit)
         except Exception:
             return ""
-        if self._premium():
-            try:
-                return self._premium_transcribe(audio)
-            except Exception as e:
-                self.last_error = f"Whisper failed, using free recognizer: {e}"
+        try:
+            text = self._local_transcribe(audio)
+            if text:
+                return text
+        except Exception as e:
+            self.last_error = f"local Whisper failed, using free recognizer: {e}"
+            print(f"[voice] {self.last_error}")
         try:
             return self._free_transcribe(audio)
         except Exception:

@@ -29,7 +29,7 @@ if FROZEN and sys.stdout is None:
 
 from memory import Memory
 from brain import Brain
-from voice import Voice, PREMIUM_VOICES
+from voice import Voice
 from tools import execute_tool_calls, strip_tool_blocks, needs_followup
 import vscode
 import playnite
@@ -95,6 +95,7 @@ class JarvisApp:
         self.listening = False
         self.muted = tk.BooleanVar(value=False)
         self.wake_var = tk.BooleanVar(value=self.cfg.get("wake_word_enabled", True))
+        self._ollama_ok = None
         self._build_ui()
         if not self._has_key():
             self.root.after(300, self.open_settings)
@@ -166,8 +167,24 @@ class JarvisApp:
 
     # ---------- settings ----------
     def _has_key(self) -> bool:
-        k = self.cfg.get("emergent_llm_key", "")
-        return bool(k) and not k.startswith("PASTE_")
+        """Local mode: ready when Ollama is reachable (checked lazily, cached 30s)."""
+        if self._ollama_ok is not None and self._ollama_ok[0]:
+            import time
+            if time.time() - self._ollama_ok[1] < 30:
+                return True
+        return self._check_ollama()
+
+    def _check_ollama(self) -> bool:
+        import time
+        import urllib.request
+        host = self.cfg.get("ollama_host", "http://localhost:11434").rstrip("/")
+        try:
+            with urllib.request.urlopen(f"{host}/api/version", timeout=1.5) as r:
+                ok = r.status == 200
+        except Exception:
+            ok = False
+        self._ollama_ok = (ok, time.time())
+        return ok
 
     def open_settings(self):
         win = tk.Toplevel(self.root)
@@ -176,31 +193,24 @@ class JarvisApp:
         win.geometry("580x760")
         pad = {"padx": 16, "anchor": "w"}
 
-        label(win, "EMERGENT LLM KEY").pack(pady=(14, 2), **pad)
-        key_var = tk.StringVar(value=self.cfg.get("emergent_llm_key", ""))
-        tk.Entry(win, textvariable=key_var, bg=CARD, fg=TEXT, insertbackground=CYAN,
-                 font=("Consolas", 11), show="*").pack(padx=16, fill="x")
-        label(win, "emergent.sh → Profile → Universal Key", fg=MUTED, font=("Consolas", 8)).pack(**pad)
+        label(win, "LOCAL AI — OLLAMA").pack(pady=(14, 2), **pad)
+        host_var = tk.StringVar(value=self.cfg.get("ollama_host", "http://localhost:11434"))
+        tk.Entry(win, textvariable=host_var, bg=CARD, fg=TEXT,
+                 font=("Consolas", 11)).pack(padx=16, fill="x")
+        label(win, "runs locally — no API key needed (ollama serve)", fg=MUTED, font=("Consolas", 8)).pack(**pad)
 
-        label(win, "MODEL (provider / name)").pack(pady=(10, 2), **pad)
-        r = tk.Frame(win, bg=BG); r.pack(fill="x", padx=16)
-        prov_var = tk.StringVar(value=self.cfg.get("model_provider", "anthropic"))
-        model_var = tk.StringVar(value=self.cfg.get("model_name", "claude-sonnet-5-5"))
-        tk.Entry(r, textvariable=prov_var, bg=CARD, fg=TEXT, width=14, font=("Consolas", 10)).pack(side="left")
-        tk.Entry(r, textvariable=model_var, bg=CARD, fg=TEXT, width=30, font=("Consolas", 10)).pack(side="left", padx=6)
+        label(win, "MODEL").pack(pady=(10, 2), **pad)
+        model_var = tk.StringVar(value=self.cfg.get("model_name", "qwen3.5:4b"))
+        tk.Entry(win, textvariable=model_var, bg=CARD, fg=TEXT, font=("Consolas", 11)).pack(padx=16, fill="x")
+        label(win, "installed: qwen3.5:4b · gemma3:4b — check with: ollama list", fg=MUTED, font=("Consolas", 8)).pack(**pad)
 
         label(win, "WORKSPACE DIR").pack(pady=(10, 2), **pad)
         ws_var = tk.StringVar(value=self.cfg.get("workspace_dir", "~/JarvisWorkspace"))
         tk.Entry(win, textvariable=ws_var, bg=CARD, fg=TEXT, font=("Consolas", 11)).pack(padx=16, fill="x")
 
         label(win, "VOICE").pack(pady=(12, 2), **pad)
-        prem_var = tk.BooleanVar(value=self.cfg.get("premium_voice", True))
-        check(win, "Premium voice (Whisper + natural OpenAI voice, uses key balance)", prem_var).pack(padx=12, anchor="w")
-        r2 = tk.Frame(win, bg=BG); r2.pack(fill="x", padx=16, pady=(2, 0))
-        label(r2, "Voice:", fg=MUTED, font=("Consolas", 9)).pack(side="left")
-        vname_var = tk.StringVar(value=self.cfg.get("premium_voice_name", "onyx"))
-        ttk.Combobox(r2, textvariable=vname_var, values=PREMIUM_VOICES, width=12, state="readonly").pack(side="left", padx=6)
-        button(r2, "▶ Test", lambda: self._test_voice(prem_var.get(), vname_var.get())).pack(side="left", padx=6)
+        label(win, "Kokoro 'George' (local AI voice) with Windows voice fallback", fg=MUTED, font=("Consolas", 9)).pack(**pad)
+        button(win, "▶ Test voice", lambda: self.voice.speak("Good evening. All systems are online.")).pack(padx=16, anchor="w", pady=(2, 0))
 
         wake_var = tk.BooleanVar(value=self.cfg.get("wake_word_enabled", True))
         check(win, 'Hands-free: listen for the wake word', wake_var).pack(padx=12, anchor="w", pady=(6, 0))
@@ -234,12 +244,10 @@ class JarvisApp:
 
         def save_and_close():
             self.cfg.update({
-                "emergent_llm_key": key_var.get().strip(),
-                "model_provider": prov_var.get().strip() or "anthropic",
-                "model_name": model_var.get().strip() or "claude-sonnet-5-5",
+                "ollama_host": host_var.get().strip() or "http://localhost:11434",
+                "model_provider": "ollama",
+                "model_name": model_var.get().strip() or "qwen3.5:4b",
                 "workspace_dir": ws_var.get().strip() or "~/JarvisWorkspace",
-                "premium_voice": prem_var.get(),
-                "premium_voice_name": vname_var.get(),
                 "wake_word_enabled": wake_var.get(),
                 "wake_word": wword_var.get().strip().lower() or "jarvis",
                 "allow_shell_commands": shell_var.get(),
@@ -250,18 +258,13 @@ class JarvisApp:
             self.workspace.mkdir(parents=True, exist_ok=True)
             self.workspace_lbl.config(text=f"workspace: {self.workspace}")
             self.brain = None
+            self._ollama_ok = None
             self.wake_var.set(self.cfg["wake_word_enabled"])
             self.voice.stop_wake()
             win.destroy()
             self.root.after(600, self._apply_wake)
 
         button(win, "SAVE", save_and_close, primary=True).pack(pady=16)
-
-    def _test_voice(self, premium: bool, name: str):
-        old = (self.cfg.get("premium_voice"), self.cfg.get("premium_voice_name"))
-        self.cfg["premium_voice"], self.cfg["premium_voice_name"] = premium, name
-        self.voice.speak("Good evening. All systems are online.")
-        self.root.after(8000, lambda: self.cfg.update(premium_voice=old[0], premium_voice_name=old[1]))
 
     def _playnite_status(self) -> str:
         if not playnite.find_exe(self.cfg):
@@ -302,11 +305,15 @@ class JarvisApp:
         if self.brain:
             return True
         if not self._has_key():
-            messagebox.showerror("Missing key", "Set your Emergent LLM key in Settings first.")
+            messagebox.showerror("Ollama not running",
+                                 "Start Ollama first (it should be in the system tray), then try again.")
             return False
-        self.brain = Brain(api_key=self.cfg["emergent_llm_key"], session_id=self.session_id,
-                           provider=self.cfg.get("model_provider", "anthropic"),
-                           model=self.cfg.get("model_name", "claude-sonnet-5-5"))
+        history = self.memory.get_recent(self.session_id)
+        self.brain = Brain(session_id=self.session_id,
+                           provider="ollama",
+                           model=self.cfg.get("model_name", "qwen3.5:4b"),
+                           host=self.cfg.get("ollama_host", "http://localhost:11434"),
+                           history=history)
         return True
 
     def _with_context(self, text: str) -> str:

@@ -2,7 +2,7 @@
 
 A fully-featured desktop Jarvis for Windows (also runs on macOS / Linux).
 It **listens**, **talks**, **remembers**, **writes code**, **scaffolds apps**, and
-**controls your PC** — powered by **Claude Sonnet 5.5** through the Emergent Universal Key.
+**controls your PC** — powered by a **local Ollama model** (e.g. `qwen3.5:4b`). No API keys, no cloud.
 
 ```
    ◉ voice in       ◉ chat memory         ◉ code generation
@@ -49,7 +49,6 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install --upgrade pip
-pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
 pip install -r requirements.txt
 copy config.example.json config.json      # Windows
 # cp config.example.json config.json      # macOS / Linux
@@ -62,11 +61,16 @@ copy config.example.json config.json      # Windows
 
 ---
 
-## 2. Add your Emergent LLM Key
+## 2. Install Ollama and pull a model
 
-Open `config.json` and replace `PASTE_YOUR_EMERGENT_LLM_KEY_HERE` with your key.
-Get yours free at **emergent.sh → Profile → Universal Key**.
-Or just launch the app once and paste the key into **Settings**.
+Jarvis runs fully local via [Ollama](https://ollama.com). Install Ollama, then:
+
+```bash
+ollama pull qwen3.5:4b    # or gemma3:4b
+```
+
+Open `config.json` and set `model_name` (and `ollama_host` if Ollama runs elsewhere).
+Or launch the app once and set it in **Settings**.
 
 ---
 
@@ -142,12 +146,12 @@ Say **"Hey Jarvis"**, wait for the beep, then speak. You can also say it in one 
 **"Jarvis, open notepad"**. Wake-word listening uses the free recognizer, so idle
 listening costs nothing. Change the wake word in Settings.
 
-## 6. Premium voice
+## 6. Voice
 
-Settings → **Premium voice** uses OpenAI Whisper to understand you and a natural OpenAI
-voice (default **onyx**) to reply. It's on by default and uses a little of your Emergent key
-balance on every reply. Untick it for the free voice. If premium fails, Jarvis switches to
-the free voice automatically. Press **▶ Test** to hear each voice.
+Speech-to-text uses local **faster-whisper** (`base`, int8 on CPU) with a Google
+recognizer fallback. Jarvis speaks with the local **Kokoro** voice `bm_george`,
+falling back to the Windows SAPI voice if Kokoro fails. Everything voice-related
+runs on your machine — no API keys, no cloud.
 
 ## 7. "Fix this" in VS Code
 
@@ -272,16 +276,14 @@ works well on `tools` and `node_modules` but not on model files.
 
 | key                    | default                   | notes                                   |
 |------------------------|---------------------------|-----------------------------------------|
-| `emergent_llm_key`     | *(required)*              | from emergent.sh                        |
-| `model_provider`       | `anthropic`               | anthropic / openai / gemini             |
-| `model_name`           | `claude-sonnet-5-5`       | any model from the Emergent catalog     |
+| `ollama_host`          | `http://localhost:11434`  | Ollama server URL                       |
+| `model_provider`       | `ollama`                  | local engine                            |
+| `model_name`           | `qwen3.5:4b`              | any `ollama list` model                 |
 | `workspace_dir`        | `~/JarvisWorkspace`       | where Jarvis writes/reads files         |
 | `allow_shell_commands` | `true`                    | gate the `run_shell` tool               |
 | `allow_pc_control`     | `true`                    | gate mouse / keyboard / open-app tools  |
 | `wake_word_enabled`    | `true`                    | hands-free "Hey Jarvis"                 |
 | `wake_word`            | `jarvis`                  | word that wakes Jarvis                  |
-| `premium_voice`        | `true`                    | Whisper + OpenAI voice (uses balance)   |
-| `premium_voice_name`   | `onyx`                    | onyx/echo/fable/alloy/ash/coral/nova/sage/shimmer |
 | `playnite_path`        | *(auto)*                  | only if Playnite is in a custom folder  |
 | `voice_rate`           | `185`                     | free voice speech rate                  |
 | `voice_volume`         | `1.0`                     | 0.0–1.0                                 |

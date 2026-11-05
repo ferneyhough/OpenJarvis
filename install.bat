@@ -40,9 +40,6 @@ call .venv\Scripts\activate.bat
 echo [+] Upgrading pip
 python -m pip install --upgrade pip --quiet
 
-echo [+] Installing emergentintegrations
-pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ --quiet
-
 echo [+] Installing dependencies (this may take 2-3 minutes)
 pip install -r requirements.txt
 if errorlevel 1 (
