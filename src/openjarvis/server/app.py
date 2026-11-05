@@ -7,6 +7,7 @@ import os
 import pathlib
 import threading
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -247,10 +248,21 @@ def create_app(
         synchronize_runtime_cache=True,
     )
 
+    shutdown_hooks: list = []
+
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI):
+        try:
+            yield
+        finally:
+            for hook in shutdown_hooks:
+                await hook()
+
     app = FastAPI(
         title="OpenJarvis API",
         description="OpenAI-compatible API server for OpenJarvis",
         version="0.1.0",
+        lifespan=_lifespan,
     )
 
     from fastapi.middleware.cors import CORSMiddleware
@@ -319,7 +331,7 @@ def create_app(
     # AuthMiddleware never sees WS upgrade requests). Empty = auth disabled.
     app.state.api_key = api_key
 
-    @app.on_event("shutdown")
+    @shutdown_hooks.append
     async def _shutdown_managed_runtime() -> None:
         # Quiesce every producer before touching the shared MCP pool. Route
         # workers are registered under this lock, so none can slip in after
@@ -459,14 +471,14 @@ def create_app(
     except Exception as _exc:
         logger.debug("Analytics init skipped: %s", _exc)
 
-    @app.on_event("shutdown")
+    @shutdown_hooks.append
     async def _shutdown_analytics() -> None:
         stop_analytics(app)
 
     # Stop the background memory service cleanly when the server shuts down.
     if memory_service is not None:
 
-        @app.on_event("shutdown")
+        @shutdown_hooks.append
         async def _shutdown_memory_service() -> None:
             svc = getattr(app.state, "memory_service", None)
             if svc is not None:
