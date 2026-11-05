@@ -86,7 +86,7 @@ export function IronGiantFace() {
 
     const headMat = new THREE.MeshStandardMaterial({
       map: panelTex, color: 0xb9c0c0, metalness: 0.75, roughness: 0.5,
-      envMapIntensity: 0.7,
+      envMapIntensity: 0.7, side: THREE.DoubleSide,
     });
 
     // ---------- load model ----------
