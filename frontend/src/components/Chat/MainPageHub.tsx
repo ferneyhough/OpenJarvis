@@ -116,7 +116,6 @@ const aiApps = [
 
 const aiTools: HubService[] = [
   { id: 'base44', name: 'Base44', url: 'https://base44.com/', color: '#635bff', description: 'AI app-building platform. Sign in with Base44 to use its hosted tools.', icon: BrainCircuit },
-  { id: 'emergent', name: 'Emergent', url: 'https://emergent.sh/', color: '#17a67a', description: 'AI software-building platform. Sign in with Emergent to use its hosted tools.', icon: BrainCircuit },
   { id: 'microsoft-copilot', name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com/', color: '#4f6bed', description: 'Microsoft Copilot web app. Uses its own Microsoft sign-in and subscription.', icon: BrainCircuit },
 ];
 
@@ -1181,7 +1180,7 @@ function AIPlatformPanel() {
           />
         ) : (
           <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            Enable Base44, Emergent, or Microsoft Copilot in Settings → AI and cloud tools to show them here.
+            Enable Base44 or Microsoft Copilot in Settings → AI and cloud tools to show them here.
             <button type="button" onClick={() => navigate('/settings')} className="ml-1 underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Open Settings</button>
           </p>
         )}

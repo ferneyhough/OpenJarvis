@@ -72,7 +72,6 @@ export const hubVoiceApps: HubVoiceApp[] = [
   { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/keys', settingsId: 'openrouter', category: 'ai', aliases: ['openrouter'], apiKey: 'OPENROUTER_API_KEY' },
   { id: 'atlascloud', name: 'Atlas Cloud', url: 'https://cloud.atlascloud.ai/', settingsId: 'atlascloud', category: 'ai', aliases: ['atlas cloud'], apiKey: 'ATLASCLOUD_API_KEY' },
   { id: 'base44', name: 'Base44', url: 'https://base44.com/', settingsId: 'base44', category: 'ai', aliases: ['base44', 'base 44'] },
-  { id: 'emergent', name: 'Emergent', url: 'https://emergent.sh/', settingsId: 'emergent', category: 'ai', aliases: ['emergent'] },
   { id: 'microsoft-copilot', name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com/', settingsId: 'microsoft-copilot', category: 'ai', aliases: ['copilot', 'microsoft copilot'] },
 ];
 

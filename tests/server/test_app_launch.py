@@ -6,6 +6,7 @@ def test_allowlist_requires_https_and_known_host():
     assert app_launch.is_allowed("https://discord.com/app")
     assert not app_launch.is_allowed("http://discord.com/app")
     assert not app_launch.is_allowed("https://evil.example.com/")
+    assert not app_launch.is_allowed("https://emergent.sh/")
 
 
 def test_native_match_uses_host_and_path_prefix():

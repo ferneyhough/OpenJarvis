@@ -3,6 +3,7 @@
 import json
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -41,14 +42,14 @@ def _docker_json_instruction(name: str) -> list[str]:
 
 def _run_fake_jarvis(tmp_path: Path, argv: list[str]) -> list[str]:
     """Run an argv assembled with Docker's exec-form ENTRYPOINT semantics."""
-    fake_jarvis = tmp_path / "jarvis"
+    fake_jarvis = tmp_path / "jarvis.py"
     fake_jarvis.write_text(
-        "#!/bin/sh\nprintf '%s\\0' \"$@\"\n",
+        "import sys\n"
+        "sys.stdout.buffer.write(b'\\0'.join(arg.encode() for arg in sys.argv[1:]))\n",
         encoding="utf-8",
     )
-    fake_jarvis.chmod(0o755)
     completed = subprocess.run(
-        [str(fake_jarvis), *argv[1:]],
+        [sys.executable, str(fake_jarvis), *argv[1:]],
         check=True,
         capture_output=True,
     )

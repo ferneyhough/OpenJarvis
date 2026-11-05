@@ -84,7 +84,7 @@ _EXTRA_HOSTS = {
     "isthereanydeal.com", "www.reddit.com", "www.youtube.com", "x.com",
     "news.ycombinator.com", "aistudio.google.com", "base44.com",
     "cloud.atlascloud.ai", "console.anthropic.com", "copilot.microsoft.com",
-    "dashboard.twitch.tv", "emergent.sh", "gaming.amazon.com", "gg.deals",
+    "dashboard.twitch.tv", "gaming.amazon.com", "gg.deals",
     "itch.io", "kick.com", "livecenter.tiktok.com", "luna.amazon.com",
     "obsproject.com", "openrouter.ai", "platform.openai.com",
     "play.geforcenow.com", "playnite.link", "prismlauncher.org", "prismlive.com",

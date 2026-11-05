@@ -36,7 +36,7 @@ describe('game launcher voice commands', () => {
     expect(parseHubAppVoiceCommand('open Twitch')?.settingsId).toBe('twitch');
     expect(parseHubAppVoiceCommand('open Plex')?.settingsId).toBe('plex');
     expect(parseHubAppVoiceCommand('open Base 44')?.settingsId).toBe('base44');
-    expect(parseHubAppVoiceCommand('open Emergent')?.settingsId).toBe('emergent');
+    expect(parseHubAppVoiceCommand('open Emergent')).toBeNull();
     expect(parseHubAppVoiceCommand('open Copilot')?.settingsId).toBe('microsoft-copilot');
     expect(parseHubAppVoiceCommand('open Twitch dashboard')?.settingsId).toBe('live-twitch');
     expect(parseHubAppVoiceCommand('open OBS Studio')?.settingsId).toBe('obs-studio');

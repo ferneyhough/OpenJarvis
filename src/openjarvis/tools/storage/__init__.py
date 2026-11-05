@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.util import find_spec
+
 # Always-available backend
 import openjarvis.tools.storage.sqlite  # noqa: F401
 
@@ -16,10 +18,11 @@ try:
 except ImportError:
     pass
 
-try:
-    import openjarvis.tools.storage.colbert_backend  # noqa: F401
-except ImportError:
-    pass
+if find_spec("colbert") is not None:
+    try:
+        import openjarvis.tools.storage.colbert_backend  # noqa: F401
+    except ImportError:
+        pass
 
 try:
     import openjarvis.tools.storage.hybrid  # noqa: F401

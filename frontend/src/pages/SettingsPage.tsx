@@ -587,7 +587,6 @@ const hubIntegrationGroups = [
     title: 'AI and cloud tools',
     apps: [
       { id: 'base44', name: 'Base44', url: 'https://base44.com/', auth: 'Open Base44 and sign in there. This is a website launcher, not a model provider connected to OpenJarvis chat.' },
-      { id: 'emergent', name: 'Emergent', url: 'https://emergent.sh/', auth: 'Open Emergent and sign in there. This is a website launcher, not a model provider connected to OpenJarvis chat.' },
       { id: 'microsoft-copilot', name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com/', auth: 'Open Copilot and sign in with Microsoft. This does not connect Copilot to OpenJarvis chat.' },
     ],
   },

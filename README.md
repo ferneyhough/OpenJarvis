@@ -239,7 +239,7 @@ only enabled apps appear unless Developer Mode is on. Social services open in yo
 but private feeds and account authentication are not integrated. Media streaming services and
 stores are launch links rather than unified provider catalogs; the TV guide combines only your
 own M3U/M3U8 playlist and optional XMLTV schedule. The AI section lists cloud providers with configured API keys and authorized local models.
-Base44, Emergent, and Microsoft Copilot can also be enabled as website launchers in Settings;
+Base44 and Microsoft Copilot can also be enabled as website launchers in Settings;
 they use their own sign-in and are not connected as OpenJarvis chat model providers.
 
 Developer Mode reveals additional hub entries and the Developer tab. It can open an existing
