@@ -17,10 +17,10 @@ export function ChatPage() {
         <IronGiantFace />
       </Suspense>
       <div className="relative z-10 flex min-h-0 flex-1">
+        {systemPanelOpen && <SystemPanel />}
         <div className="flex-1 min-w-0">
           <ChatArea />
         </div>
-        {systemPanelOpen && <SystemPanel />}
       </div>
     </div>
   );

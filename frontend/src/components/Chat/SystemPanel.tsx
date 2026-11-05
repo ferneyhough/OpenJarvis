@@ -82,7 +82,7 @@ export function SystemPanel() {
         width: 280,
         minWidth: 280,
         background: 'var(--color-bg)',
-        borderLeft: '1px solid var(--color-border)',
+        borderRight: '1px solid var(--color-border)',
       }}
     >
       {/* Header */}

@@ -124,6 +124,7 @@ export function IronGiantFace() {
         let headHalfH = size.y * 0.22;
         let headHalfW = size.x * 0.35;
         let cutWorldY = center.y - size.y * 0.15;
+        let headCentroidX = center.x;
         try {
           const MW = 160;
           const MH = 160;
@@ -160,26 +161,30 @@ export function IronGiantFace() {
           }
           if (topRow < 0) throw new Error('empty silhouette');
 
-          // head width = widest row in the top 12% of the silhouette
-          const crownRows = Math.max(2, Math.floor(MH * 0.12));
-          let crownW = 0;
-          for (let r = topRow; r < Math.min(MH, topRow + crownRows); r++) {
-            crownW = Math.max(crownW, rowW[r]);
-          }
-          // cut where the silhouette flares past ~1.7x crown width (neck/shoulders)
-          let cutRow = -1;
-          for (let r = topRow + 4; r < MH - 4; r++) {
-            if (
-              rowW[r] > crownW * 1.7 &&
-              rowW[r + 1] > crownW * 1.5 &&
-              rowW[r + 2] > crownW * 1.4 &&
-              rowW[r + 3] > crownW * 1.3
-            ) {
-              cutRow = r;
-              break;
+          // The head ends at the neck: the narrowest row in the upper half of
+          // the silhouette, just before the shoulders flare back out.
+          const zoneEnd = Math.min(MH - 4, topRow + Math.floor(MH * 0.5));
+          let neckRow = -1;
+          let neckW = Infinity;
+          for (let r = topRow + 3; r < zoneEnd; r++) {
+            if (rowW[r] > 0 && rowW[r] < neckW) {
+              neckW = rowW[r];
+              neckRow = r;
             }
           }
-          if (cutRow < 0) cutRow = Math.floor(MH * 0.55);
+          // cut at the first sustained widening after the neck minimum
+          let cutRow = -1;
+          if (neckRow > 0) {
+            for (let r = neckRow + 1; r < MH - 3; r++) {
+              if (rowW[r] > neckW * 1.35 && rowW[r + 1] > neckW * 1.3 && rowW[r + 2] > neckW * 1.25) {
+                cutRow = r;
+                break;
+              }
+            }
+          }
+          if (cutRow < 0 || cutRow <= topRow + 3) {
+            cutRow = neckRow > topRow + 3 ? neckRow : Math.floor(MH * 0.45);
+          }
 
           // row -> world Y at model depth (measurement cam fits whole model)
           const halfH = fitDist * Math.tan((cam.fov * Math.PI) / 360);
@@ -192,13 +197,29 @@ export function IronGiantFace() {
           for (let r = topRow; r < cutRow; r++) headPixW = Math.max(headPixW, rowW[r]);
           headHalfW = (headPixW / MW) * halfH; // mCam aspect = 1
           cutWorldY = cutY;
+
+          // horizontal centre of the head region, for dead-centre framing
+          let sumX = 0;
+          let count = 0;
+          for (let r = topRow; r < cutRow; r++) {
+            const src = (MH - 1 - r) * MW;
+            for (let x = 0; x < MW; x++) {
+              if (px[(src + x) * 4 + 3] > 24) {
+                sumX += x;
+                count++;
+              }
+            }
+          }
+          if (count > 0) {
+            const frac = sumX / count / MW; // 0..1 across view width
+            headCentroidX = center.x + (frac - 0.5) * 2 * halfH;
+          }
         } catch {
           /* fall back to upper-body framing */
         }
 
-        // recentre so the head sits at the origin, clip below the neck
-        inner.position.sub(center);
-        inner.position.y += center.y - headCenterY;
+        // recentre so the head sits dead-centre, clip below the neck
+        inner.position.set(-headCentroidX, -headCenterY, -center.z);
         headMat.clippingPlanes = [
           new THREE.Plane(new THREE.Vector3(0, 1, 0), headCenterY - cutWorldY),
         ];
