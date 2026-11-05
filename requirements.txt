@@ -10,7 +10,7 @@ pillow>=10.2.0          # ~16 MB
 pygame>=2.5.2
 requests>=2.31.0
 pywebview>=5.0          # ~2 MB   desktop window (WebView2)
-kokoro>=0.9             # ~0.1 MB (+ ~330 MB George voice model in models\)
+kokoro>=0.9; python_version < "3.13"  # ~0.1 MB (+ ~330 MB George voice model in models\)
 soundfile               # ~3 MB
-misaki[en]              # ~15 MB
+misaki[en]; python_version < "3.13"   # ~15 MB
 faster-whisper>=1.0     # ~1.4 MB (+ ~150 MB Whisper model in models\)
