@@ -226,9 +226,7 @@ export function IronGiantFace() {
 
         // frame just the head to fill the view
         const tanV = Math.tan((cam.fov * Math.PI) / 360);
-        const vw = canvas.clientWidth || window.innerWidth;
-        const vh = canvas.clientHeight || window.innerHeight;
-        const aspect = Math.max(0.3, vw / Math.max(1, vh));
+        const aspect = Math.max(0.5, window.innerWidth / Math.max(1, window.innerHeight));
         const tanH = tanV * aspect;
         baseDist = Math.max(headHalfH / tanV, headHalfW / tanH) * 1.12;
         dist.v = dist.t = baseDist;
@@ -237,13 +235,14 @@ export function IronGiantFace() {
       () => { /* scene stays empty but alive */ },
     );
 
-    // ---------- drag-to-rotate / scroll-to-zoom (only on the head canvas) ----------
+    // ---------- drag-to-rotate / scroll-to-zoom (window-level, ignores UI) ----------
     let dragging = false;
     let lastX = 0, lastY = 0;
-    const onCanvas = (t: EventTarget | null) => t === canvas;
+    const interactive = (t: EventTarget | null) =>
+      t instanceof Element && !!t.closest('input,textarea,button,a,select,[contenteditable],[role="button"],.msg-bubble');
 
     const onDown = (e: PointerEvent) => {
-      if (!onCanvas(e.target) || e.button !== 0) return;
+      if (interactive(e.target) || e.button !== 0) return;
       dragging = true;
       lastX = e.clientX; lastY = e.clientY;
     };
@@ -256,7 +255,7 @@ export function IronGiantFace() {
     };
     const onUp = () => { dragging = false; };
     const onWheel = (e: WheelEvent) => {
-      if (!onCanvas(e.target)) return;
+      if (interactive(e.target)) return;
       dist.t = Math.max(baseDist * 0.45, Math.min(baseDist * 2.2, dist.t + e.deltaY * 0.01));
     };
     window.addEventListener('pointerdown', onDown);
@@ -266,16 +265,16 @@ export function IronGiantFace() {
 
     // ---------- resize + loop ----------
     const resize = () => {
-      const w = canvas.clientWidth || window.innerWidth;
-      const h = canvas.clientHeight || window.innerHeight;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
       renderer.setSize(w, h, false);
-      cam.aspect = w / Math.max(1, h);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      cam.aspect = w / h;
       cam.updateProjectionMatrix();
     };
     resize();
     window.addEventListener('resize', resize);
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
 
     let raf = 0;
     const draw = () => {
@@ -305,32 +304,15 @@ export function IronGiantFace() {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', resize);
-      ro.disconnect();
       renderer.dispose();
     };
   }, []);
 
   return (
-    <aside
-      className="relative flex h-full w-[400px] shrink-0 flex-col overflow-hidden border-l max-lg:hidden"
-      style={{
-        borderColor: 'var(--color-border)',
-        background: 'radial-gradient(120% 90% at 50% 0%, #0d1a14 0%, #070b10 60%)',
-      }}
-      aria-label="Jarvis avatar"
-    >
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between px-3 py-2"
-        style={{ background: 'linear-gradient(transparent, rgba(4,8,12,0.85))' }}
-      >
-        <span className="text-[10px] font-medium tracking-widest uppercase" style={{ color: 'var(--color-text-tertiary)' }}>
-          Jarvis
-        </span>
-        <span className="text-[9px]" style={{ color: 'var(--color-text-tertiary)' }}>
-          Iron Giant · bolshooylenny · CC-BY
-        </span>
-      </div>
-    </aside>
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-0"
+    />
   );
 }
