@@ -12,15 +12,15 @@ export function ChatPage() {
   const systemPanelOpen = useAppStore((s) => s.systemPanelOpen);
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden">
-      <Suspense fallback={null}>
-        <IronGiantFace />
-      </Suspense>
-      <div className="relative z-10 flex min-h-0 flex-1">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1">
         {systemPanelOpen && <SystemPanel />}
         <div className="flex-1 min-w-0">
           <ChatArea />
         </div>
+        <Suspense fallback={null}>
+          <IronGiantFace />
+        </Suspense>
       </div>
     </div>
   );
