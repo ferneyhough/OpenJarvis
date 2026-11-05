@@ -224,6 +224,43 @@ export function IronGiantFace() {
           new THREE.Plane(new THREE.Vector3(0, 1, 0), headCenterY - cutWorldY),
         ];
 
+        // Delete every triangle below the neck cut — the body is gone for
+        // good, not just clipped, so spinning can never reveal it.
+        const cutFinalY = cutWorldY - headCenterY;
+        inner.updateMatrixWorld(true);
+        inner.traverse((o) => {
+          if (!(o instanceof THREE.Mesh)) return;
+          const geo = o.geometry as THREE.BufferGeometry;
+          const pos = geo.attributes.position;
+          if (!pos) return;
+          const arr = pos.array as Float32Array;
+          const e = o.matrixWorld.elements;
+          const wy = (i: number) =>
+            e[4] * arr[i * 3] + e[5] * arr[i * 3 + 1] + e[6] * arr[i * 3 + 2] + e[13];
+          const src = geo.index ? (geo.index.array as ArrayLike<number>) : null;
+          const triVerts = src ? src.length : arr.length / 3;
+          const kept = new Uint32Array(triVerts);
+          let kn = 0;
+          for (let t = 0; t < triVerts / 3; t++) {
+            const a = src ? src[t * 3] : t * 3;
+            const b = src ? src[t * 3 + 1] : t * 3 + 1;
+            const c = src ? src[t * 3 + 2] : t * 3 + 2;
+            if (Math.max(wy(a), wy(b), wy(c)) >= cutFinalY) {
+              kept[kn++] = a; kept[kn++] = b; kept[kn++] = c;
+            }
+          }
+          if (kn > 0) geo.setIndex(new THREE.BufferAttribute(kept.subarray(0, kn), 1));
+          else o.visible = false;
+        });
+
+        // Spin a parent group so the head rotates around its own centre
+        // while the model keeps its upright-orientation offset.
+        const spinner = new THREE.Group();
+        scene.remove(inner);
+        spinner.add(inner);
+        scene.add(spinner);
+        model = spinner;
+
         // frame just the head to fill the view
         const tanV = Math.tan((cam.fov * Math.PI) / 360);
         const aspect = Math.max(0.5, window.innerWidth / Math.max(1, window.innerHeight));
@@ -250,7 +287,7 @@ export function IronGiantFace() {
       if (!dragging) return;
       yaw.t += (e.clientX - lastX) * 0.008;
       pitch.t += (e.clientY - lastY) * 0.008;
-      pitch.t = Math.max(-1.1, Math.min(1.1, pitch.t));
+      pitch.t = Math.max(-Math.PI, Math.min(Math.PI, pitch.t));
       lastX = e.clientX; lastY = e.clientY;
     };
     const onUp = () => { dragging = false; };
