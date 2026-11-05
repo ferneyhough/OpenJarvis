@@ -738,7 +738,7 @@ function PersonalSourcesSettings() {
   );
 }
 
-function DeveloperSettings({ onSaved }: { onSaved: () => void }) {
+function DeveloperSettings() {
   const settings = useAppStore((state) => state.settings);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const [opening, setOpening] = useState(false);
@@ -757,30 +757,13 @@ function DeveloperSettings({ onSaved }: { onSaved: () => void }) {
   };
 
   return (
-    <Section title="Developer Mode">
-      <SettingRow
-        label="Enable Developer Mode"
-        description="Show developer tools and configured apps in the hub. This does not bypass service sign-in or grant new AI tool permissions."
-      >
-        <input
-          type="checkbox"
-          aria-label="Enable Developer Mode"
-          checked={settings.developerModeEnabled}
-          onChange={(event) => {
-            updateSettings({ developerModeEnabled: event.target.checked });
-            onSaved();
-          }}
-          className="h-4 w-4 accent-[var(--color-accent)]"
-        />
-      </SettingRow>
-      {settings.developerModeEnabled && (
-        <>
+    <Section title="Developer tools">
+      <>
           <SettingRow label="VS Code executable" description="Optional. Set this to Code.exe for a portable or non-standard install.">
             <input
               value={settings.vscodeExecutablePath}
               onChange={(event) => {
                 updateSettings({ vscodeExecutablePath: event.target.value });
-                onSaved();
               }}
               placeholder="Auto-detect VS Code"
               aria-label="VS Code executable path"
@@ -793,7 +776,6 @@ function DeveloperSettings({ onSaved }: { onSaved: () => void }) {
               value={settings.developerWorkspacePath}
               onChange={(event) => {
                 updateSettings({ developerWorkspacePath: event.target.value });
-                onSaved();
               }}
               placeholder="C:\\Projects\\MyProject"
               aria-label="Developer workspace folder"
@@ -832,7 +814,6 @@ function DeveloperSettings({ onSaved }: { onSaved: () => void }) {
                   onChange={(event) => {
                     const on = event.target.checked;
                     updateSettings({ [key]: on });
-                    onSaved();
                     if (on) {
                       ensureLocalMediaModel(kind).then((ok) => {
                         if (!ok) updateSettings({ [key]: false });
@@ -847,8 +828,7 @@ function DeveloperSettings({ onSaved }: { onSaved: () => void }) {
               </SettingRow>
             );
           })}
-        </>
-      )}
+      </>
     </Section>
   );
 }
@@ -1314,7 +1294,7 @@ export function SettingsPage() {
           <SteamSettings />
           <AppIntegrationsSettings />
           <PersonalSourcesSettings />
-          <DeveloperSettings onSaved={showSaved} />
+          <DeveloperSettings />
 
           {/* Tools */}
           <Section title="Tools">

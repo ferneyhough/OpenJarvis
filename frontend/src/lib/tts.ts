@@ -38,6 +38,65 @@ let controller: AbortController | null = null;
 let token = 0;
 let healthProbe: Promise<void> | null = null;
 
+// Speech-level metering for visuals: routes the audio element through an
+// AnalyserNode and exposes a smoothed 0..1 amplitude via getTtsLevel().
+let audioCtx: AudioContext | null = null;
+let analyser: AnalyserNode | null = null;
+let analyserSource: MediaElementAudioSourceNode | null = null;
+let levelData: Uint8Array<ArrayBuffer> | null = null;
+let smoothedLevel = 0;
+let levelRaf = 0;
+
+function teardownLevelMeter(): void {
+  if (levelRaf) cancelAnimationFrame(levelRaf);
+  levelRaf = 0;
+  if (analyserSource) {
+    try { analyserSource.disconnect(); } catch { /* already gone */ }
+    analyserSource = null;
+  }
+  analyser = null;
+  levelData = null;
+  smoothedLevel = 0;
+  if (audioCtx) {
+    void audioCtx.close().catch(() => undefined);
+    audioCtx = null;
+  }
+}
+
+function meterLoop(): void {
+  if (!analyser || !levelData) return;
+  analyser.getByteTimeDomainData(levelData);
+  let sum = 0;
+  for (let i = 0; i < levelData.length; i++) {
+    const v = (levelData[i] - 128) / 128;
+    sum += v * v;
+  }
+  const rms = Math.sqrt(sum / levelData.length);
+  smoothedLevel = Math.max(rms * 3.2, smoothedLevel * 0.82);
+  levelRaf = requestAnimationFrame(meterLoop);
+}
+
+function attachLevelMeter(el: HTMLAudioElement): void {
+  try {
+    audioCtx = new AudioContext();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    analyserSource = audioCtx.createMediaElementSource(el);
+    analyserSource.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    levelData = new Uint8Array(analyser.fftSize);
+    void audioCtx.resume().catch(() => undefined);
+    levelRaf = requestAnimationFrame(meterLoop);
+  } catch {
+    teardownLevelMeter();
+  }
+}
+
+/** Current smoothed speech amplitude, 0..1. Poll from an animation loop. */
+export function getTtsLevel(): number {
+  return Math.min(1, smoothedLevel);
+}
+
 /** Only a stream ending in the active conversation may trigger autoplay. */
 export function shouldAutoplayFinishedReply(
   previousStreamingConversationId: string | null,
@@ -65,6 +124,7 @@ function teardown(): void {
     audio.pause();
     audio.src = '';
     audio = null;
+    teardownLevelMeter();
   }
   if (objectUrl) {
     URL.revokeObjectURL(objectUrl);
@@ -124,6 +184,7 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
       objectUrl = url;
       const el = new Audio(url);
       audio = el;
+      attachLevelMeter(el);
 
       el.onended = () => {
         if (mine !== token) return;

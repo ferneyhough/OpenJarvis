@@ -1,0 +1,11 @@
+Model Information:
+* title:	Iron Giant
+* source:	https://sketchfab.com/3d-models/iron-giant-898df914081742ef822fdbdad8b67521
+* author:	bolshooylenny (https://sketchfab.com/bolshooylenny)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Iron Giant" (https://sketchfab.com/3d-models/iron-giant-898df914081742ef822fdbdad8b67521) by bolshooylenny (https://sketchfab.com/bolshooylenny) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

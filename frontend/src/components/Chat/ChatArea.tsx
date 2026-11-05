@@ -6,14 +6,7 @@ import { useAppStore } from '../../lib/store';
 import { shouldAutoplayFinishedReply, useTtsStore } from '../../lib/tts';
 import { stripThinkTags } from '../../lib/message-text';
 import { MainPageHub } from './MainPageHub';
-import { Sparkles, PanelRightOpen, PanelRightClose } from 'lucide-react';
-
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
+import { PanelRightOpen, PanelRightClose } from 'lucide-react';
 
 export function ChatArea() {
   const activeId = useAppStore((s) => s.activeId);
@@ -141,23 +134,7 @@ export function ChatArea() {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto"
       >
-        {isEmpty ? (
-          <div className="flex flex-col items-center justify-center min-h-full px-4 py-8">
-            <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-              style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
-            >
-              <Sparkles size={24} />
-            </div>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-              {getGreeting()}
-            </h2>
-            <p className="text-sm text-center max-w-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
-              Ask anything. Your AI runs locally — private, fast, and always available.
-            </p>
-
-          </div>
-        ) : (
+        {isEmpty ? null : (
           <div className="max-w-[var(--chat-max-width)] mx-auto px-4 py-6">
             {messages.map((msg, i) => {
               const isLastAssistant =

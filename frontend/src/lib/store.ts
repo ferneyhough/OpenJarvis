@@ -152,7 +152,7 @@ function loadSettings(): Settings {
     handsFreeEnabled: false,
     steamId64: '',
     steamContextEnabled: false,
-    developerModeEnabled: false,
+    developerModeEnabled: true,
     developerWorkspacePath: '',
     vscodeExecutablePath: '',
     hubEnabledApps: [],
@@ -178,8 +178,8 @@ function loadSettings(): Settings {
       stored.voiceId = defaults.voiceId;
       stored.voiceSettingsVersion = defaults.voiceSettingsVersion;
     }
-    const settings = { ...defaults, ...stored, developerModeEnabled: false };
-    if (needsVoiceSettingsMigration || stored.developerModeEnabled === true) {
+    const settings = { ...defaults, ...stored, developerModeEnabled: true };
+    if (needsVoiceSettingsMigration || stored.developerModeEnabled === false) {
       try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
       } catch {
@@ -636,7 +636,7 @@ export const useAppStore = create<AppState>((set, get) => {
     // ── Settings ───────────────────────────────────────────────────
 
     updateSettings: (partial: Partial<Settings>) => {
-      const updated = { ...get().settings, ...partial };
+      const updated = { ...get().settings, ...partial, developerModeEnabled: true };
       saveSettings(updated);
       set({ settings: updated });
     },
