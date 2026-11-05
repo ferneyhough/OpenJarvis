@@ -242,7 +242,9 @@ class NativeOpenHandsAgent(ToolUsingAgent):
 
         tool_descriptions = build_tool_descriptions(self._tools)
         prompt_template = (
-            load_system_prompt_override("native_openhands") or OPENHANDS_SYSTEM_PROMPT
+            getattr(self, "_system_prompt", None)
+            or load_system_prompt_override(self.agent_id)
+            or OPENHANDS_SYSTEM_PROMPT
         )
         system_prompt = prompt_template.format(
             tool_descriptions=tool_descriptions,

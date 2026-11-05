@@ -35,6 +35,11 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.agents.devin  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.agents.react  # noqa: F401 -- backward-compat shim
 except ImportError:
     pass

@@ -1633,3 +1633,20 @@ export async function deleteCustomGame(id: string): Promise<void> {
   const res = await apiFetch(`/v1/games/custom/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Delete game failed: ${res.status}`);
 }
+
+export async function fetchGuideDocument(url: string, kind: 'playlist' | 'guide'): Promise<string> {
+  const params = new URLSearchParams({ url, kind });
+  const res = await apiFetch(`/v1/guide/fetch?${params}`);
+  if (!res.ok) {
+    let detail = `fetch failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
+  const data = await res.json();
+  return String(data?.text ?? '');
+}

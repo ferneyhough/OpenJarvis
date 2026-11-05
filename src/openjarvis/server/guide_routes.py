@@ -14,8 +14,10 @@ enabled; local media and links keep working.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import mimetypes
 import os
 import re
 import time
@@ -25,7 +27,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -352,6 +355,138 @@ def guide_local() -> dict:
                 "items": items,
             }
     return {"roots": scanned_roots, "groups": list(groups.values())}
+
+
+@guide_router.get("/media-file")
+def guide_media_file(path: str, request: Request):
+    """Stream a local media file for in-app playback.
+
+    Only files inside the scanned media directories with a known media
+    extension are served. Supports single-range requests so <video> seeking
+    works.
+    """
+    try:
+        target = Path(path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        raise HTTPException(status_code=400, detail="invalid path")
+    if target.suffix.lower() not in (_VIDEO_EXTS | _AUDIO_EXTS) or not target.is_file():
+        raise HTTPException(status_code=404, detail="not a media file")
+    allowed = False
+    for root in _local_media_dirs():
+        try:
+            resolved_root = root.resolve()
+        except OSError:
+            continue
+        if target == resolved_root or resolved_root in target.parents:
+            allowed = True
+            break
+    if not allowed:
+        raise HTTPException(status_code=403, detail="path outside media directories")
+
+    media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    size = target.stat().st_size
+    range_header = request.headers.get("range")
+    if range_header:
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip())
+        if match:
+            start_s, end_s = match.groups()
+            if start_s == "" and end_s == "":
+                raise HTTPException(status_code=416, detail="invalid range")
+            if start_s == "":
+                length = int(end_s)
+                start = max(0, size - length)
+                end = size - 1
+            else:
+                start = int(start_s)
+                end = min(int(end_s) if end_s else size - 1, size - 1)
+            if start > end or start >= size:
+                raise HTTPException(status_code=416, detail="range not satisfiable")
+            with target.open("rb") as handle:
+                handle.seek(start)
+                data = handle.read(end - start + 1)
+            return Response(
+                content=data,
+                status_code=206,
+                media_type=media_type,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{size}",
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(len(data)),
+                },
+            )
+    return FileResponse(target, media_type=media_type)
+
+
+# ---------------------------------------------------------------------------
+# Remote document fetch (M3U playlists / XMLTV guides)
+# ---------------------------------------------------------------------------
+
+_FETCH_LIMITS = {"playlist": 4 * 1024 * 1024, "guide": 24 * 1024 * 1024}
+
+
+def _check_fetch_url(url: str) -> urllib.parse.ParseResult:
+    parsed = urllib.parse.urlparse(url.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise HTTPException(
+            status_code=400, detail="url must be http(s) without credentials"
+        )
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="credentials in URL not allowed")
+    # Block obvious local targets to keep this a public-document proxy.
+    host = parsed.hostname.lower()
+    if host in ("localhost",) or host.endswith(".local") or host.endswith(".internal"):
+        raise HTTPException(status_code=400, detail="local hosts are not allowed")
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise HTTPException(
+                status_code=400, detail="private addresses are not allowed"
+            )
+    except ValueError:
+        pass  # hostname, not a literal IP — allowed
+    return parsed
+
+
+@guide_router.get("/fetch")
+def guide_fetch_document(url: str, kind: str = "playlist") -> dict:
+    """Fetch a remote M3U playlist or XMLTV guide as text (server-side, no CORS)."""
+    _require_online()
+    if kind not in _FETCH_LIMITS:
+        raise HTTPException(status_code=400, detail="kind must be playlist or guide")
+    parsed = _check_fetch_url(url)
+    target = urllib.parse.urlunparse(parsed)
+    req = urllib.request.Request(
+        target, headers={"User-Agent": "OpenJarvis/1.0", "Accept": "*/*"}
+    )
+    max_bytes = _FETCH_LIMITS[kind]
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+            chunks = []
+            size = 0
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"source exceeds the {max_bytes // (1024 * 1024)} MB limit"
+                        ),
+                    )
+                chunks.append(chunk)
+            raw = b"".join(chunks)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"fetch failed: {exc}")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=502, detail="source is not valid UTF-8 text")
+    content_type = resp.headers.get("Content-Type", "")
+    return {"text": text, "bytes": size, "content_type": content_type}
 
 
 # ---------------------------------------------------------------------------

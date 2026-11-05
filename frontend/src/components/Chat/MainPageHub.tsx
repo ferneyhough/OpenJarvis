@@ -28,10 +28,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
-import { isTauri, launchApp } from '../../lib/api';
+import { isTauri, launchApp, fetchGuideDocument } from '../../lib/api';
 import { getPlayniteLibrary, launchPlayniteGame, type PlayniteGame } from '../../lib/playnite';
 import { getSteamLibrary, launchSteamGame, type SteamLibrary } from '../../lib/steam';
-import { fetchMediaDocument, playMediaUrl } from '../../lib/media';
+import { MediaPlayerModal, type MediaPlayerTarget } from '../MediaPlayerModal';
 import { parseM3U, parseXMLTV, type GuideProgram, type M3UChannel } from '../../lib/media-guide';
 import { useAppStore } from '../../lib/store';
 import { useMusicStore } from '../../lib/music';
@@ -673,13 +673,12 @@ function MediaPanel() {
   const enabledApps = useAppStore((state) => state.settings.hubEnabledApps);
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
   const showGuide = developerModeEnabled || enabledApps.includes('tv-guide');
-  const canPlayInVlc = developerModeEnabled || enabledApps.includes('vlc');
   const [sources, setSources] = useState({ playlist: '', guide: '' });
   const [youtubeQuery, setYoutubeQuery] = useState('');
   const [channels, setChannels] = useState<M3UChannel[]>([]);
   const [programs, setPrograms] = useState<Map<string, GuideProgram[]>>(new Map());
   const [loading, setLoading] = useState(false);
-  const [playing, setPlaying] = useState('');
+  const [playerTarget, setPlayerTarget] = useState<MediaPlayerTarget | null>(null);
   const [englishOnly, setEnglishOnly] = useState(true);
   const [error, setError] = useState('');
   const [guideError, setGuideError] = useState('');
@@ -700,7 +699,7 @@ function MediaPanel() {
     setError('');
     setGuideError('');
     try {
-      const playlistText = await fetchMediaDocument(sources.playlist.trim(), 'playlist');
+      const playlistText = await fetchGuideDocument(sources.playlist.trim(), 'playlist');
       const parsedChannels = parseM3U(playlistText);
       if (parsedChannels.length === 0) {
         throw new Error('The playlist contains no supported channels. Check its URL and M3U format.');
@@ -709,7 +708,7 @@ function MediaPanel() {
       setPrograms(new Map());
       if (sources.guide.trim()) {
         try {
-          const guideText = await fetchMediaDocument(sources.guide.trim(), 'guide');
+          const guideText = await fetchGuideDocument(sources.guide.trim(), 'guide');
           const parsedPrograms = parseXMLTV(guideText);
           if (parsedPrograms.size === 0) {
             setGuideError('The XMLTV file contains no usable programme entries.');
@@ -728,16 +727,9 @@ function MediaPanel() {
     }
   };
 
-  const playChannel = async (channel: M3UChannel) => {
-    setPlaying(channel.url);
+  const playChannel = (channel: M3UChannel) => {
     setError('');
-    try {
-      await playMediaUrl(channel.url);
-    } catch (playError) {
-      setError(playError instanceof Error ? playError.message : String(playError));
-    } finally {
-      setPlaying('');
-    }
+    setPlayerTarget({ src: channel.url, title: channel.name });
   };
 
   const searchYoutube = async (event: FormEvent) => {
@@ -813,8 +805,7 @@ function MediaPanel() {
             <input type="checkbox" checked={englishOnly} onChange={(event) => setEnglishOnly(event.target.checked)} />
             English channels
           </label>
-          {!isTauri() && <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>Playlist hosts must allow browser access (CORS).</span>}
-          {!canPlayInVlc && <button type="button" onClick={() => navigate('/settings')} className="text-xs underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>Enable VLC in Settings to play streams</button>}
+          <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>Playlist and guide documents load through the local server — no CORS issues.</span>
         </div>
       </div> : (
         <p className="px-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
@@ -843,16 +834,15 @@ function MediaPanel() {
                     {!current && next && <span className="ml-2 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>Next: {next.title}</span>}
                   </span>
                   {channel.group && <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{channel.group}</span>}
-                  {canPlayInVlc && <button
+                  <button
                     type="button"
-                    onClick={() => void playChannel(channel)}
-                    disabled={playing !== ''}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs disabled:opacity-50"
+                    onClick={() => playChannel(channel)}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
                     style={{ color: 'var(--color-accent)', border: '1px solid var(--color-border)' }}
                   >
-                    {playing === channel.url ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                    Play in VLC
-                  </button>}
+                    <Play size={12} />
+                    Play
+                  </button>
                 </li>
               );
             })}
@@ -860,6 +850,7 @@ function MediaPanel() {
           {visibleChannels.length === 0 && <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>No channels match the English filter.</p>}
         </div>
       )}
+      <MediaPlayerModal target={playerTarget} onClose={() => setPlayerTarget(null)} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Tv,
   Film,
@@ -39,12 +39,17 @@ import {
   type LocalMediaResponse,
   type LocalMediaGroup,
   type GuideLink,
+  fetchGuideDocument,
 } from '../lib/api';
+import { parseM3U, parseXMLTV, type M3UChannel, type GuideProgram } from '../lib/media-guide';
+import { MediaPlayerModal, type MediaPlayerTarget } from '../components/MediaPlayerModal';
+import Hls from 'hls.js';
 
-type Tab = 'tv' | 'movies' | 'shows' | 'local' | 'games' | 'links';
+type Tab = 'tv' | 'iptv' | 'movies' | 'shows' | 'local' | 'games' | 'links';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof Tv }> = [
   { id: 'tv', label: 'TV Guide', icon: Tv },
+  { id: 'iptv', label: 'IPTV', icon: Tv },
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'shows', label: 'Shows', icon: Clapperboard },
   { id: 'local', label: 'Local', icon: FolderOpen },
@@ -396,6 +401,7 @@ function LocalTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const [playerTarget, setPlayerTarget] = useState<MediaPlayerTarget | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -471,6 +477,16 @@ function LocalTab() {
                       {f.name}
                     </span>
                     <span style={{ color: 'var(--color-text-tertiary)' }}>{f.size_str}</span>
+                    {f.kind === 'video' && (
+                      <button
+                        onClick={() => setPlayerTarget({ src: f.path, title: f.name })}
+                        title="Play in Jarvis"
+                        className="p-1 rounded cursor-pointer"
+                        style={{ color: 'var(--color-accent)' }}
+                      >
+                        <Play size={12} />
+                      </button>
+                    )}
                     <button onClick={() => void copyPath(f.path)} title="Copy path" className="p-1 rounded cursor-pointer" style={{ color: 'var(--color-text-tertiary)' }}>
                       <Copy size={12} />
                     </button>
@@ -481,6 +497,7 @@ function LocalTab() {
           </div>
         );
       })}
+      <MediaPlayerModal target={playerTarget} onClose={() => setPlayerTarget(null)} />
     </div>
   );
 }
@@ -858,6 +875,295 @@ function GameCard({
 }
 
 // ---------------------------------------------------------------------------
+// IPTV tab: M3U playlist + XMLTV guide + embedded player
+// ---------------------------------------------------------------------------
+
+const IPTV_SOURCE_KEY = 'openjarvis.iptv.sources';
+
+function loadIptvSources(): { playlist: string; guide: string } {
+  try {
+    const raw = localStorage.getItem(IPTV_SOURCE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    /* ignore */
+  }
+  return { playlist: '', guide: '' };
+}
+
+function IptvTab() {
+  const [sources, setSources] = useState(loadIptvSources);
+  const [channels, setChannels] = useState<M3UChannel[]>([]);
+  const [programs, setPrograms] = useState<Map<string, GuideProgram[]>>(new Map());
+  const [loading, setLoading] = useState(false);
+  const [playing, setPlaying] = useState<M3UChannel | null>(null);
+  const [englishOnly, setEnglishOnly] = useState(true);
+  const [error, setError] = useState('');
+  const [guideError, setGuideError] = useState('');
+  const [playerError, setPlayerError] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(IPTV_SOURCE_KEY, JSON.stringify(sources));
+  }, [sources]);
+
+  const destroyPlayer = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.removeAttribute('src');
+      videoRef.current.load();
+    }
+  }, []);
+
+  useEffect(() => destroyPlayer, [destroyPlayer]);
+
+  const visibleChannels = useMemo(
+    () =>
+      englishOnly
+        ? channels.filter((c) => !c.language || /^(en|eng|english)([-_].*)?$/i.test(c.language))
+        : channels,
+    [channels, englishOnly],
+  );
+
+  const loadChannels = async () => {
+    if (!sources.playlist.trim()) {
+      setError('Enter an M3U or M3U8 playlist URL first.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setGuideError('');
+    destroyPlayer();
+    setPlaying(null);
+    try {
+      const playlistText = await fetchGuideDocument(sources.playlist.trim(), 'playlist');
+      const parsed = parseM3U(playlistText);
+      if (parsed.length === 0) {
+        throw new Error('The playlist contains no supported channels. Check its URL and M3U format.');
+      }
+      setChannels(parsed);
+      setPrograms(new Map());
+      if (sources.guide.trim()) {
+        try {
+          const guideText = await fetchGuideDocument(sources.guide.trim(), 'guide');
+          const parsedPrograms = parseXMLTV(guideText);
+          if (parsedPrograms.size === 0) {
+            setGuideError('The XMLTV file contains no usable programme entries.');
+          } else {
+            setPrograms(parsedPrograms);
+          }
+        } catch (guideLoadError) {
+          setGuideError(
+            guideLoadError instanceof Error ? guideLoadError.message : String(guideLoadError),
+          );
+        }
+      }
+    } catch (loadError) {
+      setChannels([]);
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const playChannel = (channel: M3UChannel) => {
+    const video = videoRef.current;
+    if (!video) return;
+    setPlayerError('');
+    setPlaying(channel);
+    destroyPlayer();
+    const url = channel.url;
+    const isHls = /\.m3u8($|\?)/i.test(url) || url.includes('/playlist.m3u8');
+    if (isHls && Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true });
+      hlsRef.current = hls;
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          setPlayerError(`Stream error: ${data.type} (${data.details})`);
+          hls.destroy();
+          hlsRef.current = null;
+        }
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      void video.play().catch(() => {
+        /* autoplay may be blocked; user can press play */
+      });
+    } else {
+      video.src = url;
+      void video.play().catch(() => {
+        /* autoplay may be blocked */
+      });
+    }
+  };
+
+  const stopPlayback = () => {
+    destroyPlayer();
+    setPlaying(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+        Add an M3U/M3U8 playlist and optional XMLTV guide you are authorized to use.
+        Channels play in the built-in player below — no external app needed.
+      </p>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        <label className="space-y-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+          Playlist URL (M3U/M3U8)
+          <input
+            value={sources.playlist}
+            onChange={(e) => setSources((s) => ({ ...s, playlist: e.target.value }))}
+            placeholder="https://…/channels.m3u8"
+            className="h-9 w-full rounded-lg bg-transparent px-3 text-sm outline-none"
+            style={inputStyle}
+          />
+        </label>
+        <label className="space-y-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+          XMLTV guide URL (optional)
+          <input
+            value={sources.guide}
+            onChange={(e) => setSources((s) => ({ ...s, guide: e.target.value }))}
+            placeholder="https://…/guide.xml"
+            className="h-9 w-full rounded-lg bg-transparent px-3 text-sm outline-none"
+            style={inputStyle}
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <button
+          onClick={() => void loadChannels()}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
+          style={{ background: 'var(--color-accent)', color: '#fff' }}
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+          Load channels
+        </button>
+        {channels.length > 0 && (
+          <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+            <input type="checkbox" checked={englishOnly} onChange={(e) => setEnglishOnly(e.target.checked)} />
+            English channels
+          </label>
+        )}
+        {channels.length > 0 && (
+          <span className="text-xs ml-auto" style={{ color: 'var(--color-text-tertiary)' }}>
+            {visibleChannels.length} channels
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={linkUrl}
+          onChange={(e) => setLinkUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && linkUrl.trim()) {
+              setLinkTarget({ src: linkUrl.trim() });
+              setLinkUrl('');
+            }
+          }}
+          placeholder="Play any video link here — YouTube, MP4, WebM or M3U8 stream"
+          className="h-9 flex-1 min-w-[16rem] rounded-lg bg-transparent px-3 text-sm outline-none"
+          style={inputStyle}
+        />
+        <button
+          onClick={() => {
+            if (linkUrl.trim()) {
+              setLinkTarget({ src: linkUrl.trim() });
+              setLinkUrl('');
+            }
+          }}
+          disabled={!linkUrl.trim()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
+          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+        >
+          <Play size={12} />
+          Play in Jarvis
+        </button>
+      </div>
+      <p className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+        Video links open in the built-in player instead of leaving the app. YouTube embeds; MP4/WebM/M3U8 streams play directly. Sites with DRM (Netflix, Twitch, etc.) cannot be embedded and will show a fallback message.
+      </p>
+
+      {error && <ErrorNote message={error} />}
+      {guideError && (
+        <div className="text-xs" style={{ color: 'var(--color-warning)' }}>
+          Playlist loaded, but the TV schedule could not load: {guideError}
+        </div>
+      )}
+
+      {playing && (
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="flex items-center justify-between px-3 py-2" style={{ background: 'var(--color-bg-secondary)' }}>
+            <span className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
+              {playing.name}
+              {playing.group ? <span style={{ color: 'var(--color-text-tertiary)' }}> · {playing.group}</span> : null}
+            </span>
+            <button onClick={stopPlayback} className="text-xs cursor-pointer px-2 py-1 rounded" style={{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
+              Stop
+            </button>
+          </div>
+          <video ref={videoRef} controls autoPlay className="w-full aspect-video bg-black" />
+          {playerError && (
+            <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-error)' }}>{playerError}</div>
+          )}
+        </div>
+      )}
+
+      {channels.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="max-h-[28rem] overflow-y-auto divide-y" style={{ borderColor: 'var(--color-border)' }}>
+            {visibleChannels.map((channel) => {
+              const entries = programs.get(channel.id) ?? [];
+              const now = Date.now();
+              const current = entries.find((p) => p.start <= now && p.stop > now);
+              const next = entries.find((p) => p.start > now);
+              const isPlaying = playing?.url === channel.url;
+              return (
+                <button
+                  key={`${channel.id}:${channel.url}`}
+                  onClick={() => playChannel(channel)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer hover:opacity-90"
+                  style={{ background: isPlaying ? 'var(--color-accent-subtle)' : 'transparent' }}
+                >
+                  <Play size={14} style={{ color: isPlaying ? 'var(--color-accent)' : 'var(--color-text-tertiary)', flexShrink: 0 }} />
+                  <span className="flex-1 min-w-0">
+                    <span className="text-sm truncate block" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
+                    <span className="text-[11px] truncate block" style={{ color: 'var(--color-text-tertiary)' }}>
+                      {channel.group}
+                      {current && (
+                        <span style={{ color: 'var(--color-accent)' }}> · Now: {current.title}</span>
+                      )}
+                      {!current && next && <span> · Next: {next.title}</span>}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+            {visibleChannels.length === 0 && (
+              <div className="px-3 py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+                No channels match the English filter.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <MediaPlayerModal target={linkTarget} onClose={() => setLinkTarget(null)} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -893,6 +1199,7 @@ export function MediaPage() {
 
         <div className="flex-1 overflow-y-auto pr-1 pb-4">
           {tab === 'tv' && <TvGuideTab />}
+          {tab === 'iptv' && <IptvTab />}
           {tab === 'movies' && <CatalogTab type="movie" />}
           {tab === 'shows' && <CatalogTab type="series" />}
           {tab === 'local' && <LocalTab />}
