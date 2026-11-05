@@ -55,7 +55,7 @@ if not exist config.json (
 )
 
 echo [+] Installing OpenJarvis web UI, desktop window and voice (Kokoro / Whisper)
-pip install -e . pywebview "kokoro>=0.9; python_version<'3.13'" soundfile "misaki[en]; python_version<'3.13'" faster-whisper --quiet
+pip install -e ".[desktop]" pywebview "kokoro>=0.9; python_version<'3.13'" soundfile "misaki[en]; python_version<'3.13'" faster-whisper --quiet
 python -c "import sys; sys.exit(sys.version_info >= (3, 13))" || echo [!] Kokoro voice needs Python 3.10-3.12; using the Windows voice instead.
 echo [+] Downloading voice and hands-free models into .\models
 python scripts\download_voice_models.py
