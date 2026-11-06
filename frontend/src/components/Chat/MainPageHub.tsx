@@ -733,6 +733,7 @@ const cryptoGroups: CryptoGroup[] = [
       { id: 'trust-wallet', name: 'Trust Wallet', url: 'https://trustwallet.com/', color: '#3375bb', description: 'Mobile wallet supporting 10M+ assets.', icon: Wallet },
       { id: 'ledger-live', name: 'Ledger Live', url: 'https://www.ledger.com/', color: '#000000', description: 'Hardware wallet companion app.', icon: Wallet },
       { id: 'tangem', name: 'Tangem', url: 'https://tangem.com/', color: '#1a1a1a', description: 'Smartcard hardware wallet — no seed phrase.', icon: Wallet },
+      { id: 'nc-wallet', name: 'NC Wallet', url: 'https://app.nc-wallet.com/', color: '#7c3aed', description: 'Multi-chain self-custody wallet.', icon: Wallet },
     ],
   },
 ];
