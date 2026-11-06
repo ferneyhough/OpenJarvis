@@ -3,9 +3,11 @@
 
 !include "StrFunc.nsh"
 
+${Using:StrFunc} StrRep
+
 !macro NSIS_HOOK_POSTINSTALL
   StrCpy $R9 "$INSTDIR\openjarvis-desktop.exe"
-  ${StrRep} $R9 "\" "#"
+  ${StrRep} $R9 "$R9" "\" "#"
   StrCpy $R8 "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
   WriteRegStr HKCU "$R8\microphone" "Value" "Allow"
   WriteRegStr HKCU "$R8\microphone\NonPackaged\$R9" "Value" "Allow"
@@ -15,7 +17,7 @@
 
 !macro NSIS_HOOK_POSTUNINSTALL
   StrCpy $R9 "$INSTDIR\openjarvis-desktop.exe"
-  ${StrRep} $R9 "\" "#"
+  ${StrRep} $R9 "$R9" "\" "#"
   StrCpy $R8 "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
   DeleteRegKey HKCU "$R8\microphone\NonPackaged\$R9"
   DeleteRegKey HKCU "$R8\webcam\NonPackaged\$R9"

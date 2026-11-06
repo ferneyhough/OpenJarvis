@@ -9,6 +9,8 @@ SetCompressor /SOLID lzma
 !include "StrFunc.nsh"
 !include "x64.nsh"
 
+${Using:StrFunc} StrRep
+
 !define APP_NAME "OpenJarvis"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenJarvisLegacy"
 
@@ -57,12 +59,13 @@ Section "OpenJarvis" SEC_MAIN
   # Grant this install microphone + webcam consent (Windows per-app privacy
   # store). The NonPackaged subkey name encodes the exe path with '#' for '\'.
   StrCpy $R9 "$INSTDIR\OpenJarvis.exe"
-  ${StrRep} $R9 "\" "#"
+  ${StrRep} $R9 "$R9" "\" "#"
   StrCpy $R8 "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
   WriteRegStr HKCU "$R8\microphone" "Value" "Allow"
   WriteRegStr HKCU "$R8\microphone\NonPackaged\$R9" "Value" "Allow"
   WriteRegStr HKCU "$R8\webcam" "Value" "Allow"
   WriteRegStr HKCU "$R8\webcam\NonPackaged\$R9" "Value" "Allow"
+  WriteRegStr HKLM "Software\OpenJarvis" "ConsentKey" "$R9"
 SectionEnd
 
 Section "Desktop shortcut" SEC_DESKTOP
@@ -82,11 +85,12 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\${APP_NAME}"
   Delete "$SMSTARTUP\${APP_NAME}.lnk"
   DeleteRegKey HKLM "${UNINSTALL_KEY}"
+  ReadRegStr $R9 HKLM "Software\OpenJarvis" "ConsentKey"
   DeleteRegKey HKLM "Software\OpenJarvis"
-  StrCpy $R9 "$INSTDIR\OpenJarvis.exe"
-  ${StrRep} $R9 "\" "#"
   StrCpy $R8 "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
-  DeleteRegKey HKCU "$R8\microphone\NonPackaged\$R9"
-  DeleteRegKey HKCU "$R8\webcam\NonPackaged\$R9"
+  ${If} $R9 != ""
+    DeleteRegKey HKCU "$R8\microphone\NonPackaged\$R9"
+    DeleteRegKey HKCU "$R8\webcam\NonPackaged\$R9"
+  ${EndIf}
   RMDir /r "$INSTDIR"
 SectionEnd
