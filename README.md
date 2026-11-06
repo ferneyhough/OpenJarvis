@@ -337,4 +337,16 @@ dangerous tools in **Settings** when you don't need them.
 
 ---
 
+## Archived files (optional restore)
+
+Old projects, downloads, build cache, the iObit Toolbox reference, and portable
+Blender are compressed into `C:\Users\Administrator\JarvisArchive.7z` (outside
+OneDrive — not cloud-synced). To restore everything to its original locations,
+double-click `C:\Users\Administrator\Restore-JarvisArchive.bat` (needs 7-Zip,
+installed). It self-elevates, extracts to `%TEMP%`, and copies each folder back
+to `Downloads`, `C:\BuildCache`, `C:\iobit_toolbox`, `%USERPROFILE%\OpenJarvis`,
+`%USERPROFILE%\whisper-jarvis`, and `%USERPROFILE%\Tools` (Blender).
+
+---
+
 MIT License · built with ❤ for the Emergent community

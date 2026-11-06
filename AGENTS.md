@@ -2,13 +2,28 @@
 
 ## Offline 3D rendering
 
-A portable Blender 4.5.15 LTS lives outside the repo (not OneDrive-synced) at
-`C:\Users\Administrator\JarvisArchive\blender-4.5.15-windows-x64\blender.exe`
-(no install needed). Render headless with:
+A portable Blender 4.5.15 LTS lives outside OneDrive at
+`C:\Users\Administrator\Tools\blender-4.5.15-windows-x64\blender.exe`
+(no install needed; a backup copy is inside `JarvisArchive.7z` — see below).
+Render headless with:
 
 ```
 blender.exe -b --python <script.py>
 ```
+
+The Iron Giant GLB is at `frontend/public/models/iron-giant/iron_giant.glb`
+(CC-BY-4.0, bolshooylenny — attribution required). Head-only renders delete
+all faces below ~51% of model height (neck cut) via bmesh.
+
+## Archived files
+
+`C:\Users\Administrator\JarvisArchive.7z` holds old projects, downloads,
+build cache, the iObit Toolbox reference, and portable Blender — outside
+OneDrive so nothing cloud-syncs. Double-click
+`C:\Users\Administrator\Restore-JarvisArchive.bat` to extract and copy each
+folder back to its original location (`Downloads`, `C:\BuildCache`,
+`C:\iobit_toolbox`, `%USERPROFILE%\OpenJarvis`, `%USERPROFILE%\whisper-jarvis`,
+`%USERPROFILE%\Tools`). Requires 7-Zip.
 
 ## Media guide
 

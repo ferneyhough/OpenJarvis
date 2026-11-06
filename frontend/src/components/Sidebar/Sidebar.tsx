@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import {
   MessageSquare,
@@ -30,6 +30,7 @@ export function Sidebar() {
 
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const createConversation = useAppStore((s) => s.createConversation);
   const selectedModel = useAppStore((s) => s.selectedModel);
   const serverInfo = useAppStore((s) => s.serverInfo);
@@ -63,16 +64,22 @@ export function Sidebar() {
   const nextTheme = settings.theme === 'light' ? 'dark' : settings.theme === 'dark' ? 'system' : 'light';
 
   const messages = useAppStore((s) => s.messages);
+  // Always close the drawer on navigation — covers voice commands,
+  // browser back/forward, and any path that bypasses the nav buttons.
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname, setSidebarOpen]);
+
   const handleNewChat = () => {
     // Don't create a new chat if the current one is empty
     if (messages.length === 0) {
       navigate('/');
-      toggleSidebar();
+      setSidebarOpen(false);
       return;
     }
     createConversation(selectedModel);
     navigate('/');
-    toggleSidebar();
+    setSidebarOpen(false);
   };
 
   const navItems = [
@@ -96,7 +103,7 @@ export function Sidebar() {
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('jarvis:open-section', { detail: { section } }));
     }, 200);
-    toggleSidebar();
+    setSidebarOpen(false);
   };
 
   return (
@@ -219,6 +226,28 @@ export function Sidebar() {
             </div>
           </div>
 
+          {/* Hub panels */}
+          <div className="px-3 pb-2">
+            <div className="text-[10px] font-semibold uppercase tracking-widest px-1 pb-1" style={{ color: 'var(--color-text-tertiary)' }}>
+              Panels
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {panelItems.map((item) => (
+                <button
+                  key={item.section}
+                  onClick={() => openHubPanel(item.section)}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <item.icon size={16} />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-2">
             <ConversationList searchQuery={searchQuery} />
@@ -277,7 +306,7 @@ export function Sidebar() {
                 )}
                 <button
                   key={item.path}
-                  onClick={() => { navigate(item.path); toggleSidebar(); }}
+                  onClick={() => { navigate(item.path); setSidebarOpen(false); }}
                   className="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer"
                   style={{
                     background: isActive ? 'var(--color-accent-subtle)' : 'transparent',
@@ -308,26 +337,6 @@ export function Sidebar() {
               );
             })}
           </nav>
-          <div className="px-3 pb-2">
-            <div className="text-[10px] font-semibold uppercase tracking-widest px-1 pb-1" style={{ color: 'var(--color-text-tertiary)' }}>
-              Panels
-            </div>
-            <div className="flex flex-col gap-0.5">
-              {panelItems.map((item) => (
-                <button
-                  key={item.section}
-                  onClick={() => openHubPanel(item.section)}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer"
-                  style={{ color: 'var(--color-text-secondary)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <item.icon size={16} />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </aside>
     </>

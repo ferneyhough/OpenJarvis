@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router';
+import { Outlet, useNavigate, useLocation } from 'react-router';
+import { X } from 'lucide-react';
 import { ApprovalBell } from './ApprovalBell';
 import { Sidebar } from './Sidebar/Sidebar';
 import { PageDetails } from './PageDetails';
@@ -25,12 +26,33 @@ export function Layout() {
   }, []);
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const showClose = location.pathname !== '/' && location.pathname !== '/media';
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden relative" style={{ paddingTop: '3px' }}>
       <div className="hud-backdrop" aria-hidden="true" />
       <SystemPulse apiReachable={apiReachable} />
       <ApprovalBell />
+
+      {showClose && (
+        <button
+          onClick={() => navigate('/')}
+          title="Close — back to chat"
+          aria-label="Close page"
+          className="fixed top-3 right-3 z-30 flex items-center justify-center w-9 h-9 rounded-lg transition-colors cursor-pointer"
+          style={{
+            background: 'var(--color-bg-secondary)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-secondary)',
+            backdropFilter: 'blur(12px)',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
+        >
+          <X size={17} />
+        </button>
+      )}
 
       {/* Health check banner */}
       {apiReachable === false && (
