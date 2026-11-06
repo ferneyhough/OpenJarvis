@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
+import { SystemPanel } from '../Chat/SystemPanel';
 import { useAppStore } from '../../lib/store';
 import { fetchModels, setOfflineMode } from '../../lib/api';
 
@@ -251,6 +252,11 @@ export function Sidebar() {
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-2">
             <ConversationList searchQuery={searchQuery} />
+          </div>
+
+          {/* System stats (moved here from the old side panel) */}
+          <div className="shrink-0 px-2 pt-1" style={{ borderTop: '1px solid var(--color-border)' }}>
+            <SystemPanel embedded />
           </div>
 
           {/* Bottom nav */}

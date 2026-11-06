@@ -34,7 +34,7 @@ const CLOUD_PRICING = [
   { name: 'Gemini 3.1 Pro', input: 2.00, output: 12.00, primary: false },
 ];
 
-export function SystemPanel() {
+export function SystemPanel({ embedded = false }: { embedded?: boolean }) {
   const savings = useAppStore((s) => s.savings);
   const toggleSystemPanel = useAppStore((s) => s.toggleSystemPanel);
   const optInEnabled = useAppStore((s) => s.optInEnabled);
@@ -77,8 +77,12 @@ export function SystemPanel() {
 
   return (
     <div
-      className="flex flex-col h-full overflow-y-auto"
-      style={{
+      className="flex flex-col overflow-y-auto"
+      style={embedded ? {
+        width: '100%',
+        maxHeight: '46%',
+        background: 'transparent',
+      } : {
         width: 280,
         minWidth: 280,
         background: 'var(--color-bg)',
@@ -93,14 +97,16 @@ export function SystemPanel() {
         <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--color-text-secondary)' }}>
           System
         </span>
-        <button
-          onClick={toggleSystemPanel}
-          className="p-1 rounded-md transition-colors cursor-pointer"
-          style={{ color: 'var(--color-text-tertiary)' }}
-          title="Close panel"
-        >
-          <X size={14} />
-        </button>
+        {!embedded && (
+          <button
+            onClick={toggleSystemPanel}
+            className="p-1 rounded-md transition-colors cursor-pointer"
+            style={{ color: 'var(--color-text-tertiary)' }}
+            title="Close panel"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-4 p-4">
