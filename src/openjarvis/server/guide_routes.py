@@ -177,13 +177,17 @@ def _meta_brief(meta: dict) -> dict:
 
 
 @guide_router.get("/catalog/{media_type}")
-def guide_catalog(media_type: str) -> dict:
-    """Top movies or series from the Cinemeta catalog."""
+def guide_catalog(media_type: str, genre: str = "") -> dict:
+    """Top movies or series from the Cinemeta catalog, optionally by genre."""
     _require_online()
     media_type = media_type.lower()
     if media_type not in _CATALOG_TYPES:
         raise HTTPException(status_code=400, detail="type must be movie or series")
-    url = f"{_CINEMETA}/catalog/{media_type}/top.json"
+    suffix = ""
+    if genre:
+        safe_genre = urllib.parse.quote(genre.strip(), safe="")
+        suffix = f"/genre={safe_genre}"
+    url = f"{_CINEMETA}/catalog/{media_type}/top{suffix}.json"
     try:
         data = _cached_get(url)
     except Exception as exc:
@@ -249,6 +253,17 @@ def guide_meta(media_type: str, imdb_id: str) -> dict:
             if v.get("kind") in ("Trailer", "Clip")
         ],
         "imdb_url": f"https://www.imdb.com/title/{imdb}/",
+        "episodes": [
+            {
+                "season": v.get("season"),
+                "episode": v.get("episode"),
+                "title": v.get("title"),
+                "released": v.get("released"),
+                "thumbnail": v.get("thumbnail"),
+            }
+            for v in videos
+            if v.get("season") is not None and v.get("episode") is not None
+        ],
     }
 
 
@@ -583,20 +598,18 @@ def _fetch_epg_bytes(url: str) -> bytes:
     return raw
 
 
-@guide_router.get("/epg")
-def guide_epg(url: str, hours: float = 24.0) -> dict:
-    """Fetch an XMLTV guide and return channel names + programmes in a window.
+# Parsed-XMLTV document cache: url -> (monotonic_ts, channels, programmes).
+# Programmes are kept for [now-24h, now+72h] so any windowed request inside
+# that span is answered without re-downloading or re-parsing the guide file.
+_epg_doc_cache: dict[str, tuple[float, dict, dict]] = {}
+_EPG_DOC_TTL = 6 * 3600
 
-    Only programmes overlapping ``[now - 1h, now + hours]`` are returned so the
-    payload stays small even for multi-day guide files. ``hours`` is clamped
-    to 1-72.
-    """
-    _require_online()
-    hours = min(max(float(hours or 24.0), 1.0), 72.0)
-    cache_key = f"epg:{url}:{hours:g}:{int(time.time() // 900)}"
-    hit = _cache.get(cache_key)
-    if hit is not None and time.monotonic() - hit[0] < _EPG_CACHE_TTL:
-        return hit[1]
+
+def _epg_document(url: str) -> tuple[dict, dict]:
+    now = time.time()
+    hit = _epg_doc_cache.get(url)
+    if hit is not None and time.monotonic() - hit[0] < _EPG_DOC_TTL:
+        return hit[1], hit[2]
 
     raw = _fetch_epg_bytes(url)
     try:
@@ -613,9 +626,8 @@ def guide_epg(url: str, hours: float = 24.0) -> dict:
         name_match = _xmltv_display_re.search(body) or _xmltv_title_re.search(body)
         channels[cid.group(1)] = _strip_html(name_match.group(1)) if name_match else cid.group(1)
 
-    now = time.time()
-    window_start = now - 3600
-    window_stop = now + hours * 3600
+    keep_start = now - 24 * 3600
+    keep_stop = now + 72 * 3600
     programmes: dict[str, list[dict]] = {}
     for match in _xmltv_programme_re.finditer(text):
         attrs, body = match.groups()
@@ -628,7 +640,7 @@ def guide_epg(url: str, hours: float = 24.0) -> dict:
         stop = _xmltv_time(stop_raw.group(1))
         if start is None or stop is None or stop <= start:
             continue
-        if stop < window_start or start > window_stop:
+        if stop < keep_start or start > keep_stop:
             continue
         title_match = _xmltv_title_re.search(body)
         title = _strip_html(title_match.group(1)) if title_match else ""
@@ -637,6 +649,39 @@ def guide_epg(url: str, hours: float = 24.0) -> dict:
         )
     for entries in programmes.values():
         entries.sort(key=lambda p: p["start"])
+
+    _epg_doc_cache[url] = (time.monotonic(), channels, programmes)
+    return channels, programmes
+
+
+@guide_router.get("/epg")
+def guide_epg(url: str, hours: float = 24.0) -> dict:
+    """Fetch an XMLTV guide and return channel names + programmes in a window.
+
+    Only programmes overlapping ``[now - 1h, now + hours]`` are returned so the
+    payload stays small even for multi-day guide files. ``hours`` is clamped
+    to 1-72.
+    """
+    _require_online()
+    hours = min(max(float(hours or 24.0), 1.0), 72.0)
+    cache_key = f"epg:{url}:{hours:g}:{int(time.time() // 900)}"
+    hit = _cache.get(cache_key)
+    if hit is not None and time.monotonic() - hit[0] < _EPG_CACHE_TTL:
+        return hit[1]
+
+    channels, all_programmes = _epg_document(url)
+
+    now = time.time()
+    window_start = now - 3600
+    window_stop = now + hours * 3600
+    programmes: dict[str, list[dict]] = {}
+    for cid, entries in all_programmes.items():
+        windowed = [
+            p for p in entries
+            if p["stop"] >= window_start and p["start"] <= window_stop
+        ]
+        if windowed:
+            programmes[cid] = windowed
 
     result = {
         "channels": channels,
@@ -647,6 +692,65 @@ def guide_epg(url: str, hours: float = 24.0) -> dict:
     }
     _cache[cache_key] = (time.monotonic(), result)
     return result
+
+
+# ---------------------------------------------------------------------------
+# EPG boot prefetch — warms the parsed-guide cache once a day, progressively
+# expanding the window 1h -> 6h -> 12h -> 24h so first paint stays fast.
+# ---------------------------------------------------------------------------
+
+EPG_SOURCES: list[str] = [
+    "https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_CA2.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_IE1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_AU1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_NZ1.xml.gz",
+    "https://magnetic.website/jet/epg/merged_epg.xml.gz",
+]
+
+_PREFETCH_MARKER = (
+    Path(os.environ.get("OPENJARVIS_CONFIG_DIR", str(Path.home() / ".openjarvis")))
+    / "epg_prefetch.json"
+)
+_prefetch_started = False
+
+
+def prefetch_epg_sources() -> None:
+    """Background thread: once per day, warm EPG docs at 1h/6h/12h/24h."""
+    global _prefetch_started
+    if _prefetch_started:
+        return
+    _prefetch_started = True
+
+    def _run() -> None:
+        import datetime as _dt
+        import json as _json
+
+        today = _dt.date.today().isoformat()
+        try:
+            marker = _json.loads(_PREFETCH_MARKER.read_text())
+            if marker.get("date") == today:
+                return
+        except Exception:
+            pass
+        time.sleep(20)  # let the server finish booting first
+        for hours in (1, 6, 12, 24):
+            for url in EPG_SOURCES:
+                try:
+                    guide_epg(url, hours)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("EPG prefetch failed %s @%sh: %s", url, hours, exc)
+            time.sleep(30)  # breathe between window passes
+        try:
+            _PREFETCH_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            _PREFETCH_MARKER.write_text(_json.dumps({"date": today}))
+        except Exception:
+            pass
+
+    import threading
+
+    threading.Thread(target=_run, daemon=True, name="epg-prefetch").start()
 
 
 # ---------------------------------------------------------------------------

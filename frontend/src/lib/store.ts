@@ -130,6 +130,9 @@ interface Settings {
   localImageModel: boolean;
   localVideoModel: boolean;
   offlineMode: boolean;
+  // Mic push-to-talk hotkey. '' = not chosen yet (setup prompt shows),
+  // 'Off' = user declined, otherwise a combo like 'F9' or 'Ctrl+Space'.
+  micHotkey: string;
 }
 
 function loadSettings(): Settings {
@@ -165,6 +168,7 @@ function loadSettings(): Settings {
     localImageModel: true,
     localVideoModel: true,
     offlineMode: false,
+    micHotkey: '',
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -181,13 +185,22 @@ function loadSettings(): Settings {
     const settings = {
       ...defaults,
       ...stored,
+      // Every capability toggle is forced on permanently — the app is meant to
+      // run with all features enabled. offlineMode stays user-controlled since
+      // it intentionally disables network features.
       developerModeEnabled: true,
       handsFreeEnabled: true,
       steamContextEnabled: true,
       personalSourcesEnabled: true,
       allowShell: true,
+      allowWeb: true,
+      allowFiles: true,
+      speechEnabled: true,
+      voiceOutputEnabled: true,
+      voiceAutoplay: true,
       localImageModel: true,
       localVideoModel: true,
+      permissionMode: 'allow' as PermissionMode,
     };
     if (needsVoiceSettingsMigration || stored.developerModeEnabled === false) {
       try {

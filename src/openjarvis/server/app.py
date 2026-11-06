@@ -26,7 +26,9 @@ from openjarvis.server.connectors_router import create_connectors_router
 from openjarvis.server.dashboard import dashboard_router
 from openjarvis.server.digest_routes import create_digest_router
 from openjarvis.server.game_routes import games_router
-from openjarvis.server.guide_routes import guide_router
+from openjarvis.server.guide_routes import guide_router, prefetch_epg_sources
+from openjarvis.server.ivue_routes import ivue_router
+from openjarvis.server.vod_routes import vod_router
 from openjarvis.server.media_routes import media_router
 from openjarvis.server.research_router import router as research_router
 from openjarvis.server.routes import router
@@ -254,6 +256,7 @@ def create_app(
 
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
+        prefetch_epg_sources()
         try:
             yield
         finally:
@@ -500,6 +503,8 @@ def create_app(
     app.include_router(analytics_router)
     app.include_router(media_router)
     app.include_router(guide_router)
+    app.include_router(ivue_router)
+    app.include_router(vod_router)
     app.include_router(games_router)
     include_all_routes(app)
 

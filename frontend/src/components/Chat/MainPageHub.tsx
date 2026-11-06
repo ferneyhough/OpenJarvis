@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowUpRight,
+  Baby,
   BrainCircuit,
   Code2,
   Download,
@@ -28,7 +29,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
-import { isTauri, launchApp, fetchGuideDocument } from '../../lib/api';
+import { isTauri, launchApp, fetchGuideDocument, launchGame, mcServer } from '../../lib/api';
 import { getPlayniteLibrary, launchPlayniteGame, type PlayniteGame } from '../../lib/playnite';
 import { getSteamLibrary, launchSteamGame, type SteamLibrary } from '../../lib/steam';
 import { MediaPlayerModal, type MediaPlayerTarget } from '../MediaPlayerModal';
@@ -46,7 +47,7 @@ import {
   type GameLauncherId,
 } from '../../lib/game-launchers';
 
-type HubSection = 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
+type HubSection = 'kids' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
 type GameSource = 'steam' | 'playnite';
 
 interface HubService {
@@ -559,6 +560,126 @@ function GamesPanel() {
       )}
       {visibleSource === 'steam' && <SteamGames />}
       {visibleSource === 'playnite' && <PlayniteGames />}
+    </div>
+  );
+}
+
+const kidsApps: HubService[] = [
+  { id: 'youtube-kids', name: 'YouTube Kids', url: 'https://www.youtube.com/kids', color: '#ff0033', description: 'Kid-friendly videos picked for younger viewers.', icon: Play },
+  { id: 'messenger-kids', name: 'Messenger Kids', url: 'https://www.messenger.com/', color: '#a033ff', description: 'Video calls and messages for kids — needs a parent\'s Facebook account.', icon: MessageCircle },
+  { id: 'pbskids', name: 'PBS Kids', url: 'https://pbskids.org/', color: '#0074bc', description: 'Free educational games and videos for kids.', icon: Tv },
+  { id: 'nickjr', name: 'Nick Jr.', url: 'https://www.nickjr.com/', color: '#ff6f00', description: 'Games and videos for preschoolers.', icon: Tv },
+  { id: 'google-classroom', name: 'Google Classroom', url: 'https://classroom.google.com/', color: '#0f9d58', description: 'School assignments and classes — sign in with the school Google account.', icon: Tv },
+];
+
+function KidsPanel() {
+  const navigate = useNavigate();
+  const [launching, setLaunching] = useState<string | null>(null);
+  const [serverBusy, setServerBusy] = useState(false);
+
+  const hostMinecraftServer = async () => {
+    setServerBusy(true);
+    try {
+      const status = await mcServer('status');
+      if (status.running) {
+        toast.info('Minecraft server is already running.');
+        return;
+      }
+      toast.message('Setting up Minecraft server (first run downloads ~60 MB)…');
+      await mcServer('start');
+      toast.success('Minecraft server started — friends can join on port 25565.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setServerBusy(false);
+    }
+  };
+
+  const launchBundledGame = async (kind: 'portablemc' | 'roblox') => {
+    setLaunching(kind);
+    try {
+      await launchGame({ kind });
+      toast.success(kind === 'portablemc' ? 'Starting Minecraft…' : 'Starting Roblox…');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLaunching(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3 px-4 pb-4">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Kids apps">
+        {kidsApps.map((app) => {
+          const Icon = app.icon;
+          return (
+            <button
+              key={app.id}
+              type="button"
+              onClick={() => void openExternal(app.url)}
+              title={app.description}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
+              style={{
+                color: app.color,
+                background: `${app.color}18`,
+                border: `1px solid ${app.color}55`,
+              }}
+            >
+              <Icon size={14} />
+              {app.name}
+              <ExternalLink size={11} />
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Kids games">
+        <button
+          type="button"
+          onClick={() => void launchBundledGame('portablemc')}
+          disabled={launching !== null}
+          title="Launches the bundled PortableMC — installs and starts the latest Minecraft release"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm disabled:opacity-50"
+          style={{ color: '#62a944', background: '#62a94418', border: '1px solid #62a94455' }}
+        >
+          {launching === 'portablemc' ? <Loader2 size={14} className="animate-spin" /> : <Gamepad2 size={14} />}
+          Minecraft
+        </button>
+        <button
+          type="button"
+          onClick={() => void launchBundledGame('roblox')}
+          disabled={launching !== null}
+          title="Launches the newest installed Roblox player"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm disabled:opacity-50"
+          style={{ color: '#e2231a', background: '#e2231a18', border: '1px solid #e2231a55' }}
+        >
+          {launching === 'roblox' ? <Loader2 size={14} className="animate-spin" /> : <Gamepad2 size={14} />}
+          Roblox
+        </button>
+        <button
+          type="button"
+          onClick={() => void hostMinecraftServer()}
+          disabled={serverBusy || launching !== null}
+          title="Downloads the official dedicated server + Java runtime once, then hosts it for friends to join"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm disabled:opacity-50"
+          style={{ color: '#4ade80', background: '#4ade8018', border: '1px solid #4ade8055' }}
+        >
+          {serverBusy ? <Loader2 size={14} className="animate-spin" /> : <Gamepad2 size={14} />}
+          Host MC Server
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/media')}
+          title="Cartoon, anime and kids channels have their own guide section"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm"
+          style={{ color: 'var(--color-accent)', background: 'var(--color-accent-subtle)', border: '1px solid var(--color-border)' }}
+        >
+          <Baby size={14} /> Kids TV guide
+        </button>
+      </div>
+      <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+        Messenger Kids runs inside the Messenger mobile/desktop apps and needs a parent&apos;s Facebook
+        account — the tile opens Messenger. Cartoons, anime and kids channels live in Media → IPTV → Kids.
+      </p>
     </div>
   );
 }
@@ -1304,6 +1425,7 @@ function MusicPanel() {
 }
 
 export function MainPageHub() {
+  const navigate = useNavigate();
   const [section, setSection] = useState<HubSection | null>(null);
   const [visitedSections, setVisitedSections] = useState<Set<HubSection>>(() => new Set());
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
@@ -1318,6 +1440,12 @@ export function MainPageHub() {
   return (
     <section className="shrink-0 border-b px-4 pt-2" style={{ borderColor: 'var(--color-border)' }} aria-label="Games, social, media, remote access, stores, and AI">
       <nav className="flex flex-wrap items-center gap-2 pb-2" aria-label="Main page sections">
+        <ActionButton active={false} onClick={() => navigate('/media')} title="Open TV, movie and show guides">
+          <Tv size={15} /> Guides
+        </ActionButton>
+        <ActionButton active={section === 'kids'} onClick={() => selectSection('kids')}>
+          <Baby size={15} /> Kids
+        </ActionButton>
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
         </ActionButton>
@@ -1352,6 +1480,7 @@ export function MainPageHub() {
         )}
       </nav>
       <div className={`max-h-[42vh] overflow-y-auto pb-2 ${section ? '' : 'hidden'}`}>
+        {visitedSections.has('kids') && <div hidden={section !== 'kids'}><KidsPanel /></div>}
         {visitedSections.has('browsers') && <div hidden={section !== 'browsers'}><BrowsersPanel /></div>}
         {visitedSections.has('games') && <div hidden={section !== 'games'}><GamesPanel /></div>}
         {visitedSections.has('social') && <div hidden={section !== 'social'}><SocialPanel /></div>}

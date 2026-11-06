@@ -15,7 +15,7 @@ import {
   AlertCircle,
   Play,
   Music,
-  Gamepad2,
+  Zap,
 } from 'lucide-react';
 import {
   fetchTvGuide,
@@ -26,13 +26,6 @@ import {
   fetchGuideLinks,
   addGuideLink,
   deleteGuideLink,
-  fetchGamesLibrary,
-  launchGame,
-  addCustomGame,
-  deleteCustomGame,
-  type GamesLibrary,
-  type SteamGame,
-  type CustomGame,
   type TvEpisode,
   type GuideItem,
   type GuideMetaDetail,
@@ -41,13 +34,24 @@ import {
   type GuideLink,
   fetchGuideDocument,
   fetchGuideEpg,
+  fetchIvueGuide,
+  fetchVodStreams,
+  vodTorrentAdd,
+  vodTorrentStatus,
+  vodTorrentRemove,
+  vodTorrentStreamUrl,
+  vodMagnetUri,
+  getBase,
   type GuideEpgResponse,
+  type VodStream,
+  type VodEpisode,
+  type VodTorrentStatus,
 } from '../lib/api';
 import { parseM3U, parseXMLTV, type M3UChannel, type GuideProgram } from '../lib/media-guide';
 import { MediaPlayerModal, type MediaPlayerTarget } from '../components/MediaPlayerModal';
 import Hls from 'hls.js';
 
-type Tab = 'tv' | 'iptv' | 'movies' | 'shows' | 'local' | 'games' | 'links';
+type Tab = 'tv' | 'iptv' | 'movies' | 'shows' | 'local' | 'links';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof Tv }> = [
   { id: 'tv', label: 'TV Guide', icon: Tv },
@@ -55,7 +59,6 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof Tv }> = [
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'shows', label: 'Shows', icon: Clapperboard },
   { id: 'local', label: 'Local', icon: FolderOpen },
-  { id: 'games', label: 'Games', icon: Gamepad2 },
   { id: 'links', label: 'Links', icon: Link2 },
 ];
 
@@ -227,20 +230,64 @@ function TvGuideTab() {
 // Catalog / search tab (movies & shows share this)
 // ---------------------------------------------------------------------------
 
+interface CatalogRow {
+  label: string;
+  items: GuideItem[];
+}
+
+const CATALOG_GENRES: Record<'movie' | 'series', string[]> = {
+  movie: ['Action', 'Comedy', 'Drama', 'Horror', 'Thriller', 'Documentary', 'Animation', 'Romance'],
+  series: ['Drama', 'Comedy', 'Crime', 'Thriller', 'Documentary', 'Animation', 'Family', 'Mystery'],
+};
+
+const CATALOG_ROW_SIZE = 24;
+
 function CatalogTab({ type }: { type: 'movie' | 'series' }) {
   const [items, setItems] = useState<GuideItem[]>([]);
+  const [rows, setRows] = useState<CatalogRow[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState<GuideMetaDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [selSeason, setSelSeason] = useState<number | ''>('');
+  const [selEpisode, setSelEpisode] = useState<number | ''>('');
+  const [streams, setStreams] = useState<VodStream[] | null>(null);
+  const [streamsLoading, setStreamsLoading] = useState(false);
+  const [streamsError, setStreamsError] = useState('');
+  const [qualityFilter, setQualityFilter] = useState('');
+  const [bestTesting, setBestTesting] = useState(false);
+  const [playerTarget, setPlayerTarget] = useState<MediaPlayerTarget | null>(null);
+  const [torrentJobs, setTorrentJobs] = useState<
+    Record<string, { tid: string; status?: VodTorrentStatus; error?: string }>
+  >({});
 
   const loadCatalog = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await fetchGuideCatalog(type);
-      setItems(data.items);
+      const labels = ['', ...CATALOG_GENRES[type]];
+      const results = await Promise.allSettled(
+        labels.map((genre) => fetchGuideCatalog(type, genre)),
+      );
+      // Dedupe across the whole guide — a title appears only in the first
+      // row that contains it.
+      const seen = new Set<string>();
+      const built: CatalogRow[] = [];
+      results.forEach((res, i) => {
+        if (res.status !== 'fulfilled') return;
+        const deduped = (res.value.items ?? [])
+          .filter((it) => {
+            const key = it.imdb_id || `${it.name ?? ''}`;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, CATALOG_ROW_SIZE);
+        if (deduped.length > 0) built.push({ label: labels[i] || 'Top', items: deduped });
+      });
+      if (built.length === 0) setError('Catalog unavailable');
+      setRows(built);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Catalog unavailable');
     } finally {
@@ -250,6 +297,7 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
 
   useEffect(() => {
     setItems([]);
+    setRows([]);
     setQuery('');
     void loadCatalog();
   }, [loadCatalog]);
@@ -258,6 +306,7 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
     if (query.trim().length < 2) return;
     setLoading(true);
     setError('');
+    setRows([]);
     try {
       const data = await searchGuide(query.trim(), type);
       setItems(data.items);
@@ -271,15 +320,279 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
   const openDetail = async (item: GuideItem) => {
     if (!item.imdb_id) return;
     setDetailLoading(true);
+    setStreams(null);
+    setStreamsError('');
+    setSelSeason('');
+    setSelEpisode('');
+    setTorrentJobs({});
     try {
       const d = await fetchGuideMeta(type, item.imdb_id);
       setDetail(d);
+      const seasons = Array.from(
+        new Set((d.episodes ?? []).map((e) => e.season).filter((s): s is number => s != null)),
+      ).sort((a, b) => a - b);
+      if (type === 'series' && seasons.length > 0) setSelSeason(seasons[0]);
     } catch {
       setDetail(null);
     } finally {
       setDetailLoading(false);
     }
   };
+
+  const episodes = detail?.episodes ?? [];
+  const seasons = useMemo(
+    () =>
+      Array.from(new Set(episodes.map((e) => e.season).filter((s): s is number => s != null))).sort(
+        (a, b) => a - b,
+      ),
+    [episodes],
+  );
+  const seasonEpisodes = useMemo(
+    () =>
+      episodes
+        .filter((e) => e.season === selSeason && e.episode != null)
+        .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0)),
+    [episodes, selSeason],
+  );
+
+  useEffect(() => {
+    if (type === 'series' && selSeason !== '') {
+      const first = episodes
+        .filter((e) => e.season === selSeason && e.episode != null)
+        .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))[0];
+      setSelEpisode(first?.episode ?? '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selSeason]);
+
+  // Poll active torrent jobs for progress.
+  useEffect(() => {
+    const active = Object.values(torrentJobs).filter((j) => j.tid && !j.status?.finished);
+    if (active.length === 0) return;
+    const timer = window.setInterval(() => {
+      void Promise.all(
+        active.map(async (j) => {
+          try {
+            const status = await vodTorrentStatus(j.tid);
+            setTorrentJobs((prev) => ({ ...prev, [j.tid]: { ...prev[j.tid], tid: j.tid, status } }));
+          } catch {
+            /* keep last status */
+          }
+        }),
+      );
+    }, 2000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(Object.keys(torrentJobs))]);
+
+  const loadSources = async () => {
+    if (!detail) return;
+    if (type === 'series' && (selSeason === '' || selEpisode === '')) {
+      setStreamsError('Pick a season and episode first.');
+      return;
+    }
+    setStreamsLoading(true);
+    setStreamsError('');
+    setStreams(null);
+    try {
+      const data = await fetchVodStreams(
+        type,
+        detail.meta.imdb_id,
+        type === 'series' ? Number(selSeason) : undefined,
+        type === 'series' ? Number(selEpisode) : undefined,
+      );
+      setStreams(data.streams);
+    } catch (e) {
+      setStreamsError(e instanceof Error ? e.message : 'Source lookup failed');
+    } finally {
+      setStreamsLoading(false);
+    }
+  };
+
+  const ensureTorrent = async (stream: VodStream): Promise<string> => {
+    const key = stream.id;
+    const existing = torrentJobs[key];
+    if (existing?.tid) return existing.tid;
+    if (!stream.infoHash) throw new Error('Stream has no torrent hash');
+    const magnet = vodMagnetUri(stream.infoHash, stream.name || stream.title || undefined);
+    const added = await vodTorrentAdd(magnet, stream.fileIdx);
+    setTorrentJobs((prev) => ({ ...prev, [key]: { tid: added.id } }));
+    return added.id;
+  };
+
+  const playStream = async (stream: VodStream) => {
+    const title = `${detail?.meta.name ?? ''} — ${stream.name || stream.title || stream.quality}`;
+    if (stream.url) {
+      setPlayerTarget({ src: stream.url, title });
+      return;
+    }
+    if (stream.externalUrl) {
+      window.open(stream.externalUrl, '_blank', 'noopener');
+      return;
+    }
+    try {
+      const tid = await ensureTorrent(stream);
+      setPlayerTarget({ src: vodTorrentStreamUrl(tid), title });
+    } catch (e) {
+      setStreamsError(e instanceof Error ? e.message : 'Could not start torrent');
+    }
+  };
+
+  const downloadStream = async (stream: VodStream) => {
+    if (stream.url) {
+      window.open(stream.url, '_blank', 'noopener');
+      return;
+    }
+    try {
+      const tid = await ensureTorrent(stream);
+      window.open(vodTorrentStreamUrl(tid, true), '_blank', 'noopener');
+    } catch (e) {
+      setStreamsError(e instanceof Error ? e.message : 'Could not start torrent');
+    }
+  };
+
+  const qualities = useMemo(() => {
+    if (!streams) return [];
+    const order = ['8K', '4K', '1080P', '720P', '480P'];
+    const present = new Set(streams.map((s) => s.quality).filter(Boolean));
+    const sorted = order.filter((q) => present.has(q));
+    for (const q of present) if (!sorted.includes(q)) sorted.push(q);
+    return sorted;
+  }, [streams]);
+
+  const filteredStreams = useMemo(() => {
+    if (!streams) return null;
+    if (!qualityFilter) return streams;
+    return streams.filter((s) => s.quality === qualityFilter);
+  }, [streams, qualityFilter]);
+
+  const fmtRate = (bps: number) => {
+    if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} MB/s`;
+    if (bps >= 1_000) return `${Math.round(bps / 1_000)} KB/s`;
+    return `${Math.round(bps)} B/s`;
+  };
+
+  // Speed-test the top torrent candidates and play the fastest.
+  const playBest = async () => {
+    if (!detail || !filteredStreams) return;
+    const title = detail.meta.name;
+    const torrents = filteredStreams.filter((s) => s.isTorrent && s.infoHash);
+    const directs = filteredStreams.filter((s) => s.url);
+
+    if (torrents.length === 0) {
+      const first = directs[0] ?? filteredStreams[0];
+      if (first) void playStream(first);
+      else setStreamsError('No playable sources in this quality.');
+      return;
+    }
+
+    setBestTesting(true);
+    setStreamsError('');
+    // Candidates: highest seeders first, cap at 5 to keep the test quick.
+    const candidates = [...torrents]
+      .sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0))
+      .slice(0, 5);
+
+    // Phase 1: add all candidates in parallel (metadata fetch per torrent).
+    const added = await Promise.all(
+      candidates.map(async (s) => {
+        try {
+          const tid = await ensureTorrent(s);
+          return { stream: s, tid };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const live = added.filter((x): x is { stream: VodStream; tid: string } => x !== null);
+
+    // Phase 2: sample download rates for ~6s and pick the fastest.
+    let winner: { stream: VodStream; tid: string } | null = null;
+    if (live.length === 1) {
+      winner = live[0];
+    } else if (live.length > 1) {
+      const sample = async () => {
+        const rates = new Map<string, number>();
+        await Promise.all(
+          live.map(async ({ tid }) => {
+            try {
+              const st = await vodTorrentStatus(tid);
+              rates.set(tid, st.download_rate);
+            } catch {
+              rates.set(tid, 0);
+            }
+          }),
+        );
+        return rates;
+      };
+      await new Promise((r) => setTimeout(r, 4000));
+      const rates1 = await sample();
+      await new Promise((r) => setTimeout(r, 2500));
+      const rates2 = await sample();
+      let bestRate = -1;
+      for (const { tid } of live) {
+        const rate = Math.max(rates1.get(tid) ?? 0, rates2.get(tid) ?? 0);
+        if (rate > bestRate) {
+          bestRate = rate;
+          winner = live.find((x) => x.tid === tid) ?? null;
+        }
+      }
+      // Remove the losers to free bandwidth.
+      await Promise.all(
+        live
+          .filter((x) => x.tid !== winner?.tid)
+          .map((x) => vodTorrentRemove(x.tid).catch(() => {})),
+      );
+      setTorrentJobs((prev) => {
+        const next = { ...prev };
+        for (const x of live) {
+          if (x.tid !== winner?.tid) {
+            for (const [k, v] of Object.entries(next)) {
+              if (v.tid === x.tid) delete next[k];
+            }
+          }
+        }
+        return next;
+      });
+    }
+
+    setBestTesting(false);
+    if (winner) {
+      const w = winner.stream;
+      setPlayerTarget({
+        src: vodTorrentStreamUrl(winner.tid),
+        title: `${title} — ${w.name || w.title || w.quality} (best source)`,
+      });
+    } else if (directs[0]) {
+      void playStream(directs[0]);
+    } else {
+      setStreamsError('Could not start any torrent source.');
+    }
+  };
+
+  const renderCard = (item: GuideItem, compact = false) => (
+    <button
+      key={`${item.imdb_id}-${item.name}`}
+      onClick={() => void openDetail(item)}
+      className={`text-left rounded-xl overflow-hidden transition-transform hover:scale-[1.03] cursor-pointer shrink-0 ${compact ? 'w-32' : 'w-40'}`}
+      style={panelStyle}
+    >
+      {item.poster ? (
+        <img src={item.poster} alt={item.name ?? ''} className="w-full aspect-[2/3] object-cover" loading="lazy" />
+      ) : (
+        <div className="w-full aspect-[2/3] flex items-center justify-center text-xs px-2 text-center" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}>
+          {item.name}
+        </div>
+      )}
+      <div className="p-2">
+        <div className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>{item.name}</div>
+        <div className="flex items-center justify-between mt-0.5">
+          <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>{item.year}</span>
+          <Rating value={item.rating} />
+        </div>
+      </div>
+    </button>
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -299,7 +612,7 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
           Search
         </button>
         <button onClick={() => void loadCatalog()} className="px-3 py-1.5 rounded-lg text-xs cursor-pointer" style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
-          Top
+          Guide
         </button>
       </div>
 
@@ -308,35 +621,33 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
         <div className="flex justify-center py-16"><Loader2 className="animate-spin" style={{ color: 'var(--color-accent)' }} /></div>
       )}
 
+      {/* Search results — flat grid */}
       {!loading && items.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {items.map((item) => (
-            <button
-              key={`${item.imdb_id}-${item.name}`}
-              onClick={() => void openDetail(item)}
-              className="text-left rounded-xl overflow-hidden transition-transform hover:scale-[1.02] cursor-pointer"
-              style={panelStyle}
-            >
-              {item.poster ? (
-                <img src={item.poster} alt={item.name ?? ''} className="w-full aspect-[2/3] object-cover" loading="lazy" />
-              ) : (
-                <div className="w-full aspect-[2/3] flex items-center justify-center text-xs" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}>
-                  {item.name}
-                </div>
-              )}
-              <div className="p-2">
-                <div className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>{item.name}</div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>{item.year}</span>
-                  <Rating value={item.rating} />
-                </div>
+          {items.map((item) => renderCard(item))}
+        </div>
+      )}
+
+      {/* Guide rows — Rogers-style shelves */}
+      {!loading && rows.length > 0 && (
+        <div className="flex flex-col gap-5">
+          {rows.map((row) => (
+            <div key={row.label}>
+              <div
+                className="text-[11px] font-semibold uppercase tracking-wider mb-2 px-1"
+                style={{ color: 'var(--color-text-secondary)', borderLeft: '3px solid var(--color-accent)', paddingLeft: 8 }}
+              >
+                {row.label}
               </div>
-            </button>
+              <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+                {row.items.map((item) => renderCard(item, true))}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {!loading && items.length === 0 && !error && (
+      {!loading && items.length === 0 && rows.length === 0 && !error && (
         <div className="text-center py-16 text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
           {query ? 'No results.' : 'Loading catalog…'}
         </div>
@@ -349,7 +660,7 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
           onClick={() => setDetail(null)}
         >
           <div
-            className="rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5 flex gap-4"
+            className="rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-5 flex gap-4"
             style={panelStyle}
             onClick={(e) => e.stopPropagation()}
           >
@@ -381,10 +692,168 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
                   ) : null,
                 )}
               </div>
+
+              {/* Episode picker for series */}
+              {type === 'series' && seasons.length > 0 && (
+                <div className="flex items-center gap-2 mt-4">
+                  <select
+                    value={selSeason}
+                    onChange={(e) => setSelSeason(Number(e.target.value))}
+                    className="h-8 rounded-lg px-2 text-xs"
+                    style={inputStyle}
+                  >
+                    {seasons.map((s) => (
+                      <option key={s} value={s}>Season {s}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={selEpisode}
+                    onChange={(e) => setSelEpisode(Number(e.target.value))}
+                    className="h-8 flex-1 rounded-lg px-2 text-xs"
+                    style={inputStyle}
+                  >
+                    {seasonEpisodes.map((ep) => (
+                      <option key={ep.episode} value={ep.episode ?? 0}>
+                        E{ep.episode} — {ep.title || 'Episode'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Sources */}
+              <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--color-border)' }}>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => void loadSources()}
+                    disabled={streamsLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
+                    style={{ background: 'var(--color-accent)', color: '#fff' }}
+                  >
+                    {streamsLoading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                    {type === 'series' ? 'Find episode sources' : 'Find sources'}
+                  </button>
+                  {filteredStreams && filteredStreams.length > 0 && (
+                    <button
+                      onClick={() => void playBest()}
+                      disabled={bestTesting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
+                      style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+                    >
+                      {bestTesting ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                      {bestTesting ? 'Speed-testing…' : 'Play best'}
+                    </button>
+                  )}
+                  <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                    Torrentio · Comet · MediaFusion
+                  </span>
+                </div>
+                {filteredStreams && qualities.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <button
+                      onClick={() => setQualityFilter('')}
+                      className="px-2 py-0.5 rounded text-[10px] cursor-pointer"
+                      style={{
+                        background: qualityFilter === '' ? 'var(--color-accent-subtle)' : 'var(--color-bg-secondary)',
+                        color: qualityFilter === '' ? 'var(--color-text)' : 'var(--color-text-tertiary)',
+                        border: `1px solid ${qualityFilter === '' ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                      }}
+                    >
+                      All
+                    </button>
+                    {qualities.map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => setQualityFilter(qualityFilter === q ? '' : q)}
+                        className="px-2 py-0.5 rounded text-[10px] cursor-pointer"
+                        style={{
+                          background: qualityFilter === q ? 'var(--color-accent-subtle)' : 'var(--color-bg-secondary)',
+                          color: qualityFilter === q ? 'var(--color-text)' : 'var(--color-text-tertiary)',
+                          border: `1px solid ${qualityFilter === q ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        }}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {streamsError && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--color-error, #f87171)' }}>{streamsError}</p>
+                )}
+                {streams && (
+                  <div className="mt-2 space-y-1.5">
+                    {filteredStreams!.length === 0 && (
+                      <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                        {streams.length === 0 ? 'No streams found for this title.' : 'No streams in this quality.'}
+                      </p>
+                    )}
+                    {(filteredStreams ?? []).map((s) => {
+                      const job = torrentJobs[s.id];
+                      const progress = job?.status?.progress;
+                      return (
+                        <div
+                          key={s.id}
+                          className="flex items-center gap-2 rounded-lg px-2.5 py-2"
+                          style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              {s.quality && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-text)' }}>
+                                  {s.quality}
+                                </span>
+                              )}
+                              <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+                                {s.name || s.title || s.addon}
+                              </span>
+                            </div>
+                            <div className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                              {s.addon}
+                              {s.size ? ` · ${s.size}` : ''}
+                              {s.seeders != null ? ` · ${s.seeders} seeds` : ''}
+                              {s.isTorrent ? ' · torrent' : ' · direct'}
+                              {s.externalUrl ? ' · external' : ''}
+                            </div>
+                            {job?.status && !job.status.finished && (
+                              <div className="mt-1">
+                                <div className="flex items-center justify-between text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                                  <span>{job.status.state} · {job.status.peers} peers</span>
+                                  <span>{fmtRate(job.status.download_rate)} · {Math.round((progress ?? 0) * 100)}%</span>
+                                </div>
+                                <div className="mt-0.5 h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-bg-tertiary)' }}>
+                                  <div className="h-full" style={{ width: `${Math.round((progress ?? 0) * 100)}%`, background: 'var(--color-accent)' }} />
+                                </div>
+                              </div>
+                            )}
+                            {job?.status?.finished && (
+                              <div className="text-[10px] mt-0.5" style={{ color: 'var(--color-success, #4ade80)' }}>Downloaded — saved to ~/.openjarvis/torrents</div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => void playStream(s)}
+                            className="px-2.5 py-1 rounded-md text-[11px] font-medium cursor-pointer shrink-0"
+                            style={{ background: 'var(--color-accent)', color: '#fff' }}
+                          >
+                            Play
+                          </button>
+                          <button
+                            onClick={() => void downloadStream(s)}
+                            className="px-2.5 py-1 rounded-md text-[11px] cursor-pointer shrink-0"
+                            style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+                          >
+                            Download
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
+      <MediaPlayerModal target={playerTarget} onClose={() => setPlayerTarget(null)} />
       {detailLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
           <Loader2 className="animate-spin" size={28} style={{ color: 'var(--color-accent)' }} />
@@ -654,229 +1123,6 @@ function LinksTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Games tab (Steam library + custom games + Playnite interop)
-// ---------------------------------------------------------------------------
-
-function GamesTab() {
-  const [data, setData] = useState<GamesLibrary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: '', exe: '', args: '', cover_url: '' });
-  const [saving, setSaving] = useState(false);
-  const [launching, setLaunching] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setData(await fetchGamesLibrary());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load games');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const play = async (key: string, body: Parameters<typeof launchGame>[0]) => {
-    setLaunching(key);
-    try {
-      await launchGame(body);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Launch failed');
-    } finally {
-      setLaunching(null);
-    }
-  };
-
-  const submitCustom = async () => {
-    if (!form.title.trim() || !form.exe.trim()) return;
-    setSaving(true);
-    try {
-      await addCustomGame(form);
-      setForm({ title: '', exe: '', args: '', cover_url: '' });
-      setShowForm(false);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add game');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const removeCustom = async (id: string) => {
-    try {
-      await deleteCustomGame(id);
-      setData((prev) => prev && { ...prev, custom: prev.custom.filter((g) => g.id !== id) });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete');
-    }
-  };
-
-  if (loading) {
-    return <div className="flex justify-center py-16"><Loader2 className="animate-spin" style={{ color: 'var(--color-accent)' }} /></div>;
-  }
-  if (error && !data) return <ErrorNote message={error} />;
-  if (!data) return null;
-
-  const { steam, custom, playnite } = data;
-  const total = steam.length + custom.length;
-
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Source status */}
-      <div className="flex items-center gap-2 flex-wrap text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-        <span className="px-2 py-1 rounded-lg" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
-          Steam: {steam.length} game{steam.length === 1 ? '' : 's'}
-        </span>
-        <span className="px-2 py-1 rounded-lg" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
-          Custom: {custom.length}
-        </span>
-        <span className="px-2 py-1 rounded-lg" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
-          Playnite: {playnite.installed ? 'detected' : 'not detected'}
-        </span>
-        {playnite.installed && playnite.exe === null && playnite.scheme_registered && (
-          <button
-            onClick={() => void play('playnite', { kind: 'playnite' })}
-            disabled={launching === 'playnite'}
-            className="px-2 py-1 rounded-lg font-medium cursor-pointer disabled:opacity-50"
-            style={{ background: 'var(--color-accent)', color: '#fff' }}
-          >
-            {launching === 'playnite' ? 'Opening…' : 'Open Playnite'}
-          </button>
-        )}
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg font-medium cursor-pointer"
-          style={{ background: 'var(--color-accent)', color: '#fff' }}
-        >
-          <Plus size={11} /> Add game
-        </button>
-      </div>
-
-      {error && <ErrorNote message={error} />}
-
-      {showForm && (
-        <div className="rounded-xl p-4 flex flex-col gap-2" style={panelStyle}>
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Game title" className="rounded-lg px-3 py-2 text-sm" style={inputStyle} />
-          <input value={form.exe} onChange={(e) => setForm({ ...form, exe: e.target.value })} placeholder="Path to .exe" className="rounded-lg px-3 py-2 text-sm" style={inputStyle} />
-          <div className="flex gap-2">
-            <input value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} placeholder="Launch args (optional)" className="flex-1 rounded-lg px-3 py-2 text-sm" style={inputStyle} />
-            <input value={form.cover_url} onChange={(e) => setForm({ ...form, cover_url: e.target.value })} placeholder="Cover URL (optional)" className="flex-1 rounded-lg px-3 py-2 text-sm" style={inputStyle} />
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 rounded-lg text-xs cursor-pointer" style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
-              Cancel
-            </button>
-            <button onClick={() => void submitCustom()} disabled={saving || !form.title.trim() || !form.exe.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50" style={{ background: 'var(--color-accent)', color: '#fff' }}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!playnite.installed && (
-        <div className="rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
-          <Gamepad2 size={12} className="inline mr-1.5 -mt-0.5" style={{ color: 'var(--color-accent)' }} />
-          Playnite not detected. Install Playnite Portable to unify emulated and non-Steam libraries —
-          Jarvis will detect it automatically. Games you add manually appear below.
-        </div>
-      )}
-
-      {total === 0 && !showForm && (
-        <div className="text-center py-16 text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
-          No games found. Add a custom game above, or install games through Steam/Playnite.
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        {steam.map((game: SteamGame) => (
-          <GameCard
-            key={game.id}
-            title={game.title}
-            cover={game.cover}
-            badge="Steam"
-            installed={game.installed}
-            launching={launching === game.id}
-            onPlay={() => void play(game.id, { kind: 'steam', appid: game.appid })}
-          />
-        ))}
-        {custom.map((game: CustomGame) => (
-          <GameCard
-            key={game.id}
-            title={game.title}
-            cover={game.cover}
-            badge="Custom"
-            launching={launching === game.id}
-            onPlay={() => void play(game.id, { kind: 'custom', id: game.id })}
-            onDelete={() => void removeCustom(game.id)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function GameCard({
-  title,
-  cover,
-  badge,
-  installed = true,
-  launching,
-  onPlay,
-  onDelete,
-}: {
-  title: string;
-  cover?: string;
-  badge: string;
-  installed?: boolean;
-  launching: boolean;
-  onPlay: () => void;
-  onDelete?: () => void;
-}) {
-  const [imgFailed, setImgFailed] = useState(false);
-  return (
-    <div className="rounded-xl overflow-hidden relative group" style={panelStyle}>
-      {cover && !imgFailed ? (
-        <img src={cover} alt={title} className="w-full aspect-[2/3] object-cover" loading="lazy" onError={() => setImgFailed(true)} />
-      ) : (
-        <div className="w-full aspect-[2/3] flex items-center justify-center" style={{ background: 'var(--color-bg-tertiary)' }}>
-          <Gamepad2 size={28} style={{ color: 'var(--color-text-tertiary)' }} />
-        </div>
-      )}
-      {!installed && (
-        <span className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(0,0,0,0.7)', color: 'var(--color-warning)' }}>
-          not installed
-        </span>
-      )}
-      <span className="absolute top-1.5 right-1.5 text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(0,0,0,0.7)', color: 'var(--color-text)' }}>
-        {badge}
-      </span>
-      <div className="p-2">
-        <div className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>{title}</div>
-        <div className="flex items-center gap-1.5 mt-1">
-          <button
-            onClick={onPlay}
-            disabled={launching}
-            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium cursor-pointer disabled:opacity-50"
-            style={{ background: 'var(--color-accent)', color: '#fff' }}
-          >
-            {launching ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />} Play
-          </button>
-          {onDelete && (
-            <button onClick={onDelete} className="p-1 rounded cursor-pointer" style={{ color: 'var(--color-text-tertiary)' }} title="Remove">
-              <Trash2 size={11} />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // IPTV tab: merged regional playlists + windowed XMLTV EPG
 // ---------------------------------------------------------------------------
 
@@ -886,6 +1132,7 @@ interface RegionPreset {
   playlist: string;
   epg: string;
   tz: string;
+  ivue?: boolean;
 }
 
 const REGION_PRESETS: RegionPreset[] = [
@@ -931,6 +1178,21 @@ const REGION_PRESETS: RegionPreset[] = [
     epg: 'https://epgshare01.online/epgshare01/epg_ripper_NZ1.xml.gz',
     tz: 'Pacific/Auckland',
   },
+  {
+    key: 'MT',
+    label: 'Mad Titan',
+    playlist: 'https://magnetic.website/jet/playlists/titan.m3u8',
+    epg: 'https://magnetic.website/jet/epg/merged_epg.xml.gz',
+    tz: 'America/New_York',
+  },
+  {
+    key: 'IV',
+    label: 'iVue Guide',
+    playlist: '',
+    epg: '',
+    tz: '',
+    ivue: true,
+  },
 ];
 
 interface GuideChannel extends M3UChannel {
@@ -938,9 +1200,108 @@ interface GuideChannel extends M3UChannel {
   regionLabel: string;
   tz: string;
   schedule: GuideProgram[];
+  playable: boolean;
 }
 
 const IPTV_STATE_KEY = 'openjarvis.iptv.merged';
+
+// Religious channels are excluded from the guide entirely.
+const RELIGIOUS_RE = new RegExp(
+  '\\b(' +
+    [
+      // Islam / Muslim
+      'islam', 'islamic', 'muslim', 'muslims', 'quran', 'koran', 'masjid', 'mosque',
+      'azan', 'athan', 'salah', 'salat', 'eid', 'halal', 'haram', 'fatwa', 'imam',
+      'mullah', 'ulema', 'allahu', 'muhammad', 'jihad', 'sharia', 'deen', 'dawah',
+      'ramadan', 'iftar', 'suhoor', 'suhur', 'hajj', 'umrah', 'jumuah', 'taraweeh',
+      'sujud', 'wudu', 'hijab', 'niqab', 'iqra', 'alkauthar', 'awakening', 'hayat',
+      'huda', 'noor', 'safa', 'assiratv', 'peace tv', 'voice of islam', 'radio islam',
+      'islam 21', 'alkarim', 'alkoos', 'hijrah', 'qibla', 'mihrab', 'maghrib', 'fajr',
+      'dhuhr', 'asr', 'ishaa', 'isha', 'sehar', 'salaam', 'assalamu', 'islamic relief',
+      'muslim aid', 'human appeal',
+      // Muslim / Arabic-leaning news
+      'al jazeera', 'aljazeera', 'al arabiya', 'alarabiya', 'arab news', 'press tv',
+      'tasnim', 'al mayadeen', 'almayadeen', 'sky news arabia', 'trt arabic',
+      'alhurra', 'alkhaleej', 'al anadolu', 'anadolu ajansi',
+      // Christianity / church / prayer / donation
+      'gospel', 'christian', 'christ', 'jesus', 'bible', 'scripture', 'church',
+      'worship', 'praise', 'hymn', 'hymns', 'sermon', 'pastor', 'ministry',
+      'ministries', 'faith', 'catholic', 'orthodox', 'adventist', 'mormon',
+      'jehovah', 'torah', 'synagogue', 'jewish', 'revival', 'anoint', 'hallelujah',
+      'sabbath', 'eucharist', 'baptist', 'methodist', 'presbyterian', 'lutheran',
+      'anglican', 'pentecostal', 'charismatic', 'messianic', 'daystar', 'god tv',
+      'pray', 'adoration', 'rosary', 'novena', 'litany', 'sacred', 'divine',
+      'chapel', 'cathedral', 'parish', 'diocese', 'abbey', 'monastery', 'convent',
+      'chaplain', 'reverend', 'rev.', 'padre', 'priest', 'cleric', 'deacon',
+      'vicar', 'bishop', 'cardinal', 'pope', 'vatican', 'lourdes', 'fatima',
+      'guadalupe', 'donat', 'tithe', 'offering', 'benevolence', 'savior',
+      'saviour', 'messiah', 'redemption', 'salvation', 'born again', 'glory tv',
+      // Other religions / spirituality
+      'hindu', 'sikh', 'buddhist', 'jain', 'kirtan', 'bhajan', 'mandir',
+      'gurdwara', 'temple', 'guru granth', 'bhagavad', 'upanishad', 'vedas',
+      'dalai lama', 'dharma', 'nirvana', 'bahai', 'meditation', 'yoga',
+    ].join('|') +
+    ')\\b',
+  'i',
+);
+
+type ChannelMeta = Pick<M3UChannel, 'id' | 'name' | 'group' | 'language'>;
+
+function isReligiousChannel(channel: ChannelMeta): boolean {
+  return RELIGIOUS_RE.test(`${channel.name} ${channel.group} ${channel.id}`);
+}
+
+// Non-Latin scripts indicate a non-English-spoken channel even when the
+// playlist omits tvg-language.
+const NON_ENGLISH_SCRIPT_RE =
+  /[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/;
+
+function isEnglishChannel(channel: ChannelMeta): boolean {
+  if (channel.language && !/^(en|eng|english)([-_].*)?$/i.test(channel.language))
+    return false;
+  if (NON_ENGLISH_SCRIPT_RE.test(channel.name) || NON_ENGLISH_SCRIPT_RE.test(channel.group))
+    return false;
+  return true;
+}
+
+// Kids channels (cartoons, anime, preschool) get their own guide section.
+const KIDS_RE =
+  /\b(kids?|nick\s*(jr|elodeon|music|at\s*night)?|nicktoons|disney\s*(jr|junior|xd|channel)|boomerang|cartoon|anime|baby\s*(tv|first)|toddler|pbs|cbeebies|treehouse|jeemovies|sprout|kidscity|kidtastic|cartoonito|babyfirst|zombie\s*chum|garfield|peppa|bluey|paw patrol)\b/i;
+
+// Sports channels get their own section, grouped by sport.
+const SPORTS_RE =
+  /\b(sports?|nfl|nba|mlb|nhl|mls|ncaa|soccer|football|futbol|tennis|golf|pga|ufc|mma|boxing|wwe|wrestling|nascar|indycar|f1|formula|motogp|racing|cricket|rugby|espn|fs1|fs2|big ten|sec network|dazn|bein sports|sky sports|tsn|sportsnet|eurosport|golf channel|tennis channel|nba tv|nfl network|mlb network|nhl network|mls soccer)\b/i;
+
+const SPORT_ORDER = [
+  'American Football',
+  'Basketball',
+  'Baseball',
+  'Hockey',
+  'Soccer',
+  'Tennis',
+  'Golf',
+  'Combat & Wrestling',
+  'Racing & Motorsports',
+  'Cricket & Rugby',
+  'Sports Network',
+  'Other Sports',
+];
+
+function sportOf(channel: GuideChannel): string {
+  const s = `${channel.name} ${channel.group}`.toLowerCase();
+  if (/\b(nfl|super bowl|football)\b/.test(s) && !/soccer|futbol|premier/.test(s)) return 'American Football';
+  if (/\b(nba|basketball|march madness|ncaa)\b/.test(s)) return 'Basketball';
+  if (/\b(mlb|baseball)\b/.test(s)) return 'Baseball';
+  if (/\b(nhl|hockey|stanley cup)\b/.test(s)) return 'Hockey';
+  if (/\b(soccer|mls|futbol|premier league|champions league|bundesliga|serie a|laliga|la liga|uefa|fifa|epl)\b/.test(s)) return 'Soccer';
+  if (/\b(tennis|wimbledon|us open|australian open|french open)\b/.test(s)) return 'Tennis';
+  if (/\bgolf|pga\b/.test(s)) return 'Golf';
+  if (/\b(ufc|mma|boxing|wwe|wrestling|wrestlemania|bellator|pfl)\b/.test(s)) return 'Combat & Wrestling';
+  if (/\b(nascar|indycar|formula|f1|motogp|racing|speedway|drag)\b/.test(s)) return 'Racing & Motorsports';
+  if (/\b(cricket|rugby|six nations)\b/.test(s)) return 'Cricket & Rugby';
+  if (/\bsports?\b|espn|fs1|fs2|dazn|bein|sky sports|tsn|sportsnet|eurosport|big ten|sec network|nba tv|nfl network|mlb network|nhl network|mls/.test(s)) return 'Sports Network';
+  return 'Other Sports';
+}
 
 function loadIptvState(): { regions: string[]; playlist: string; guide: string } {
   try {
@@ -1003,13 +1364,14 @@ function IptvTab() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [playing, setPlaying] = useState<GuideChannel | null>(null);
-  const [englishOnly, setEnglishOnly] = useState(true);
   const [regionFilter, setRegionFilter] = useState<string>('ALL');
   const [query, setQuery] = useState('');
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [error, setError] = useState('');
   const [guideErrors, setGuideErrors] = useState<string[]>([]);
   const [playerError, setPlayerError] = useState('');
+  const [playNotice, setPlayNotice] = useState('');
+  const [guideView, setGuideView] = useState<'main' | 'kids' | 'sports'>('main');
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1069,6 +1431,7 @@ function IptvTab() {
       lookup: ((channel: M3UChannel) => GuideProgram[]) | null,
     ) => {
       for (const channel of parsed) {
+        if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
         const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -1078,12 +1441,16 @@ function IptvTab() {
           regionLabel,
           tz,
           schedule: lookup ? lookup(channel) : [],
+          playable: /^(https?|rtsp|rtmp|udp):\/\//i.test(channel.url),
         });
       }
     };
 
+    const streamRegions = regions.filter((r) => !r.ivue);
+    const ivueRegions = regions.filter((r) => r.ivue);
+
     await Promise.all(
-      regions.map(async (region) => {
+      streamRegions.map(async (region) => {
         try {
           const [playlistText, epg] = await Promise.all([
             fetchGuideDocument(region.playlist, 'playlist'),
@@ -1102,6 +1469,34 @@ function IptvTab() {
         }
       }),
     );
+
+    if (ivueRegions.length > 0) {
+      try {
+        const data = await fetchIvueGuide();
+        for (const region of ivueRegions) {
+          for (const channel of data.channels) {
+            if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
+            const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+            merged.push({
+              ...channel,
+              userAgent: '',
+              referrer: '',
+              region: region.key,
+              regionLabel: channel.regionLabel || region.label,
+              tz: channel.tz || region.tz,
+              schedule: channel.schedule ?? [],
+              playable: false,
+            });
+          }
+        }
+      } catch (ivueError) {
+        errors.push(
+          `iVue Guide: ${ivueError instanceof Error ? ivueError.message : String(ivueError)}`,
+        );
+      }
+    }
 
     if (customUrl) {
       try {
@@ -1152,28 +1547,67 @@ function IptvTab() {
 
   const visibleChannels = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return channels
-      .filter((c) => {
-        if (englishOnly && c.language && !/^(en|eng|english)([-_].*)?$/i.test(c.language))
-          return false;
-        if (regionFilter !== 'ALL' && c.region !== regionFilter) return false;
-        if (q && !c.name.toLowerCase().includes(q) && !c.group.toLowerCase().includes(q))
-          return false;
-        return true;
-      })
-      .sort(
+    const matchesQuery = (c: GuideChannel) =>
+      !q || c.name.toLowerCase().includes(q) || c.group.toLowerCase().includes(q);
+    const filtered = channels.filter((c) => {
+      if (c.language && !/^(en|eng|english)([-_].*)?$/i.test(c.language))
+        return false;
+      if (regionFilter !== 'ALL' && c.region !== regionFilter) return false;
+      if (!matchesQuery(c)) return false;
+      const kids = KIDS_RE.test(`${c.name} ${c.group}`);
+      const sports = SPORTS_RE.test(`${c.name} ${c.group}`);
+      if (guideView === 'kids') return kids;
+      if (guideView === 'sports') return sports;
+      return !kids; // main guide excludes kids channels
+    });
+    if (guideView === 'sports') {
+      filtered.sort(
         (a, b) =>
-          (regionOrder.get(a.region) ?? 99) - (regionOrder.get(b.region) ?? 99) ||
+          SPORT_ORDER.indexOf(sportOf(a)) - SPORT_ORDER.indexOf(sportOf(b)) ||
           a.name.localeCompare(b.name),
       );
-  }, [channels, englishOnly, regionFilter, query, regionOrder]);
+      return filtered;
+    }
+    return filtered.sort(
+      (a, b) =>
+        (regionOrder.get(a.region) ?? 99) - (regionOrder.get(b.region) ?? 99) ||
+        a.name.localeCompare(b.name),
+    );
+  }, [channels, regionFilter, query, regionOrder, guideView]);
+
+  // Sports view inserts a separator row whenever the sport category changes.
+  const gridRows = useMemo(() => {
+    if (guideView !== 'sports') {
+      return visibleChannels.map((channel, idx) => ({ kind: 'channel' as const, channel, idx }));
+    }
+    const rows: (
+      | { kind: 'channel'; channel: GuideChannel; idx: number }
+      | { kind: 'header'; label: string; count: number }
+    )[] = [];
+    const counts = new Map<string, number>();
+    for (const c of visibleChannels) {
+      const s = sportOf(c);
+      counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+    let lastSport = '';
+    visibleChannels.forEach((channel, idx) => {
+      const sport = sportOf(channel);
+      if (sport !== lastSport) {
+        rows.push({ kind: 'header', label: sport, count: counts.get(sport) ?? 0 });
+        lastSport = sport;
+      }
+      rows.push({ kind: 'channel', channel, idx });
+    });
+    return rows;
+  }, [visibleChannels, guideView]);
 
   const channelKey = (channel: GuideChannel) => `${channel.region}:${channel.id || channel.url}`;
 
   // EPG grid: 24h window starting one hour before now, in the viewer's local time.
   const GRID_HOURS = 24;
-  const PX_PER_HOUR = 90;
-  const GRID_LEFT_W = 190;
+  const PX_PER_HOUR = 120;
+  const GRID_LEFT_W = 220;
+  const NOW_COLOR = '#22d3ee'; // JARVIS cyan — matches the boot screen theme
   const gridStart = useMemo(() => {
     const d = new Date(nowTick);
     d.setMinutes(0, 0, 0);
@@ -1194,11 +1628,22 @@ function IptvTab() {
     new Date(ts).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
 
   const playChannel = (channel: GuideChannel) => {
-    const video = videoRef.current;
-    if (!video) return;
+    setPlayNotice('');
+    if (!channel.playable) {
+      setPlayNotice(`${channel.name} is guide-only — Mad Titan/plugin channels have no stream OpenJarvis can play.`);
+      return;
+    }
     setPlayerError('');
     setPlaying(channel);
     destroyPlayer();
+  };
+
+  // Attach the stream once the <video> element exists (it mounts with `playing`).
+  useEffect(() => {
+    const video = videoRef.current;
+    const channel = playing;
+    if (!video || !channel || !channel.playable) return;
+    setPlayerError('');
     const url = channel.url;
     const isHls = /\.m3u8($|\?)/i.test(url) || url.includes('/playlist.m3u8');
     if (isHls && Hls.isSupported()) {
@@ -1228,7 +1673,8 @@ function IptvTab() {
         /* autoplay may be blocked */
       });
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing]);
 
   const stopPlayback = () => {
     destroyPlayer();
@@ -1293,6 +1739,21 @@ function IptvTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+          {(['main', 'kids', 'sports'] as const).map((view) => (
+            <button
+              key={view}
+              onClick={() => setGuideView(view)}
+              className="px-3 py-1.5 text-xs cursor-pointer capitalize"
+              style={{
+                background: guideView === view ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
+                color: guideView === view ? '#fff' : 'var(--color-text-secondary)',
+              }}
+            >
+              {view === 'main' ? 'Guide' : view === 'kids' ? 'Kids' : 'Sports'}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => void loadChannels()}
           disabled={loading}
@@ -1321,10 +1782,6 @@ function IptvTab() {
           ))}
           {customPlaylist.trim() && <option value="CUSTOM">Custom</option>}
         </select>
-        <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-          <input type="checkbox" checked={englishOnly} onChange={(e) => setEnglishOnly(e.target.checked)} />
-          English channels
-        </label>
         {channels.length > 0 && (
           <span className="text-xs ml-auto" style={{ color: 'var(--color-text-tertiary)' }}>
             {visibleChannels.length} of {channels.length} channels
@@ -1366,6 +1823,9 @@ function IptvTab() {
       </p>
 
       {error && <ErrorNote message={error} />}
+      {playNotice && (
+        <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{playNotice}</div>
+      )}
       {guideErrors.map((message) => (
         <div key={message} className="text-xs" style={{ color: 'var(--color-warning)' }}>
           {message}
@@ -1416,7 +1876,12 @@ function IptvTab() {
                     color: 'var(--color-text-tertiary)',
                   }}
                 >
-                  Channel
+                  <div>Channel</div>
+                  <div className="text-[9px] font-medium normal-case tracking-normal" style={{ color: NOW_COLOR }}>
+                    {new Date(nowTick).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    {' · '}
+                    {new Date(nowTick).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </div>
                 </div>
                 <div className="relative shrink-0" style={{ width: gridWidth, height: 30 }}>
                   {hourTicks.map((tick) => (
@@ -1428,7 +1893,7 @@ function IptvTab() {
                         borderColor: 'var(--color-border)',
                       }}
                     >
-                      <span className="text-[10px] font-medium whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
+                      <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: 'var(--color-text)' }}>
                         {fmtHour(tick)}
                       </span>
                       {new Date(tick).getHours() === 0 && (
@@ -1441,8 +1906,35 @@ function IptvTab() {
                 </div>
               </div>
 
-              {/* Channel rows */}
-              {visibleChannels.map((channel, rowIndex) => {
+              {/* Channel rows (with sport separators in Sports view) */}
+              {gridRows.map((row) => {
+                if (row.kind === 'header') {
+                  return (
+                    <div
+                      key={`sport-${row.label}`}
+                      className="flex"
+                      style={{ background: 'var(--color-bg-tertiary)', borderTop: '1px solid var(--color-border)' }}
+                    >
+                      <div
+                        className="sticky left-0 z-10 shrink-0 px-3 py-1 text-[10px] font-bold uppercase tracking-widest"
+                        style={{
+                          width: GRID_LEFT_W,
+                          background: 'var(--color-bg-tertiary)',
+                          borderRight: '1px solid var(--color-border)',
+                          color: 'var(--color-accent)',
+                        }}
+                      >
+                        {row.label}
+                      </div>
+                      <div className="relative shrink-0" style={{ width: gridWidth, height: 26 }}>
+                        <span className="absolute left-2 top-1 text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                          {row.count} channel{row.count === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                const { channel, idx: rowIndex } = row;
                 const entries = channel.schedule.filter(
                   (p) => p.stop > gridStart && p.start < gridEnd,
                 );
@@ -1468,22 +1960,21 @@ function IptvTab() {
                       title={`Play ${channel.name}`}
                     >
                       {channel.logo ? (
-                        <img src={channel.logo} alt="" className="w-7 h-7 rounded object-cover shrink-0" loading="lazy" />
+                        <img src={channel.logo} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" style={{ background: '#000' }} loading="lazy" />
                       ) : (
-                        <span className="w-7 h-7 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--color-bg-tertiary)' }}>
-                          <Tv size={13} style={{ color: 'var(--color-text-tertiary)' }} />
+                        <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-bg-tertiary)' }}>
+                          <Tv size={15} style={{ color: 'var(--color-text-tertiary)' }} />
                         </span>
                       )}
                       <span className="flex-1 min-w-0">
-                        <span className="text-xs truncate block" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
-                        <span className="text-[9px] truncate block" style={{ color: 'var(--color-text-tertiary)' }}>
-                          {channel.regionLabel}
-                          {current ? ` · ${current.title}` : ''}
+                        <span className="text-[13px] font-semibold truncate block" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
+                        <span className="text-[10px] truncate block" style={{ color: current ? NOW_COLOR : 'var(--color-text-tertiary)', fontWeight: current ? 600 : 400 }}>
+                          {current ? `● ${current.title}` : channel.regionLabel}
                         </span>
                       </span>
                       <Play size={11} style={{ color: isPlaying ? 'var(--color-accent)' : 'var(--color-text-tertiary)', flexShrink: 0 }} />
                     </button>
-                    <div className="relative shrink-0" style={{ width: gridWidth, height: 46 }}>
+                    <div className="relative shrink-0" style={{ width: gridWidth, height: 54 }}>
                       {entries.map((program, pIndex) => {
                         const left = Math.max(0, ((program.start - gridStart) / 3_600_000) * PX_PER_HOUR);
                         const right = Math.min(
@@ -1496,30 +1987,34 @@ function IptvTab() {
                           <button
                             key={`${program.start}-${pIndex}`}
                             onClick={() => playChannel(channel)}
-                            className="absolute top-1 bottom-1 rounded px-1.5 text-left overflow-hidden cursor-pointer"
+                            className="absolute top-1 bottom-1 rounded-md px-2 text-left overflow-hidden cursor-pointer transition-opacity hover:opacity-80"
                             style={{
                               left,
                               width,
                               background: isCurrent
-                                ? 'var(--color-accent)'
-                                : pIndex % 2
+                                ? NOW_COLOR
+                                : program.stop <= nowTick
                                   ? 'var(--color-bg-tertiary)'
-                                  : 'var(--color-bg-secondary)',
-                              border: '1px solid var(--color-border)',
+                                  : pIndex % 2
+                                    ? 'var(--color-bg-secondary)'
+                                    : 'var(--color-bg-tertiary)',
+                              border: isCurrent ? 'none' : '1px solid var(--color-border)',
+                              opacity: program.stop <= nowTick ? 0.45 : 1,
                             }}
                             title={`${channel.name} — ${program.title || '—'}\n${new Date(program.start).toLocaleString()} – ${new Date(program.stop).toLocaleString()}`}
                           >
                             <span
-                              className="block text-[10px] truncate leading-tight"
-                              style={{ color: isCurrent ? '#fff' : 'var(--color-text)' }}
+                              className="block text-[11px] font-medium truncate leading-tight"
+                              style={{ color: isCurrent ? '#062a33' : 'var(--color-text)' }}
                             >
                               {program.title || '—'}
                             </span>
                             <span
                               className="block text-[9px] truncate leading-tight"
-                              style={{ color: isCurrent ? 'rgba(255,255,255,0.75)' : 'var(--color-text-tertiary)' }}
+                              style={{ color: isCurrent ? 'rgba(6,42,51,0.75)' : 'var(--color-text-tertiary)' }}
                             >
                               {fmtHour(program.start)}–{fmtHour(program.stop)}
+                              {isCurrent ? '  ● LIVE' : ''}
                             </span>
                           </button>
                         );
@@ -1543,7 +2038,7 @@ function IptvTab() {
               {nowX >= 0 && nowX <= gridWidth && (
                 <div
                   className="absolute top-0 bottom-0 pointer-events-none z-10"
-                  style={{ left: GRID_LEFT_W + nowX, width: 2, background: 'var(--color-error)' }}
+                  style={{ left: GRID_LEFT_W + nowX - 1, width: 3, background: NOW_COLOR, boxShadow: `0 0 8px ${NOW_COLOR}` }}
                 />
               )}
             </div>
@@ -1596,7 +2091,7 @@ export function MediaPage() {
           {tab === 'movies' && <CatalogTab type="movie" />}
           {tab === 'shows' && <CatalogTab type="series" />}
           {tab === 'local' && <LocalTab />}
-          {tab === 'games' && <GamesTab />}
+
           {tab === 'links' && <LinksTab />}
         </div>
       </div>

@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import time
 import uuid
@@ -275,8 +276,70 @@ def games_library() -> dict:
     }
 
 
+def _bundled_tool(*parts: str) -> Optional[Path]:
+    """Locate a bundled tool under ``<repo>/tools/`` walking up from this file."""
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent.joinpath("tools", *parts)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _roblox_player() -> Optional[Path]:
+    """Find the newest RobloxPlayerBeta.exe (installed Roblox, not bundled)."""
+    roots = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Roblox" / "Versions",
+        Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local")))
+        / "Roblox"
+        / "Versions",
+    ]
+    best: Optional[Path] = None
+    best_mtime = 0.0
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for version_dir in root.iterdir():
+            exe = version_dir / "RobloxPlayerBeta.exe"
+            try:
+                mtime = exe.stat().st_mtime
+            except OSError:
+                continue
+            if mtime > best_mtime:
+                best, best_mtime = exe, mtime
+    return best
+
+
+def _launch_portablemc() -> dict:
+    exe = _bundled_tool("portablemc", "portablemc.exe")
+    if exe is None:
+        raise HTTPException(status_code=404, detail="Bundled PortableMC not found")
+    try:
+        subprocess.Popen(
+            [str(exe), "start", "release"],
+            cwd=str(exe.parent),
+            close_fds=True,
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not start Minecraft: {exc}")
+    return {"launched": str(exe)}
+
+
+def _launch_roblox() -> dict:
+    exe = _roblox_player()
+    if exe is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Roblox is not installed — install it from roblox.com first.",
+        )
+    try:
+        subprocess.Popen([str(exe)], cwd=str(exe.parent), close_fds=True)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not start Roblox: {exc}")
+    return {"launched": str(exe)}
+
+
 class LaunchIn(BaseModel):
-    kind: str = Field(pattern="^(steam|custom|playnite|exe)$")
+    kind: str = Field(pattern="^(steam|custom|playnite|exe|portablemc|roblox)$")
     appid: Optional[str] = None
     id: Optional[str] = None
     path: Optional[str] = Field(default=None, max_length=1000)
@@ -321,6 +384,12 @@ def launch_game(body: LaunchIn) -> dict:
                 status_code=500, detail=f"Could not start Playnite: {exc}"
             )
         return {"launched": exe}
+
+    if body.kind == "portablemc":
+        return _launch_portablemc()
+
+    if body.kind == "roblox":
+        return _launch_roblox()
 
     if body.kind == "exe":
         path = (body.path or "").strip()
@@ -378,6 +447,136 @@ def add_custom_game(body: CustomGameIn) -> dict:
     games.append(game)
     _save_games(games)
     return {"game": game}
+
+
+# ---------------------------------------------------------------------------
+# Bundled Minecraft dedicated server (downloaded on demand, runs globally)
+# ---------------------------------------------------------------------------
+
+_MC_DIR = (
+    Path(os.environ.get("OPENJARVIS_CONFIG_DIR", str(Path.home() / ".openjarvis")))
+    / "minecraft-server"
+)
+_MC_JAR = _MC_DIR / "server.jar"
+_MC_EULA = _MC_DIR / "eula.txt"
+_MC_VERSION_FILE = _MC_DIR / "version.txt"
+_MC_SERVER_PROC: Optional[subprocess.Popen] = None
+
+_PISTON_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+_JRE_URL = (
+    "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
+)
+
+
+def _mc_java() -> Optional[Path]:
+    """Bundled JRE first, then java on PATH."""
+    for candidate in (_MC_DIR / "jre" / "bin" / "java.exe",):
+        if candidate.is_file():
+            return candidate
+    import shutil
+
+    found = shutil.which("java")
+    return Path(found) if found else None
+
+
+def _mc_server_jar_url(version: str = "") -> str:
+    import urllib.request
+
+    with urllib.request.urlopen(_PISTON_MANIFEST, timeout=30) as r:
+        manifest = json.loads(r.read().decode())
+    if version:
+        entry = next(
+            (v for v in manifest["versions"] if v["id"] == version), None
+        )
+    else:
+        entry = next(
+            (v for v in manifest["versions"] if v["type"] == "release"), None
+        )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Minecraft version not found")
+    with urllib.request.urlopen(entry["url"], timeout=30) as r:
+        meta = json.loads(r.read().decode())
+    return meta["downloads"]["server"]["url"]
+
+
+def _mc_setup(body_version: str = "") -> dict:
+    _MC_DIR.mkdir(parents=True, exist_ok=True)
+    # Accept the EULA once — it only gates first launch of a self-hosted server.
+    _MC_EULA.write_text("eula=true\n", encoding="utf-8")
+    if not _MC_JAR.is_file():
+        url = _mc_server_jar_url(body_version)
+        import urllib.request
+
+        tmp = _MC_DIR / "server.jar.part"
+        with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
+        tmp.replace(_MC_JAR)
+    if _mc_java() is None:
+        import urllib.request
+        import zipfile
+
+        jre_zip = _MC_DIR / "jre.zip"
+        with urllib.request.urlopen(_JRE_URL, timeout=300) as r, open(jre_zip, "wb") as f:
+            shutil.copyfileobj(r, f)
+        with zipfile.ZipFile(jre_zip) as z:
+            z.extractall(_MC_DIR / "jre-extract")
+        inner = next((_MC_DIR / "jre-extract").iterdir())
+        target = _MC_DIR / "jre"
+        if target.exists():
+            shutil.rmtree(target)
+        inner.rename(target)
+        shutil.rmtree(_MC_DIR / "jre-extract")
+        jre_zip.unlink(missing_ok=True)
+    return {"ready": True, "dir": str(_MC_DIR), "java": str(_mc_java())}
+
+
+class McServerIn(BaseModel):
+    action: str = Field(pattern="^(setup|start|stop|status)$")
+    version: str = Field(default="", max_length=80)
+
+
+@games_router.post("/mcserver")
+def mc_server(body: McServerIn) -> dict:
+    global _MC_SERVER_PROC
+    if body.action == "setup":
+        return _mc_setup(body.version)
+    if body.action == "status":
+        running = _MC_SERVER_PROC is not None and _MC_SERVER_PROC.poll() is None
+        return {
+            "installed": _MC_JAR.is_file(),
+            "running": running,
+            "java": str(_mc_java() or ""),
+            "dir": str(_MC_DIR),
+        }
+    if body.action == "stop":
+        if _MC_SERVER_PROC is not None and _MC_SERVER_PROC.poll() is None:
+            _MC_SERVER_PROC.terminate()
+        _MC_SERVER_PROC = None
+        return {"stopped": True}
+    # start
+    if not _MC_JAR.is_file():
+        _mc_setup(body.version)
+    java = _mc_java()
+    if java is None:
+        raise HTTPException(status_code=500, detail="No Java runtime available")
+    if _MC_SERVER_PROC is not None and _MC_SERVER_PROC.poll() is None:
+        return {"running": True, "already": True}
+    _MC_DIR.mkdir(parents=True, exist_ok=True)
+    _MC_EULA.write_text("eula=true\n", encoding="utf-8")
+    log_path = _MC_DIR / "server.log"
+    try:
+        log_file = open(log_path, "ab")
+        _MC_SERVER_PROC = subprocess.Popen(
+            [str(java), "-Xmx2G", "-jar", str(_MC_JAR), "nogui"],
+            cwd=str(_MC_DIR),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not start server: {exc}")
+    return {"running": True, "pid": _MC_SERVER_PROC.pid, "log": str(log_path)}
 
 
 @games_router.delete("/custom/{game_id}")

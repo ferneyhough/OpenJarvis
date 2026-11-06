@@ -1,12 +1,12 @@
 Unicode true
-RequestExecutionLevel user
-InstallDir "$LOCALAPPDATA\Programs\OpenJarvis"
-InstallDirRegKey HKCU "Software\OpenJarvis" "InstallDir"
+RequestExecutionLevel admin
+InstallDir "$PROGRAMFILES64\OpenJarvis"
 OutFile "Output\OpenJarvis-Setup-x64.exe"
 SetCompressor /SOLID lzma
 
 !include "LogicLib.nsh"
 !include "MUI2.nsh"
+!include "StrFunc.nsh"
 !include "x64.nsh"
 
 !define APP_NAME "OpenJarvis"
@@ -31,12 +31,12 @@ Function .onInit
     MessageBox MB_ICONSTOP "This installer requires 64-bit Windows."
     Abort
   ${EndIf}
-  SetShellVarContext current
+  SetShellVarContext all
   SetRegView 64
 FunctionEnd
 
 Function un.onInit
-  SetShellVarContext current
+  SetShellVarContext all
   SetRegView 64
 FunctionEnd
 
@@ -45,14 +45,24 @@ Section "OpenJarvis" SEC_MAIN
   SetOutPath "$INSTDIR"
   File /r "dist\OpenJarvis\*"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\OpenJarvis" "InstallDir" "$INSTDIR"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${APP_NAME}"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "1.1.0"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "OpenJarvis"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
-  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
+  WriteRegStr HKLM "Software\OpenJarvis" "InstallDir" "$INSTDIR"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayName" "${APP_NAME}"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayVersion" "1.1.0"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher" "OpenJarvis"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify" 1
+  WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair" 1
+
+  # Grant this install microphone + webcam consent (Windows per-app privacy
+  # store). The NonPackaged subkey name encodes the exe path with '#' for '\'.
+  StrCpy $R9 "$INSTDIR\OpenJarvis.exe"
+  ${StrRep} $R9 "\" "#"
+  StrCpy $R8 "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
+  WriteRegStr HKCU "$R8\microphone" "Value" "Allow"
+  WriteRegStr HKCU "$R8\microphone\NonPackaged\$R9" "Value" "Allow"
+  WriteRegStr HKCU "$R8\webcam" "Value" "Allow"
+  WriteRegStr HKCU "$R8\webcam\NonPackaged\$R9" "Value" "Allow"
 SectionEnd
 
 Section "Desktop shortcut" SEC_DESKTOP
@@ -71,7 +81,12 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
   RMDir "$SMPROGRAMS\${APP_NAME}"
   Delete "$SMSTARTUP\${APP_NAME}.lnk"
-  DeleteRegKey HKCU "${UNINSTALL_KEY}"
-  DeleteRegKey HKCU "Software\OpenJarvis"
+  DeleteRegKey HKLM "${UNINSTALL_KEY}"
+  DeleteRegKey HKLM "Software\OpenJarvis"
+  StrCpy $R9 "$INSTDIR\OpenJarvis.exe"
+  ${StrRep} $R9 "\" "#"
+  StrCpy $R8 "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
+  DeleteRegKey HKCU "$R8\microphone\NonPackaged\$R9"
+  DeleteRegKey HKCU "$R8\webcam\NonPackaged\$R9"
   RMDir /r "$INSTDIR"
 SectionEnd

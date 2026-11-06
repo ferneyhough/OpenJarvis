@@ -37,6 +37,7 @@ import {
 } from '../../lib/chat-telemetry';
 import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
+import { matchesHotkey } from '../../lib/hotkeys';
 import { useHandsFree } from '../../hooks/useHandsFree';
 import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { resolveAgent } from '../../lib/chat-agents';
@@ -215,6 +216,46 @@ export function InputArea() {
       await startRecording();
     }
   }, [speechState, startRecording, stopRecording]);
+
+  const micHotkey = useAppStore((s) => s.settings.micHotkey);
+  const handleMicClickRef = useRef(handleMicClick);
+  handleMicClickRef.current = handleMicClick;
+
+  // In-app hotkey (works while the Jarvis window is focused).
+  useEffect(() => {
+    if (!micHotkey || micHotkey === 'Off') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (matchesHotkey(e, micHotkey)) {
+        e.preventDefault();
+        void handleMicClickRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [micHotkey]);
+
+  // System-wide F9 hotkey registered by the Tauri shell (works unfocused).
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        const off = await listen('oj-mic-toggle', () => {
+          void handleMicClickRef.current();
+        });
+        if (disposed) off();
+        else unlisten = off;
+      } catch {
+        /* not running inside Tauri */
+      }
+    })();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     const el = textareaRef.current;

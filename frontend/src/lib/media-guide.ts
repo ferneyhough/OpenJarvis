@@ -56,7 +56,7 @@ export function parseM3U(text: string): M3UChannel[] {
       break;
     }
 
-    if (!url || !/^(https?|rtsp|rtmp|udp):\/\//i.test(url)) continue;
+    if (!url || !/^(https?|rtsp|rtmp|udp|plugin):\/\//i.test(url)) continue;
     const id = attribute(metadata, 'tvg-id');
     channels.push({
       id,

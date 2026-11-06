@@ -4252,6 +4252,23 @@ pub fn run() {
                 }
             }
 
+            // F9 = mic push-to-talk, system-wide. The webview listens for the
+            // "oj-mic-toggle" event and toggles dictation.
+            {
+                use tauri::Emitter;
+                use tauri_plugin_global_shortcut::{
+                    Code, GlobalShortcutExt, Shortcut, ShortcutState,
+                };
+                let sc = Shortcut::new(None, Code::F9);
+                if let Err(e) = app.global_shortcut().on_shortcut(sc, move |app, _sc, ev| {
+                    if ev.state == ShortcutState::Pressed {
+                        let _ = app.emit("oj-mic-toggle", ());
+                    }
+                }) {
+                    eprintln!("Warning: could not register F9 mic hotkey: {e}");
+                }
+            }
+
             // Returning users keep automatic startup after they have persisted
             // a source. Fresh installs stay inert until the setup UI records
             // explicit consent and invokes `start_backend`.

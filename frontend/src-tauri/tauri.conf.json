@@ -52,7 +52,12 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "installMode": "both",
+        "displayLanguageSelector": false,
+        "installerHooks": "./installer-hooks.nsh"
+      }
     }
   },
   "plugins": {

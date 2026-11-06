@@ -9,6 +9,7 @@ pyperclip>=1.8.2
 pillow>=10.2.0          # ~16 MB
 pygame>=2.5.2
 requests>=2.31.0
+beautifulsoup4>=4.12    # <1 MB   EPG webgrab scraping (iVue sources)
 pywebview>=5.0          # ~2 MB   desktop window (WebView2)
 kokoro>=0.9             # ~0.1 MB (+ ~330 MB George voice model in models\)
 soundfile               # ~3 MB

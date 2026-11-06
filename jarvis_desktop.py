@@ -19,24 +19,22 @@ HOST, PORT = "127.0.0.1", 8000
 URL = f"http://{HOST}:{PORT}/"
 
 
-def _allow_microphone(window) -> None:
-    """Auto-allow microphone requests in the embedded WebView2 control."""
-    if getattr(_allow_microphone, "done", False):
+def _allow_media_permissions(window) -> None:
+    """Auto-allow WebView2 permission requests (mic, camera, screen, etc.)."""
+    if getattr(_allow_media_permissions, "done", False):
         return
     try:
-        from Microsoft.Web.WebView2.Core import CoreWebView2PermissionKind as Kind
         from Microsoft.Web.WebView2.Core import CoreWebView2PermissionState as State
 
         core = window.native.browser.web_view.CoreWebView2
 
         def on_permission(_sender, args):
-            if args.PermissionKind == Kind.Microphone:
-                args.State = State.Allow
+            args.State = State.Allow
 
         core.PermissionRequested += on_permission
-        _allow_microphone.done = True
+        _allow_media_permissions.done = True
     except Exception as exc:  # best effort; the in-app button still works
-        print(f"[desktop] could not auto-allow microphone: {exc}")
+        print(f"[desktop] could not auto-allow media permissions: {exc}")
 
 
 def _port_open() -> bool:
@@ -82,6 +80,6 @@ def _refresh_stale_cache(window) -> None:
 if __name__ == "__main__":
     _start_server()
     window = webview.create_window("OpenJarvis", URL, width=1280, height=840)
-    window.events.loaded += lambda: _allow_microphone(window)
+    window.events.loaded += lambda: _allow_media_permissions(window)
     window.events.loaded += lambda: _refresh_stale_cache(window)
     webview.start()

@@ -1449,6 +1449,7 @@ export interface GuideMetaDetail {
   meta: GuideMeta;
   trailers: Array<{ name?: string; url?: string; kind?: string }>;
   imdb_url: string;
+  episodes?: VodEpisode[];
 }
 
 export interface LocalMediaFile {
@@ -1493,8 +1494,12 @@ export async function fetchTvGuide(country = 'US', date?: string): Promise<TvGui
   return res.json();
 }
 
-export async function fetchGuideCatalog(type: 'movie' | 'series'): Promise<{ type: string; items: GuideItem[] }> {
-  const res = await apiFetch(`/v1/guide/catalog/${type}`);
+export async function fetchGuideCatalog(
+  type: 'movie' | 'series',
+  genre = '',
+): Promise<{ type: string; items: GuideItem[] }> {
+  const params = genre ? `?genre=${encodeURIComponent(genre)}` : '';
+  const res = await apiFetch(`/v1/guide/catalog/${type}${params}`);
   if (!res.ok) throw new Error(`Catalog failed: ${res.status}`);
   return res.json();
 }
@@ -1598,7 +1603,7 @@ export async function fetchGamesLibrary(): Promise<GamesLibrary> {
 }
 
 export async function launchGame(body: {
-  kind: 'steam' | 'custom' | 'playnite' | 'exe';
+  kind: 'steam' | 'custom' | 'playnite' | 'exe' | 'portablemc' | 'roblox';
   appid?: string;
   id?: string;
   path?: string;
@@ -1610,6 +1615,40 @@ export async function launchGame(body: {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Launch failed: ${res.status}`);
+  return res.json();
+}
+
+export interface McServerStatus {
+  installed?: boolean;
+  running?: boolean;
+  already?: boolean;
+  ready?: boolean;
+  java?: string;
+  dir?: string;
+  pid?: number;
+  log?: string;
+  stopped?: boolean;
+}
+
+export async function mcServer(
+  action: 'setup' | 'start' | 'stop' | 'status',
+  version = '',
+): Promise<McServerStatus> {
+  const res = await apiFetch(`/v1/games/mcserver`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, version }),
+  });
+  if (!res.ok) {
+    let detail = `Minecraft server ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
   return res.json();
 }
 
@@ -1665,6 +1704,30 @@ export interface GuideEpgResponse {
   fetched_at: number;
 }
 
+export interface IvueGuideChannel {
+  id: string;
+  name: string;
+  group: string;
+  language: string;
+  logo: string;
+  url: string;
+  region: string;
+  regionLabel: string;
+  tz: string;
+  schedule: GuideEpgProgram[];
+}
+
+export interface IvueGuideResponse {
+  channels: IvueGuideChannel[];
+  count: number;
+}
+
+export async function fetchIvueGuide(): Promise<IvueGuideResponse> {
+  const res = await apiFetch(`/v1/guide/ivue`);
+  if (!res.ok) throw new Error(`iVue guide failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchGuideEpg(url: string, hours = 24): Promise<GuideEpgResponse> {
   const params = new URLSearchParams({ url, hours: String(hours) });
   const res = await apiFetch(`/v1/guide/epg?${params}`);
@@ -1679,4 +1742,130 @@ export async function fetchGuideEpg(url: string, hours = 24): Promise<GuideEpgRe
     throw new Error(detail);
   }
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// VOD sources (Stremio addons) + torrent playback
+// ---------------------------------------------------------------------------
+
+export interface VodEpisode {
+  season: number | null;
+  episode: number | null;
+  title?: string | null;
+  released?: string | null;
+  thumbnail?: string | null;
+}
+
+export interface VodStream {
+  id: string;
+  addon: string;
+  name: string;
+  title: string;
+  quality: string;
+  size: string;
+  seeders: number | null;
+  isTorrent: boolean;
+  browserPlayable: boolean;
+  url?: string;
+  externalUrl?: string;
+  infoHash?: string;
+  fileIdx?: number;
+}
+
+export interface VodStreamsResponse {
+  type: string;
+  id: string;
+  season: number | null;
+  episode: number | null;
+  streams: VodStream[];
+}
+
+export interface VodTorrentFile {
+  index: number;
+  name: string;
+  size: number;
+  browserPlayable: boolean;
+  video: boolean;
+}
+
+export interface VodTorrentAddResponse {
+  id: string;
+  files: VodTorrentFile[];
+  selected: number | null;
+  metadata_pending?: boolean;
+}
+
+export interface VodTorrentStatus {
+  id: string;
+  state: string;
+  progress: number;
+  download_rate: number;
+  upload_rate: number;
+  peers: number;
+  has_metadata: boolean;
+  finished: boolean;
+  file_index: number | null;
+  files: VodTorrentFile[];
+}
+
+export async function fetchVodStreams(
+  type: 'movie' | 'series',
+  imdbId: string,
+  season?: number,
+  episode?: number,
+): Promise<VodStreamsResponse> {
+  const params = new URLSearchParams({ type, id: imdbId });
+  if (season != null) params.set('season', String(season));
+  if (episode != null) params.set('episode', String(episode));
+  const res = await apiFetch(`/v1/vod/streams?${params}`);
+  if (!res.ok) {
+    let detail = `Stream lookup failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+export async function vodTorrentAdd(magnet: string, fileIdx?: number): Promise<VodTorrentAddResponse> {
+  const res = await apiFetch('/v1/vod/torrent/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ magnet, file_idx: fileIdx ?? null }),
+  });
+  if (!res.ok) {
+    let detail = `Torrent failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+export async function vodTorrentStatus(tid: string): Promise<VodTorrentStatus> {
+  const res = await apiFetch(`/v1/vod/torrent/${tid}/status`);
+  if (!res.ok) throw new Error(`Torrent status failed: ${res.status}`);
+  return res.json();
+}
+
+export async function vodTorrentRemove(tid: string): Promise<void> {
+  const res = await apiFetch(`/v1/vod/torrent/${tid}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Torrent remove failed: ${res.status}`);
+}
+
+export function vodTorrentStreamUrl(tid: string, download = false): string {
+  return `${getBase()}/v1/vod/torrent/${tid}/stream${download ? '?dl=1' : ''}`;
+}
+
+export function vodMagnetUri(infoHash: string, name?: string): string {
+  const dn = name ? `&dn=${encodeURIComponent(name)}` : '';
+  return `magnet:?xt=urn:btih:${infoHash}${dn}`;
 }

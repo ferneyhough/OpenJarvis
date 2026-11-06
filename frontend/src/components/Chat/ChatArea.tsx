@@ -6,6 +6,8 @@ import { useAppStore } from '../../lib/store';
 import { shouldAutoplayFinishedReply, useTtsStore } from '../../lib/tts';
 import { stripThinkTags } from '../../lib/message-text';
 import { MainPageHub } from './MainPageHub';
+import { JarvisBoot } from './JarvisBoot';
+import { MicHotkeyPrompt } from './MicHotkeyPrompt';
 import { PanelRightOpen, PanelRightClose } from 'lucide-react';
 
 export function ChatArea() {
@@ -134,7 +136,9 @@ export function ChatArea() {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto"
       >
-        {isEmpty ? null : (
+        {isEmpty ? (
+          <JarvisBoot />
+        ) : (
           <div className="max-w-[var(--chat-max-width)] mx-auto px-4 py-6">
             {messages.map((msg, i) => {
               const isLastAssistant =
@@ -162,6 +166,7 @@ export function ChatArea() {
           </div>
         )}
       </div>
+      <MicHotkeyPrompt />
       <InputArea />
     </div>
   );
