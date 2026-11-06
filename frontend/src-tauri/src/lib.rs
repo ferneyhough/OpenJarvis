@@ -1794,6 +1794,31 @@ async fn reset_inference_source(
     Ok(())
 }
 
+/// Open a URL in a dedicated in-app browser window (real WebView2, so sites
+/// that block iframes via X-Frame-Options still work). Reuses one window —
+/// each call navigates the existing "hub-browser" window or creates it.
+#[tauri::command]
+fn open_browser_window(app: tauri::AppHandle, url: String, title: String) -> Result<(), String> {
+    let parsed: tauri::Url = url
+        .parse()
+        .map_err(|_| "Invalid URL for in-app browser".to_string())?;
+    if let Some(win) = app.get_webview_window("hub-browser") {
+        let _ = win.close();
+    }
+    let window_title = if title.is_empty() { "Browser".to_string() } else { title };
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "hub-browser",
+        tauri::WebviewUrl::External(parsed),
+    )
+    .title(&window_title)
+    .inner_size(1152.0, 768.0)
+    .min_inner_size(800.0, 500.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[derive(serde::Serialize)]
 struct PlayniteStatus {
     supported: bool,
@@ -4326,6 +4351,7 @@ pub fn run() {
             toggle_overlay,
             hide_overlay,
             get_overlay_conversation,
+            open_browser_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building OpenJarvis Desktop")

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { ExternalLink, Globe, Loader2, RotateCw, X } from 'lucide-react';
+import { AppWindow, ExternalLink, Globe, Loader2, RotateCw, X } from 'lucide-react';
 import { useInAppBrowser, closeInAppBrowser } from '../lib/in-app-browser';
-import { isTauri, launchApp } from '../lib/api';
+import { isTauri, launchApp, openBrowserWindow } from '../lib/api';
 
 /**
  * In-Jarvis browser overlay. Hub tiles open pages here instead of the
@@ -59,6 +59,17 @@ export function InAppBrowser() {
         >
           <RotateCw size={14} />
         </button>
+        {isTauri() && (
+          <button
+            type="button"
+            onClick={() => void openBrowserWindow(url, title).catch(() => {})}
+            title="Open in a separate in-app browser window (works even if the site blocks embedding)"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs"
+            style={{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+          >
+            <AppWindow size={13} /> Window
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void openExternal()}
@@ -93,7 +104,7 @@ export function InAppBrowser() {
         className="px-3 py-1.5 text-[11px] shrink-0"
         style={{ borderTop: '1px solid var(--color-border)', color: 'var(--color-text-tertiary)', background: 'var(--color-bg-secondary)' }}
       >
-        Some sites block embedding — if the page stays blank, use External. {isTauri() ? '' : 'In the desktop app this runs in a full webview.'}
+        Some sites block embedding — if the page stays blank, use Window (desktop app) or External. Sign-in and browsing stay inside OpenJarvis either way.
       </div>
     </div>
   );

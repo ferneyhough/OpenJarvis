@@ -2021,3 +2021,13 @@ export async function deleteHubApp(id: string): Promise<void> {
   const res = await apiFetch(`/v1/hub/custom/apps/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
 }
+
+/** Open a URL in the desktop app's dedicated browser window (real webview). */
+export async function openBrowserWindow(url: string, title = ''): Promise<void> {
+  if (!isTauri()) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('open_browser_window', { url, title });
+}
