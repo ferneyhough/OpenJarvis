@@ -29,6 +29,7 @@ import {
   Video,
   Music2,
   Globe,
+  LayoutGrid,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
@@ -41,6 +42,7 @@ import { useAppStore } from '../../lib/store';
 import { useMusicStore } from '../../lib/music';
 import { MUSIC_APPS } from '../../lib/music-commands';
 import { Links, useEnabledMusicApps } from '../PageDetails';
+import { InstallerButton } from '../InstallerButton';
 import { getCloudKeyStatus, fetchNativeApps } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
 import { openHubService } from '../../lib/hub-voice';
@@ -50,7 +52,7 @@ import {
   type GameLauncherId,
 } from '../../lib/game-launchers';
 
-type HubSection = 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
+type HubSection = 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps';
 type GameSource = 'steam' | 'playnite';
 
 interface HubService {
@@ -121,6 +123,7 @@ const aiApps = [
 const aiTools: HubService[] = [
   { id: 'base44', name: 'Base44', url: 'https://base44.com/', color: '#635bff', description: 'AI app-building platform. Sign in with Base44 to use its hosted tools.', icon: BrainCircuit },
   { id: 'microsoft-copilot', name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com/', color: '#4f6bed', description: 'Microsoft Copilot web app. Uses its own Microsoft sign-in and subscription.', icon: BrainCircuit },
+  { id: 'xcrawl', name: 'XCrawl', url: 'https://www.xcrawl.ai/', color: '#0ea5e9', description: 'Web scraping API for agents — scrape/crawl/map/SERP as clean JSON or Markdown. Get a key at dash.xcrawl.com (1,000 free credits), then add it as an MCP server (see AGENTS.md).', icon: BrainCircuit },
 ];
 
 const streamingDestinations: HubService[] = [
@@ -616,22 +619,24 @@ function KidsPanel() {
         {kidsApps.map((app) => {
           const Icon = app.icon;
           return (
-            <button
-              key={app.id}
-              type="button"
-              onClick={() => void openExternal(app.url)}
-              title={app.description}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
-              style={{
-                color: app.color,
-                background: `${app.color}18`,
-                border: `1px solid ${app.color}55`,
-              }}
-            >
-              <Icon size={14} />
-              {app.name}
-              <ExternalLink size={11} />
-            </button>
+            <span key={app.id} className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => void openExternal(app.url)}
+                title={app.description}
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
+                style={{
+                  color: app.color,
+                  background: `${app.color}18`,
+                  border: `1px solid ${app.color}55`,
+                }}
+              >
+                <Icon size={14} />
+                {app.name}
+                <ExternalLink size={11} />
+              </button>
+              <InstallerButton url={app.url} name={app.name} color={app.color} />
+            </span>
           );
         })}
       </div>
@@ -784,22 +789,24 @@ function CryptoPanel() {
             {group.apps.map((app) => {
               const Icon = app.icon;
               return (
-                <button
-                  key={app.id}
-                  type="button"
-                  onClick={() => void openExternal(app.url)}
-                  title={app.description}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
-                  style={{
-                    color: app.color,
-                    background: `${app.color}18`,
-                    border: `1px solid ${app.color}55`,
-                  }}
-                >
-                  <Icon size={14} />
-                  {app.name}
-                  <ExternalLink size={11} />
-                </button>
+                <span key={app.id} className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void openExternal(app.url)}
+                    title={app.description}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
+                    style={{
+                      color: app.color,
+                      background: `${app.color}18`,
+                      border: `1px solid ${app.color}55`,
+                    }}
+                  >
+                    <Icon size={14} />
+                    {app.name}
+                    <ExternalLink size={11} />
+                  </button>
+                  <InstallerButton url={app.url} name={app.name} color={app.color} />
+                </span>
               );
             })}
           </div>
@@ -871,31 +878,46 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
                   Feed previews are not available in OpenJarvis yet. Open the service to see its feed; OpenJarvis does not access private content.
                 </span>
               )}
+              <span className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void openLink(selectedApp)}
+                  disabled={opening !== ''}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs disabled:opacity-50"
+                  style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+                >
+                  {opening === selectedApp.id ? <Loader2 size={13} className="animate-spin" /> : <ExternalLink size={13} />}
+                  Open {selectedApp.name}
+                </button>
+                <InstallerButton url={selectedApp.url} name={selectedApp.name} color={selectedApp.color} />
+              </span>
             </div>
           )}
           <div className="flex flex-wrap gap-2" role="group" aria-label={`Available ${category} apps`}>
             {visibleApps.map((app) => {
               const Icon = app.icon;
               return (
-                <button
-                  key={app.id}
-                  type="button"
-                  onMouseEnter={() => setSelectedId(app.id)}
-                  onFocus={() => setSelectedId(app.id)}
-                  onClick={() => void openLink(app)}
-                  aria-pressed={selectedApp?.id === app.id}
-                  title={installed[app.url] ? `Open ${app.name} app` : `Open ${app.name} website`}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={{
-                    color: selectedApp?.id === app.id ? app.color : 'var(--color-text-secondary)',
-                    background: selectedApp?.id === app.id ? `${app.color}18` : 'var(--color-bg-secondary)',
-                    border: `1px solid ${selectedApp?.id === app.id ? app.color : 'var(--color-border)'}`,
-                  }}
-                >
-                  {opening === app.id ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
-                  {app.name}
-                  <ExternalLink size={11} />
-                </button>
+                <span key={app.id} className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onMouseEnter={() => setSelectedId(app.id)}
+                    onFocus={() => setSelectedId(app.id)}
+                    onClick={() => void openLink(app)}
+                    aria-pressed={selectedApp?.id === app.id}
+                    title={installed[app.url] ? `Open ${app.name} app` : `Open ${app.name} website`}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{
+                      color: selectedApp?.id === app.id ? app.color : 'var(--color-text-secondary)',
+                      background: selectedApp?.id === app.id ? `${app.color}18` : 'var(--color-bg-secondary)',
+                      border: `1px solid ${selectedApp?.id === app.id ? app.color : 'var(--color-border)'}`,
+                    }}
+                  >
+                    {opening === app.id ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
+                    {app.name}
+                    <ExternalLink size={11} />
+                  </button>
+                  <InstallerButton url={app.url} name={app.name} color={app.color} />
+                </span>
               );
             })}
           </div>
@@ -1552,6 +1574,91 @@ function MusicPanel() {
   );
 }
 
+interface AppsGroup {
+  label: string;
+  apps: HubService[];
+}
+
+const appsGroups: AppsGroup[] = [
+  {
+    label: 'Streaming devices',
+    apps: [
+      { id: 'roku', name: 'Roku', url: 'https://my.roku.com/', color: '#6a0dad', description: 'Roku account — add channels, manage your streaming devices.', icon: Tv },
+      { id: 'fire-tv', name: 'Fire TV', url: 'https://www.amazon.com/fire-tv', color: '#00a8e1', description: 'Amazon Fire TV Stick / Cube — shop and setup.', icon: Tv },
+      { id: 'apple-tv', name: 'Apple TV', url: 'https://www.apple.com/tv-app/', color: '#1d1d1f', description: 'Apple TV app and Apple TV 4K setup.', icon: Tv },
+      { id: 'chromecast', name: 'Chromecast / Google TV', url: 'https://store.google.com/us/category/streaming_devices', color: '#4285f4', description: 'Google TV streamers and Chromecast devices.', icon: Tv },
+      { id: 'nvidia-shield', name: 'NVIDIA Shield', url: 'https://www.nvidia.com/en-us/geforce-now/shield/', color: '#76b900', description: 'Shield TV Pro — the most powerful Android TV streamer.', icon: Tv },
+      { id: 'onn', name: 'ONN Google TV', url: 'https://www.walmart.com/browse/electronics/onn-google-tv/3944_124576365', color: '#ffc220', description: 'Walmart ONN 4K Google TV boxes — budget streamer.', icon: Tv },
+      { id: 'tivo-stream', name: 'TiVo Stream', url: 'https://www.tivo.com/products/tivo-stream', color: '#00b3e6', description: 'TiVo Stream 4K Android TV streamer.', icon: Tv },
+    ],
+  },
+  {
+    label: 'Media center apps',
+    apps: [
+      { id: 'kodi', name: 'Kodi', url: 'https://kodi.tv/', color: '#3d7dc4', description: 'Free open-source media center for any device.', icon: Tv },
+      { id: 'jellyfin', name: 'Jellyfin', url: 'https://jellyfin.org/', color: '#00a4dc', description: 'Free software media system — your own Netflix.', icon: Tv },
+      { id: 'emby', name: 'Emby', url: 'https://emby.media/', color: '#52b54b', description: 'Media server with apps for every platform.', icon: Tv },
+      { id: 'stremio', name: 'Stremio', url: 'https://www.stremio.com/', color: '#3a7bd5', description: 'Streaming center — movies, series, live TV in one app.', icon: Tv },
+      { id: 'plex-app', name: 'Plex', url: 'https://www.plex.tv/download/', color: '#e5a00d', description: 'Download the Plex desktop/server apps.', icon: Tv },
+      { id: 'vlc-app', name: 'VLC', url: 'https://www.videolan.org/vlc/download-windows/', color: '#ff8800', description: 'Download VLC for Windows directly.', icon: Play },
+    ],
+  },
+  {
+    label: 'Popular apps',
+    apps: [
+      { id: 'netflix-app', name: 'Netflix', url: 'https://www.netflix.com/download', color: '#e50914', description: 'Download the Netflix app for Windows.', icon: Tv },
+      { id: 'disney-app', name: 'Disney+', url: 'https://www.disneyplus.com/', color: '#113ccf', description: 'Movies and series from Disney, Marvel, Star Wars.', icon: Tv },
+      { id: 'hbomax-app', name: 'Max', url: 'https://www.max.com/download', color: '#5b2bdb', description: 'HBO Max movies and series.', icon: Tv },
+      { id: 'spotify', name: 'Spotify', url: 'https://www.spotify.com/download/', color: '#1db954', description: 'Music streaming — download the desktop app.', icon: Music2 },
+      { id: 'vlc-media', name: 'VLC Media Player', url: 'https://www.videolan.org/', color: '#ff8800', description: 'Plays almost any video/audio file.', icon: Play },
+      { id: 'audacity', name: 'Audacity', url: 'https://www.audacityteam.org/download/', color: '#0000cc', description: 'Free audio editor and recorder.', icon: Music2 },
+    ],
+  },
+];
+
+function AppsPanel() {
+  return (
+    <div className="space-y-4 px-4 pb-4">
+      {appsGroups.map((group) => (
+        <div key={group.label}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-tertiary)' }}>
+            {group.label}
+          </h3>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={group.label}>
+            {group.apps.map((app) => {
+              const Icon = app.icon;
+              return (
+                <span key={app.id} className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void openExternal(app.url)}
+                    title={app.description}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
+                    style={{
+                      color: app.color,
+                      background: `${app.color}18`,
+                      border: `1px solid ${app.color}55`,
+                    }}
+                  >
+                    <Icon size={14} />
+                    {app.name}
+                    <ExternalLink size={11} />
+                  </button>
+                  <InstallerButton url={app.url} name={app.name} color={app.color} />
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+        The download arrow grabs the real installer from the site and runs it — files land in
+        ~/.openjarvis/installers first. Device tiles open setup/account pages (streamers don&apos;t install on this PC).
+      </p>
+    </div>
+  );
+}
+
 export function MainPageHub() {
   const navigate = useNavigate();
   const [section, setSection] = useState<HubSection | null>(null);
@@ -1576,6 +1683,9 @@ export function MainPageHub() {
         </ActionButton>
         <ActionButton active={section === 'crypto'} onClick={() => selectSection('crypto')}>
           <Bitcoin size={15} /> Crypto
+        </ActionButton>
+        <ActionButton active={section === 'apps'} onClick={() => selectSection('apps')}>
+          <LayoutGrid size={15} /> Apps
         </ActionButton>
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
@@ -1613,6 +1723,7 @@ export function MainPageHub() {
       <div className={`max-h-[42vh] overflow-y-auto pb-2 ${section ? '' : 'hidden'}`}>
         {visitedSections.has('kids') && <div hidden={section !== 'kids'}><KidsPanel /></div>}
         {visitedSections.has('crypto') && <div hidden={section !== 'crypto'}><CryptoPanel /></div>}
+        {visitedSections.has('apps') && <div hidden={section !== 'apps'}><AppsPanel /></div>}
         {visitedSections.has('browsers') && <div hidden={section !== 'browsers'}><BrowsersPanel /></div>}
         {visitedSections.has('games') && <div hidden={section !== 'games'}><GamesPanel /></div>}
         {visitedSections.has('social') && <div hidden={section !== 'social'}><SocialPanel /></div>}

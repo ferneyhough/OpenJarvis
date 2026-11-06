@@ -1885,3 +1885,67 @@ export function vodMagnetUri(infoHash: string, name?: string): string {
   const dn = name ? `&dn=${encodeURIComponent(name)}` : '';
   return `magnet:?xt=urn:btih:${infoHash}${dn}`;
 }
+
+// ---------------------------------------------------------------------------
+// Installer pipeline — resolve a product/repo page to a real installer file,
+// download it into ~/.openjarvis/installers, then launch it.
+// ---------------------------------------------------------------------------
+
+export interface InstallerCandidate {
+  name: string;
+  url: string;
+  size: number | null;
+}
+
+export async function resolveInstaller(url: string): Promise<InstallerCandidate[]> {
+  const res = await apiFetch(`/v1/installer/resolve?url=${encodeURIComponent(url)}`);
+  if (!res.ok) {
+    let detail = `Installer lookup failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
+  const data = await res.json();
+  return (data.candidates ?? []) as InstallerCandidate[];
+}
+
+export async function downloadInstaller(url: string, filename?: string): Promise<{ path: string; name: string; size: number }> {
+  const res = await apiFetch('/v1/installer/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, filename: filename ?? null }),
+  });
+  if (!res.ok) {
+    let detail = `Installer download failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+export async function runInstaller(path: string): Promise<void> {
+  const res = await apiFetch('/v1/installer/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    let detail = `Installer launch failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
+}

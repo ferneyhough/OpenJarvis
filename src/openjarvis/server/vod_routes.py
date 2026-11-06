@@ -362,7 +362,13 @@ class _TorrentManager:
             handle = item["handle"]
             per_file = handle.file_progress()
             if per_file and item["file_index"] < len(per_file):
-                return float(per_file[item["file_index"]])
+                raw = float(per_file[item["file_index"]])
+                # libtorrent returns per-file progress in bytes on some builds
+                # and as a 0..1 fraction on others — normalize either way.
+                size = self._file_expected_size(tid)
+                if size and raw > 1.0:
+                    return min(1.0, raw / size)
+                return min(1.0, max(0.0, raw))
             return float(handle.status().progress)
         except Exception:
             return 0.0
@@ -382,8 +388,10 @@ class _TorrentManager:
             lt.torrent_status.checking_resume_data: "checking",
         }
         progress = self._file_progress(tid)
-        expected = self._file_expected_size(tid)
-        done = progress >= 0.999 or (expected and self._disk_size(tid) >= expected)
+        done = progress >= 0.999 or st.state in (
+            lt.torrent_status.finished,
+            lt.torrent_status.seeding,
+        )
         return {
             "id": tid,
             "state": state_names.get(st.state, str(st.state)),

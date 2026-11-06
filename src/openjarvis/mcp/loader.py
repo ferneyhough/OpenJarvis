@@ -53,13 +53,24 @@ def load_mcp_tools_from_config(
     # MCPConfig dataclass; accept duck-typed equivalents for tests.
     enabled = getattr(mcp_cfg, "enabled", False)
     servers_blob = getattr(mcp_cfg, "servers", None)
-    if not enabled or not servers_blob:
+
+    # XCrawl web-scraping tools auto-enable when XCRAWL_API_KEY is set,
+    # even if no other MCP servers are configured.
+    import os
+
+    xcrawl_key = os.environ.get("XCRAWL_API_KEY", "").strip()
+    if not enabled and not xcrawl_key:
+        return [], []
+    if not servers_blob and not xcrawl_key:
         return [], []
 
     try:
-        server_list = (
-            json.loads(servers_blob) if isinstance(servers_blob, str) else servers_blob
-        )
+        if not servers_blob:
+            server_list = []
+        else:
+            server_list = (
+                json.loads(servers_blob) if isinstance(servers_blob, str) else servers_blob
+            )
     except (json.JSONDecodeError, TypeError) as exc:
         logger.warning("Failed to parse MCP servers config: %s", exc)
         return [], []
@@ -69,6 +80,21 @@ def load_mcp_tools_from_config(
             type(server_list).__name__,
         )
         return [], []
+
+    # XCrawl web-scraping tools: enabled automatically when XCRAWL_API_KEY is
+    # set in the environment, unless a server named "xcrawl" is already
+    # configured explicitly.
+    if xcrawl_key and not any(
+        isinstance(s, dict) and str(s.get("name", "")).lower() == "xcrawl"
+        for s in server_list
+    ):
+        server_list = list(server_list) + [
+            {
+                "name": "xcrawl",
+                "url": "https://mcp.xcrawl.com/mcp",
+                "token": xcrawl_key,
+            }
+        ]
 
     # Imported lazily so that `openjarvis.mcp.loader` can be imported
     # cheaply from CLI startup paths without dragging in the heavy MCP

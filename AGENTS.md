@@ -16,9 +16,16 @@ blender.exe -b --python <script.py>
   `titan.m3u8`) with windowed XMLTV EPG via `/v1/guide/epg`.
 - `/v1/guide/ivue` scrapes iVue TV Guide sources (~2 min cold; cache it).
 - VOD: `/v1/vod/*` Stremio addons + libtorrent progressive playback.
-- EPG docs are parsed once into `_epg_doc_cache` (6h TTL); `prefetch_epg_sources()`
-  warms 1h→6h→12h→24h windows once daily on server start.
+- EPG docs are parsed once into `_epg_doc_cache` (6h TTL). No fetch on boot —
+  `POST /v1/guide/prefetch` warms 1h→6h→12h→24h windows manually.
 - Games (incl. Minecraft server) live on the chat-page Kids pill, not Media.
+- Installers: `/v1/installer/resolve|download|run` turns a product/GitHub page
+  link into a downloaded installer under `~/.openjarvis/installers` (wired to
+  hub tiles via `InstallerButton`).
+- XCrawl (web scraping API for agents): sign up at dash.xcrawl.com for an API
+  key, then add the hosted MCP server in `~/.openjarvis/config.toml`:
+  `servers = '[{"name":"xcrawl","url":"https://mcp.xcrawl.com/mcp","token":"YOUR_KEY"}]'`
+  under `[tools.mcp]`. Or run `npx -y xcrawl-mcp` with `XCRAWL_API_KEY` set.
 
 ## Frontend
 
