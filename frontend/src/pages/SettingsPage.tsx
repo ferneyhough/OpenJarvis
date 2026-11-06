@@ -50,11 +50,6 @@ import {
   deleteHubSection,
   addHubApp,
   deleteHubApp,
-  fetchWikiStatus,
-  activateWikiFile,
-  deleteWikiFile,
-  downloadWikiFile,
-  type WikiStatus,
   type InferenceSource,
   type MemoryStats,
 } from '../lib/api';
@@ -1255,123 +1250,6 @@ export function CustomHubSettings() {
   );
 }
 
-function WikiSettings() {
-  const [status, setStatus] = useState<WikiStatus | null>(null);
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState('');
-
-  const refresh = useCallback(() => {
-    fetchWikiStatus().then(setStatus).catch(() => setStatus(null));
-  }, []);
-
-  useEffect(() => { refresh(); }, [refresh]);
-
-  const act = async (key: string, fn: () => Promise<unknown>, done?: string) => {
-    setBusy(key); setMsg('');
-    try {
-      await fn();
-      if (done) setMsg(done);
-      refresh();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Failed');
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const inputStyle = {
-    background: 'var(--color-bg-secondary)',
-    color: 'var(--color-text)',
-    border: '1px solid var(--color-border)',
-  } as const;
-
-  return (
-    <Section title="Offline knowledge">
-      <SettingRow
-        label="Offline Wikipedia (optional)"
-        description="Download a Kiwix .zim file once, then Jarvis can search and read articles fully offline. Get files at library.kiwix.org — pick a small one like Simple English Wikipedia if space is tight."
-      >
-        <div className="flex flex-col gap-2 w-full max-w-xl">
-          {status && !status.available && (
-            <div className="text-xs" style={{ color: 'var(--color-warning, #eab308)' }}>
-              libzim is not installed on the server — the wiki reader is unavailable until it is.
-            </div>
-          )}
-          {status?.files.length ? (
-            <div className="flex flex-col gap-1">
-              {status.files.map((f) => (
-                <div key={f.name} className="flex items-center gap-2 text-xs">
-                  <span className="truncate" style={{ color: 'var(--color-text)' }}>
-                    {f.name} <span style={{ color: 'var(--color-text-tertiary)' }}>({f.size_mb} MB)</span>
-                  </span>
-                  {status.active === f.name && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}>active</span>
-                  )}
-                  <span className="flex-1" />
-                  {status.active !== f.name && (
-                    <button
-                      disabled={busy !== null}
-                      onClick={() => act(`act:${f.name}`, () => activateWikiFile(f.name), `Activated ${f.name}`)}
-                      className="text-[11px] underline underline-offset-2 disabled:opacity-50"
-                      style={{ color: 'var(--color-accent)' }}
-                    >Use</button>
-                  )}
-                  <button
-                    disabled={busy !== null}
-                    onClick={() => act(`del:${f.name}`, () => deleteWikiFile(f.name), `Deleted ${f.name}`)}
-                    className="text-[11px] underline underline-offset-2 disabled:opacity-50"
-                    style={{ color: 'var(--color-danger, #ef4444)' }}
-                  >Delete</button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>No wiki files yet — paste a .zim URL below to download one.</div>
-          )}
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); setMsg(''); }}
-              placeholder="https://…/something.zim"
-              className="text-xs px-3 py-1.5 rounded-lg outline-none flex-1 max-w-md"
-              style={inputStyle}
-            />
-            <button
-              disabled={busy !== null || !url.trim()}
-              onClick={() => act('dl', async () => {
-                const r = await downloadWikiFile(url.trim());
-                setUrl('');
-                await activateWikiFile(r.name);
-                return r;
-              }, 'Download complete — set as active source')}
-              className="text-xs px-3 py-1.5 rounded-lg outline-none cursor-pointer disabled:opacity-50 flex items-center gap-1"
-              style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)', border: '1px solid var(--color-border)' }}
-            >
-              <Download className="w-3.5 h-3.5" />
-              {busy === 'dl' ? 'Downloading…' : 'Download .zim'}
-            </button>
-            <a
-              href="https://library.kiwix.org/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs underline underline-offset-2 flex items-center gap-1"
-              style={{ color: 'var(--color-accent)' }}
-            >
-              Kiwix library <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-          {msg && <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{msg}</div>}
-          <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            Files live in {status?.dir ?? '~/.openjarvis/wiki'}. Once active, ask Jarvis to search the offline wiki, or use the offline_wiki tool.
-          </div>
-        </div>
-      </SettingRow>
-    </Section>
-  );
-}
-
 function PersonalSourcesSettings() {
   const enabled = useAppStore((state) => state.settings.personalSourcesEnabled);
   const updateSettings = useAppStore((state) => state.updateSettings);
@@ -1975,7 +1853,6 @@ export function SettingsPage() {
           <SteamSettings />
           <AppIntegrationsSettings />
           <CustomHubSettings />
-          <WikiSettings />
           <PersonalSourcesSettings />
           <DeveloperSettings />
 

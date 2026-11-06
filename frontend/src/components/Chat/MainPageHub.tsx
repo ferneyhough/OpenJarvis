@@ -1512,10 +1512,10 @@ function PcCareCard() {
     return () => window.clearInterval(t);
   }, [defrag?.running, refreshDefrag]);
 
-  const doScan = useCallback(async () => {
-    setBusy('scan'); setMsg('Scanning…');
+  const doScan = useCallback(async (deep = false) => {
+    setBusy(deep ? 'deep' : 'scan'); setMsg(deep ? 'Deep scanning whole PC (slower)…' : 'Scanning…');
     try {
-      setScan(await fetchPcScan());
+      setScan(await fetchPcScan(deep));
       setMsg('');
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Scan failed');
@@ -1574,8 +1574,11 @@ function PcCareCard() {
         <HardDrive size={16} style={{ color: 'var(--color-accent)' }} />
         <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>PC Care</h3>
         <span className="flex-1" />
-        <button onClick={() => void doScan()} disabled={busy !== null} className={btn} style={btnStyle}>
+        <button onClick={() => void doScan()} disabled={busy !== null} className={btn} style={btnStyle} title="Scan your profile folders">
           {busy === 'scan' ? 'Scanning…' : 'Scan PC'}
+        </button>
+        <button onClick={() => void doScan(true)} disabled={busy !== null} className={btn} style={btnStyle} title="Scan all of C:\Users and ProgramData — slower">
+          {busy === 'deep' ? 'Deep scanning…' : 'Deep scan (whole PC)'}
         </button>
       </div>
 

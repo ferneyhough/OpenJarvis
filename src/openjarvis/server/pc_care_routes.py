@@ -39,6 +39,12 @@ SCAN_ROOTS = [
 ]
 EMPTY_DIR_MAX_DEPTH = 5
 EMPTY_DIR_LIMIT = 300
+DEEP_DIR_BUDGET_S = 45.0
+DEEP_PRUNE_DIRS = {
+    "appdata", "node_modules", ".git", ".hg", ".svn", ".venv", "venv",
+    "__pycache__", "$recycle.bin", "system volume information",
+    "windows", "program files", "program files (x86)", "programdata",
+}
 LINK_SCAN_DIRS = [
     HOME / "Desktop",
     HOME / "Downloads",
@@ -120,9 +126,13 @@ def _scan_temp() -> dict[str, Any]:
     }
 
 
-def _scan_empty_dirs() -> list[dict[str, str]]:
+def _scan_empty_dirs(
+    roots: list[Path] | None = None,
+    deadline: float | None = None,
+    prune: set[str] | None = None,
+) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
-    for root in SCAN_ROOTS:
+    for root in (roots if roots is not None else SCAN_ROOTS):
         if len(found) >= EMPTY_DIR_LIMIT or not root.is_dir():
             continue
         base_depth = len(root.parts)
@@ -130,6 +140,14 @@ def _scan_empty_dirs() -> list[dict[str, str]]:
             for dirpath, dirnames, filenames in os.walk(root):
                 if len(found) >= EMPTY_DIR_LIMIT:
                     break
+                if deadline is not None and time.time() > deadline:
+                    dirnames[:] = []
+                    break
+                if prune:
+                    dirnames[:] = [
+                        d for d in dirnames
+                        if d.lower() not in prune and not d.startswith(".")
+                    ]
                 depth = len(Path(dirpath).parts) - base_depth
                 if depth > EMPTY_DIR_MAX_DEPTH:
                     dirnames[:] = []
@@ -158,15 +176,17 @@ def _scan_empty_dirs() -> list[dict[str, str]]:
     return found
 
 
-def _scan_dead_links() -> list[dict[str, str]]:
+def _scan_dead_links(roots: list[Path] | None = None) -> list[dict[str, str]]:
     """Resolve .lnk/.url shortcuts via PowerShell COM; report broken targets."""
     targets: list[Path] = []
-    for d in LINK_SCAN_DIRS:
+    for d in (roots if roots is not None else LINK_SCAN_DIRS):
         try:
             if not d.is_dir():
                 continue
             for p in d.rglob("*"):
-                if p.suffix.lower() in {".lnk", ".url"} and len(targets) < 400:
+                if len(targets) >= 400:
+                    break
+                if p.suffix.lower() in {".lnk", ".url"}:
                     targets.append(p)
         except OSError:
             continue
@@ -207,12 +227,48 @@ def _scan_dead_links() -> list[dict[str, str]]:
 
 # ---------------------------------------------------------------- endpoints
 
+DEEP_SCAN_ROOTS = [
+    Path(r"C:\Users"),
+    Path(r"C:\ProgramData"),
+]
+
+
+def _deep_link_dirs() -> list[Path]:
+    """Shortcut-heavy dirs across every user profile — avoids a full-drive rglob."""
+    dirs: list[Path] = []
+    skip = {"public", "default", "default user", "all users"}
+    try:
+        for prof in Path(r"C:\Users").iterdir():
+            if not prof.is_dir() or prof.name.lower() in skip:
+                continue
+            for sub in ("Desktop", "Downloads", "Documents", "Start Menu"):
+                d = prof / sub
+                if d.is_dir():
+                    dirs.append(d)
+            sm = prof / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu"
+            if sm.is_dir():
+                dirs.append(sm)
+    except OSError:
+        pass
+    pd = Path(r"C:\ProgramData\Microsoft\Windows\Start Menu")
+    if pd.is_dir():
+        dirs.append(pd)
+    return dirs
+
+
 @pc_router.get("/pc/scan")
-def scan() -> dict:
+def scan(deep: bool = False) -> dict:
     t0 = time.time()
     temp = _scan_temp()
-    empty = _scan_empty_dirs()
-    dead = _scan_dead_links()
+    if deep:
+        deadline = t0 + DEEP_DIR_BUDGET_S
+        empty = _scan_empty_dirs(
+            SCAN_ROOTS + DEEP_SCAN_ROOTS, deadline=deadline, prune=DEEP_PRUNE_DIRS
+        )
+        dead = _scan_dead_links(LINK_SCAN_DIRS + _deep_link_dirs())
+    else:
+        empty = _scan_empty_dirs()
+        dead = _scan_dead_links()
     usage = shutil.disk_usage("C:\\")
     return {
         "duration_s": round(time.time() - t0, 1),
@@ -412,6 +468,8 @@ SYSTEM_APPS = {
     "task manager": ["taskmgr.exe"],
     "settings": ["ms-settings:"],
     "control panel": ["control.exe"],
+    "activation settings": ["ms-settings:activation"],
+    "ms-settings:activation": ["ms-settings:activation"],
 }
 
 # Every launchable Windows target, grouped for the Toolbox UI. Commands ending
@@ -523,14 +581,20 @@ def launch_system(body: LaunchBody) -> dict:
     if not target:
         raise HTTPException(status_code=404, detail=f"Unknown system app: {body.app}")
     try:
-        if ":" in target.split(" ", 1)[0] and not target.split(" ", 1)[0].endswith(".exe"):
+        parts = target.split()
+        first = parts[0]
+        lower = first.lower()
+        if ":" in first and not lower.endswith(".exe"):
             # Shell URI (ms-settings:, windowsdefender:, ms-photos:, …)
-            os.startfile(target.split(" ", 1)[0])  # type: ignore[attr-defined]
-        elif target.endswith(".cpl") or ".cpl " in target or target.startswith("control.exe"):
-            # Control Panel applets accept args like "control.exe /name X"
-            subprocess.Popen(["control.exe"] + target.split()[1:] if target.startswith("control.exe") else [target.split()[0]] + target.split()[1:])
+            os.startfile(first)  # type: ignore[attr-defined]
+        elif lower.endswith(".msc"):
+            # Microsoft Management Console snap-ins need mmc.exe
+            subprocess.Popen(["mmc.exe", first])
+        elif lower.endswith(".cpl"):
+            # Control Panel applets need control.exe
+            subprocess.Popen(["control.exe", first])
         else:
-            subprocess.Popen(target.split())
+            subprocess.Popen(parts)
         return {"ok": True, "app": key}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

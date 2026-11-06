@@ -2101,47 +2101,7 @@ export async function openBrowserWindow(url: string, title = ''): Promise<void> 
   await invoke('open_browser_window', { url, title });
 }
 
-// ---- Offline Wikipedia (ZIM) ----
-
-export interface WikiStatus {
-  available: boolean;
-  dir: string;
-  active: string | null;
-  files: { name: string; size: number; size_mb: number }[];
-}
-
-export async function fetchWikiStatus(): Promise<WikiStatus> {
-  const res = await apiFetch('/v1/wiki/status');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function activateWikiFile(name: string): Promise<void> {
-  const res = await apiFetch('/v1/wiki/activate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-}
-
-export async function deleteWikiFile(name: string): Promise<void> {
-  const res = await apiFetch(`/v1/wiki/file/${encodeURIComponent(name)}`, { method: 'DELETE' });
-  if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
-}
-
-export async function downloadWikiFile(url: string): Promise<{ name: string; size: number; already: boolean }> {
-  const res = await apiFetch('/v1/wiki/download', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
+// ---- Offline Wikipedia removed ----
 
 // ---- PC care & files ----
 
@@ -2153,8 +2113,8 @@ export interface PcScanResult {
   dead_links: { count: number; sample: { path: string; target: string }[] };
 }
 
-export async function fetchPcScan(): Promise<PcScanResult> {
-  const res = await apiFetch('/v1/pc/scan');
+export async function fetchPcScan(deep = false): Promise<PcScanResult> {
+  const res = await apiFetch(`/v1/pc/scan${deep ? '?deep=true' : ''}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
