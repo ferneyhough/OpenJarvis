@@ -127,6 +127,24 @@ export const gameLaunchers = [
     description: 'Amazon Luna cloud gaming.',
     aliases: ['amazon luna', 'luna'],
   },
+  {
+    id: 'heroic',
+    settingsId: 'heroic-games-launcher',
+    name: 'Heroic Games Launcher',
+    url: 'https://heroicgameslauncher.com/',
+    color: '#f97316',
+    description: 'Open-source launcher for GOG and Epic games on Linux/Windows.',
+    aliases: ['heroic', 'heroic games', 'heroic games launcher'],
+  },
+  {
+    id: 'lutris',
+    settingsId: 'lutris',
+    name: 'Lutris',
+    url: 'https://lutris.net/',
+    color: '#e74c3c',
+    description: 'Open-source game launcher and library manager.',
+    aliases: ['lutris'],
+  },
 ] as const;
 
 export type GameLauncherId = (typeof gameLaunchers)[number]['id'];

@@ -32,6 +32,7 @@ export const MUSIC_APPS: MusicApp[] = [
   { id: 'bandcamp', label: 'Bandcamp', url: 'https://bandcamp.com/', aliases: ['bandcamp', 'band camp'] },
   { id: 'qobuz', label: 'Qobuz', url: 'https://play.qobuz.com/', aliases: ['qobuz'] },
   { id: 'mixcloud', label: 'Mixcloud', url: 'https://www.mixcloud.com/', aliases: ['mixcloud', 'mix cloud'] },
+  { id: 'iheart', label: 'iHeartRadio', url: 'https://www.iheart.com/', aliases: ['iheart', 'i heart', 'iheart radio', 'i heart radio'] },
 ];
 
 function normalize(text: string): string {

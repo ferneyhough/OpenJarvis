@@ -30,6 +30,19 @@ import {
   Music2,
   Globe,
   LayoutGrid,
+  Home,
+  Briefcase,
+  Landmark,
+  Newspaper,
+  HeartPulse,
+  Plane,
+  GraduationCap,
+  ShoppingCart,
+  Wrench,
+  ShieldCheck,
+  Lightbulb,
+  Dumbbell,
+  BookOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
@@ -52,7 +65,8 @@ import {
   type GameLauncherId,
 } from '../../lib/game-launchers';
 
-type HubSection = 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps';
+type HubSection = 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps'
+  | 'smart_home' | 'productivity' | 'finance' | 'news' | 'health' | 'travel' | 'education' | 'shopping' | 'tools' | 'privacy' | 'mods';
 type GameSource = 'steam' | 'playnite';
 
 interface HubService {
@@ -72,6 +86,10 @@ const browserApps: HubService[] = [
   { id: 'browser-opera', name: 'Opera', url: 'https://www.opera.com/', color: '#ff1b2d', description: 'Browser with a built-in sidebar and VPN.', icon: Globe },
   { id: 'browser-vivaldi', name: 'Vivaldi', url: 'https://vivaldi.com/', color: '#ef3939', description: 'Highly customizable browser.', icon: Globe },
   { id: 'browser-tor', name: 'Tor Browser', url: 'https://www.torproject.org/', color: '#7d4698', description: 'Privacy browser that routes traffic through Tor.', icon: Globe },
+  { id: 'browser-arc', name: 'Arc', url: 'https://arc.net/', color: '#ff5a1f', description: 'Design-forward browser with built-in spaces and tools.', icon: Globe },
+  { id: 'browser-dia', name: 'Dia', url: 'https://www.diabrowser.com/', color: '#5b8def', description: 'AI-first browser from The Browser Company.', icon: Globe },
+  { id: 'browser-comet', name: 'Comet', url: 'https://www.perplexity.ai/comet', color: '#20808d', description: 'AI browser from Perplexity.', icon: Globe },
+  { id: 'browser-librewolf', name: 'Librewolf', url: 'https://librewolf.net/', color: '#7a8b00', description: 'Privacy-hardened Firefox fork.', icon: Globe },
 ];
 
 const socialApps: HubService[] = [
@@ -82,6 +100,14 @@ const socialApps: HubService[] = [
   { id: 'facebook', name: 'Facebook', url: 'https://www.facebook.com/', color: '#0866ff', description: 'Friends, groups, and updates.', icon: Users },
   { id: 'instagram', name: 'Instagram', url: 'https://www.instagram.com/', color: '#d62976', description: 'Photos, reels, and stories.', icon: MessageCircle },
   { id: 'tiktok', name: 'TikTok', url: 'https://www.tiktok.com/', color: '#fe2c55', description: 'Short videos, creators, and live streams.', icon: Play },
+  { id: 'x', name: 'X', url: 'https://x.com/', color: '#e7e9ea', description: 'Posts, news and conversations.', icon: MessageCircle },
+  { id: 'reddit', name: 'Reddit', url: 'https://www.reddit.com/', color: '#ff4500', description: 'Communities, forums and discussions.', icon: MessageCircle },
+  { id: 'pinterest', name: 'Pinterest', url: 'https://www.pinterest.com/', color: '#bd081c', description: 'Visual discovery — pins, boards and ideas.', icon: MessageCircle },
+  { id: 'linkedin', name: 'LinkedIn', url: 'https://www.linkedin.com/', color: '#0a66c2', description: 'Professional network and jobs.', icon: Users },
+  { id: 'snapchat', name: 'Snapchat', url: 'https://www.snapchat.com/', color: '#fffc00', description: 'Ephemeral messages and stories.', icon: MessageCircle },
+  { id: 'threads', name: 'Threads', url: 'https://www.threads.net/', color: '#101010', description: 'Text-based social app from Meta.', icon: MessageCircle },
+  { id: 'bluesky', name: 'Bluesky', url: 'https://bsky.app/', color: '#0085ff', description: 'Decentralized microblogging.', icon: MessageCircle },
+  { id: 'mastodon', name: 'Mastodon', url: 'https://mastodon.social/', color: '#6364ff', description: 'Open federated social network.', icon: MessageCircle },
 ];
 
 const mediaApps: HubService[] = [
@@ -97,6 +123,13 @@ const mediaApps: HubService[] = [
   { id: 'hulu', name: 'Hulu', url: 'https://www.hulu.com/', color: '#1ce783', description: 'TV and movies.', icon: Tv },
   { id: 'paramount-plus', name: 'Paramount+', url: 'https://www.paramountplus.com/', color: '#0064ff', description: 'TV and movies.', icon: Tv },
   { id: 'peacock', name: 'Peacock', url: 'https://www.peacocktv.com/', color: '#111827', description: 'TV and movies.', icon: Tv },
+  { id: 'pluto-tv', name: 'Pluto TV', url: 'https://pluto.tv/', color: '#a3e635', description: 'Free live TV channels and movies — no account needed.', icon: Tv },
+  { id: 'samsung-tv-plus', name: 'Samsung TV Plus', url: 'https://www.samsungtvplus.com/', color: '#1428a0', description: 'Free ad-supported live TV channels.', icon: Tv },
+  { id: 'xumo', name: 'Xumo', url: 'https://xumo.tv/', color: '#7c3aed', description: 'Free live TV, movies and shows.', icon: Tv },
+  { id: 'tubi', name: 'Tubi', url: 'https://tubitv.com/', color: '#ff5c39', description: 'Free movies and shows with ads.', icon: Tv },
+  { id: 'kick', name: 'Kick', url: 'https://kick.com/', color: '#53fc18', description: 'Live streams — looser moderation than Twitch.', icon: Play },
+  { id: 'dailymotion', name: 'Dailymotion', url: 'https://www.dailymotion.com/', color: '#0066dc', description: 'Video sharing and live streams.', icon: Play },
+  { id: 'vimeo', name: 'Vimeo', url: 'https://vimeo.com/', color: '#17b3e8', description: 'Creator videos, films and live events.', icon: Play },
   { id: 'vlc', name: 'VLC', url: 'https://www.videolan.org/vlc/', color: '#ff8800', description: 'Local media and authorized TV streams.', icon: Play },
   { id: 'tv-guide', name: 'TV Guide', url: 'https://www.xmltv.org/', color: '#22d3ee', description: 'Combine your own M3U/M3U8 playlist with XMLTV schedule data.', icon: Tv },
 ];
@@ -110,6 +143,9 @@ const storeApps: HubService[] = [
   { id: 'itch-store', name: 'itch.io', url: 'https://itch.io/', color: '#fa5c5c', description: 'Discover indie games.', icon: ShoppingBag },
   { id: 'xbox-store', name: 'Xbox Store', url: 'https://www.xbox.com/games/store', color: '#107c10', description: 'Browse Xbox games and offers.', icon: ShoppingBag },
   { id: 'playstation-store', name: 'PlayStation Store', url: 'https://store.playstation.com/', color: '#003791', description: 'Browse PlayStation games and offers.', icon: ShoppingBag },
+  { id: 'fanatical', name: 'Fanatical', url: 'https://www.fanatical.com/', color: '#ff6b00', description: 'Game keys and bundles at a discount.', icon: ShoppingBag },
+  { id: 'green-man-gaming', name: 'Green Man Gaming', url: 'https://www.greenmangaming.com/', color: '#39ff14', description: 'Discounted game keys for PC.', icon: ShoppingBag },
+  { id: 'indiegala', name: 'IndieGala', url: 'https://www.indiegala.com/', color: '#7c3aed', description: 'Indie bundles and daily giveaways.', icon: ShoppingBag },
 ];
 
 const aiApps = [
@@ -124,6 +160,20 @@ const aiTools: HubService[] = [
   { id: 'base44', name: 'Base44', url: 'https://base44.com/', color: '#635bff', description: 'AI app-building platform. Sign in with Base44 to use its hosted tools.', icon: BrainCircuit },
   { id: 'microsoft-copilot', name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com/', color: '#4f6bed', description: 'Microsoft Copilot web app. Uses its own Microsoft sign-in and subscription.', icon: BrainCircuit },
   { id: 'xcrawl', name: 'XCrawl', url: 'https://www.xcrawl.ai/', color: '#0ea5e9', description: 'Web scraping API for agents — scrape/crawl/map/SERP as clean JSON or Markdown. Get a key at dash.xcrawl.com (1,000 free credits), then add it as an MCP server (see AGENTS.md).', icon: BrainCircuit },
+  { id: 'huggingface', name: 'Hugging Face', url: 'https://huggingface.co/', color: '#ff9d00', description: 'Model hub — download open-weight models for offline use in Settings → Models.', icon: BrainCircuit },
+  { id: 'ollama', name: 'Ollama', url: 'https://ollama.com/', color: '#ffffff', description: 'Local model runtime — powers OpenJarvis offline chat.', icon: BrainCircuit },
+  { id: 'lm-studio', name: 'LM Studio', url: 'https://lmstudio.ai/', color: '#7c6cf0', description: 'Desktop app for running local LLMs.', icon: BrainCircuit },
+  { id: 'jan', name: 'Jan', url: 'https://jan.ai/', color: '#e8e8e8', description: 'Open-source local AI chat app.', icon: BrainCircuit },
+  { id: 'gpt4all', name: 'GPT4All', url: 'https://www.nomic.ai/gpt4all', color: '#00b894', description: 'Local AI desktop app — runs models fully offline.', icon: BrainCircuit },
+  { id: 'anythingllm', name: 'AnythingLLM', url: 'https://anythingllm.com/', color: '#f59e0b', description: 'All-in-one local AI workspace with document chat.', icon: BrainCircuit },
+  { id: 'open-webui', name: 'Open WebUI', url: 'https://openwebui.com/', color: '#111111', description: 'Self-hosted AI chat interface for Ollama and more.', icon: BrainCircuit },
+  { id: 'perplexity', name: 'Perplexity', url: 'https://www.perplexity.ai/', color: '#20808d', description: 'AI answer engine with live web search.', icon: BrainCircuit },
+  { id: 'poe', name: 'Poe', url: 'https://poe.com/', color: '#5930d6', description: 'Chat with many AI models in one place.', icon: BrainCircuit },
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai/', color: '#d97757', description: 'Anthropic\u2019s AI assistant.', icon: BrainCircuit },
+  { id: 'mistral-le-chat', name: 'Mistral Le Chat', url: 'https://chat.mistral.ai/', color: '#ff7000', description: 'Mistral\u2019s free AI chat.', icon: BrainCircuit },
+  { id: 'meta-ai', name: 'Meta AI', url: 'https://www.meta.ai/', color: '#0081fb', description: 'Meta\u2019s AI assistant.', icon: BrainCircuit },
+  { id: 'grok', name: 'Grok', url: 'https://grok.com/', color: '#e7e9ea', description: 'xAI\u2019s assistant — needs an X account.', icon: BrainCircuit },
+  { id: 'deepseek-chat', name: 'DeepSeek', url: 'https://chat.deepseek.com/', color: '#4d6bfe', description: 'DeepSeek chat — strong reasoning, free tier.', icon: BrainCircuit },
 ];
 
 const streamingDestinations: HubService[] = [
@@ -142,6 +192,14 @@ const streamingTools: HubService[] = [
   { id: 'streamlabs', name: 'Streamlabs', url: 'https://streamlabs.com/', color: '#80f5d2', description: 'Streaming software and creator tools.', icon: Video },
   { id: 'streamyard', name: 'StreamYard', url: 'https://streamyard.com/', color: '#1768ff', description: 'Browser-based live production; sign in and choose your destinations.', icon: Video },
   { id: 'prism-launcher', name: 'Prism Launcher', url: 'https://prismlauncher.org/', color: '#5d8db8', description: 'Minecraft instance launcher (not the same as PRISM Live Studio).', icon: Gamepad2 },
+  { id: 'loom', name: 'Loom', url: 'https://www.loom.com/', color: '#625df5', description: 'Quick screen-recording videos for sharing.', icon: Video },
+  { id: 'descript', name: 'Descript', url: 'https://www.descript.com/', color: '#ff4b4b', description: 'Edit video and audio by editing the transcript.', icon: Video },
+  { id: 'riverside', name: 'Riverside', url: 'https://riverside.com/', color: '#12b5a5', description: 'Studio-quality remote recording.', icon: Video },
+  { id: 'capcut', name: 'CapCut', url: 'https://www.capcut.com/', color: '#111111', description: 'Free video editor — desktop and web.', icon: Video },
+  { id: 'canva', name: 'Canva', url: 'https://www.canva.com/', color: '#8b3dff', description: 'Graphic design — thumbnails, posters, social posts.', icon: Video },
+  { id: 'clipchamp', name: 'Clipchamp', url: 'https://clipchamp.com/', color: '#20c4f3', description: 'Microsoft\u2019s free video editor.', icon: Video },
+  { id: 'davinci-resolve', name: 'DaVinci Resolve', url: 'https://www.blackmagicdesign.com/products/davinciresolve', color: '#f4b400', description: 'Pro-grade free video editor and color tools.', icon: Video },
+  { id: 'audacity', name: 'Audacity', url: 'https://www.audacityteam.org/', color: '#0000cc', description: 'Free open-source audio editor.', icon: Video },
 ];
 
 const remoteApps: HubService[] = [
@@ -151,6 +209,11 @@ const remoteApps: HubService[] = [
   { id: 'teamviewer', name: 'TeamViewer', url: 'https://www.teamviewer.com/en/', color: '#0e8ee7', description: 'Remote access and support; use only with the device owner’s permission.', icon: Monitor },
   { id: 'rustdesk', name: 'RustDesk', url: 'https://rustdesk.com/', color: '#2a85ff', description: 'Open-source remote desktop; configure your own clients or server.', icon: Monitor },
   { id: 'parsec', name: 'Parsec', url: 'https://parsec.app/', color: '#8f4bff', description: 'Low-latency remote desktop and game streaming for devices you control.', icon: Gamepad2 },
+  { id: 'moonlight', name: 'Moonlight', url: 'https://moonlight-stream.org/', color: '#76b900', description: 'Open-source game streaming client — pairs with Sunshine.', icon: Gamepad2 },
+  { id: 'sunshine', name: 'Sunshine', url: 'https://app.lizardbyte.dev/Sunshine/', color: '#f59e0b', description: 'Self-hosted game-stream host for Moonlight clients.', icon: Gamepad2 },
+  { id: 'quick-assist', name: 'Quick Assist', url: 'https://support.microsoft.com/en-us/windows/get-help-with-quick-assist', color: '#0078d4', description: 'Built-in Windows screen-sharing for quick help.', icon: Monitor },
+  { id: 'dwservice', name: 'DWService', url: 'https://www.dwservice.net/', color: '#00a8e1', description: 'Remote access agent — works behind NAT.', icon: Monitor },
+  { id: 'zoho-assist', name: 'Zoho Assist', url: 'https://www.zoho.com/assist/', color: '#e42527', description: 'Remote support and unattended access.', icon: Monitor },
 ];
 
 function appArtwork(color: string): string {
@@ -576,6 +639,10 @@ const kidsApps: HubService[] = [
   { id: 'pbskids', name: 'PBS Kids', url: 'https://pbskids.org/', color: '#0074bc', description: 'Free educational games and videos for kids.', icon: Tv },
   { id: 'nickjr', name: 'Nick Jr.', url: 'https://www.nickjr.com/', color: '#ff6f00', description: 'Games and videos for preschoolers.', icon: Tv },
   { id: 'google-classroom', name: 'Google Classroom', url: 'https://classroom.google.com/', color: '#0f9d58', description: 'School assignments and classes — sign in with the school Google account.', icon: Tv },
+  { id: 'abcmouse', name: 'ABCmouse', url: 'https://www.abcmouse.com/', color: '#ff6b35', description: 'Learning games and books for ages 2–8 — needs a subscription.', icon: Tv },
+  { id: 'khan-kids', name: 'Khan Academy Kids', url: 'https://www.khanacademy.org/kids', color: '#1865d8', description: 'Free reading, math and logic games for young kids.', icon: Tv },
+  { id: 'toca-boca', name: 'Toca Boca', url: 'https://tocaboca.com/', color: '#ff5fa2', description: 'Creative play apps for preschoolers.', icon: Tv },
+  { id: 'lego-builder', name: 'LEGO Builder', url: 'https://www.lego.com/en-us/kids', color: '#e3000b', description: 'LEGO games, videos and building ideas for kids.', icon: Tv },
 ];
 
 function KidsPanel() {
@@ -777,10 +844,328 @@ const cryptoGroups: CryptoGroup[] = [
   },
 ];
 
-function CryptoPanel() {
+interface HubGroup {
+  label: string;
+  apps: HubService[];
+}
+
+const smartHomeGroups: HubGroup[] = [
+  {
+    label: 'Hubs & platforms',
+    apps: [
+      { id: 'home-assistant', name: 'Home Assistant', url: 'https://www.home-assistant.io/', color: '#18bcf2', description: 'Open-source smart-home hub — local control, no cloud.', icon: Home },
+      { id: 'smartthings', name: 'SmartThings', url: 'https://www.smartthings.com/', color: '#1f6feb', description: 'Samsung\u2019s smart-home app for hubs and devices.', icon: Home },
+      { id: 'google-home', name: 'Google Home', url: 'https://home.google.com/', color: '#4285f4', description: 'Control Nest and Works-with-Google devices.', icon: Home },
+      { id: 'amazon-alexa', name: 'Alexa', url: 'https://alexa.amazon.com/', color: '#00d4aa', description: 'Amazon voice assistant — routines, devices, drops.', icon: Home },
+      { id: 'homey', name: 'Homey', url: 'https://www.homey.app/', color: '#6c5ce7', description: 'Athom\u2019s local-first smart-home hub.', icon: Home },
+    ],
+  },
+  {
+    label: 'Lights, cameras & sensors',
+    apps: [
+      { id: 'philips-hue', name: 'Philips Hue', url: 'https://www.philips-hue.com/en-us', color: '#0066ff', description: 'Hue lights, scenes and rooms.', icon: Lightbulb },
+      { id: 'ring', name: 'Ring', url: 'https://ring.com/', color: '#1f6feb', description: 'Doorbells, cameras and alarm.', icon: Home },
+      { id: 'nest', name: 'Google Nest', url: 'https://store.google.com/us/category/nest', color: '#4285f4', description: 'Nest thermostats, cameras and doorbells.', icon: Home },
+      { id: 'ecobee', name: 'ecobee', url: 'https://www.ecobee.com/', color: '#2dd4bf', description: 'Smart thermostats and sensors.', icon: Home },
+      { id: 'tp-link-kasa', name: 'Kasa', url: 'https://www.kasasmart.com/', color: '#3b82f6', description: 'TP-Link smart plugs, bulbs and cameras.', icon: Home },
+      { id: 'switchbot', name: 'SwitchBot', url: 'https://www.switch-bot.com/', color: '#00b894', description: 'Robot buttons, curtains and sensors.', icon: Home },
+    ],
+  },
+];
+
+const productivityGroups: HubGroup[] = [
+  {
+    label: 'Work suites & notes',
+    apps: [
+      { id: 'microsoft-365', name: 'Microsoft 365', url: 'https://www.microsoft365.com/', color: '#d83b01', description: 'Word, Excel, Outlook, Teams and OneDrive.', icon: Briefcase },
+      { id: 'google-workspace', name: 'Google Workspace', url: 'https://workspace.google.com/', color: '#4285f4', description: 'Docs, Sheets, Gmail and Drive.', icon: Briefcase },
+      { id: 'notion', name: 'Notion', url: 'https://www.notion.so/', color: '#111111', description: 'Notes, docs, wikis and project boards.', icon: Briefcase },
+      { id: 'obsidian', name: 'Obsidian', url: 'https://obsidian.md/', color: '#7c3aed', description: 'Local-first markdown notes — works offline.', icon: Briefcase },
+      { id: 'todoist', name: 'Todoist', url: 'https://todoist.com/', color: '#e44332', description: 'Task manager with natural-language entry.', icon: Briefcase },
+    ],
+  },
+  {
+    label: 'Boards & planning',
+    apps: [
+      { id: 'trello', name: 'Trello', url: 'https://trello.com/', color: '#0052cc', description: 'Kanban boards for projects.', icon: Briefcase },
+      { id: 'asana', name: 'Asana', url: 'https://asana.com/', color: '#f06a6a', description: 'Team task and project management.', icon: Briefcase },
+      { id: 'clickup', name: 'ClickUp', url: 'https://clickup.com/', color: '#7b68ee', description: 'All-in-one work platform.', icon: Briefcase },
+      { id: 'monday', name: 'monday.com', url: 'https://monday.com/', color: '#ff3d57', description: 'Work OS with boards, docs and automations.', icon: Briefcase },
+    ],
+  },
+  {
+    label: 'Meetings & scheduling',
+    apps: [
+      { id: 'zoom', name: 'Zoom', url: 'https://zoom.us/', color: '#2d8cff', description: 'Video meetings and webinars.', icon: Monitor },
+      { id: 'teams', name: 'Microsoft Teams', url: 'https://teams.microsoft.com/', color: '#6264a7', description: 'Chat, calls and collaboration.', icon: Monitor },
+      { id: 'google-meet', name: 'Google Meet', url: 'https://meet.google.com/', color: '#00897b', description: 'Browser video meetings.', icon: Monitor },
+      { id: 'webex', name: 'Webex', url: 'https://www.webex.com/', color: '#00bcf2', description: 'Cisco video meetings.', icon: Monitor },
+      { id: 'calendly', name: 'Calendly', url: 'https://calendly.com/', color: '#006bff', description: 'Scheduling links — let people book you.', icon: Monitor },
+      { id: 'doodle', name: 'Doodle', url: 'https://doodle.com/', color: '#579ff9', description: 'Group scheduling polls.', icon: Monitor },
+    ],
+  },
+];
+
+const financeGroups: HubGroup[] = [
+  {
+    label: 'Payments & transfers',
+    apps: [
+      { id: 'paypal', name: 'PayPal', url: 'https://www.paypal.com/', color: '#003087', description: 'Payments, transfers and buyer protection.', icon: Wallet },
+      { id: 'venmo', name: 'Venmo', url: 'https://venmo.com/', color: '#008cff', description: 'Social payments app.', icon: Wallet },
+      { id: 'cash-app', name: 'Cash App', url: 'https://cash.app/', color: '#00d632', description: 'Payments, investing and Bitcoin.', icon: Wallet },
+      { id: 'wise', name: 'Wise', url: 'https://wise.com/', color: '#9fe870', description: 'Low-cost international transfers.', icon: Wallet },
+      { id: 'revolut', name: 'Revolut', url: 'https://www.revolut.com/', color: '#000000', description: 'Multi-currency account and card.', icon: Wallet },
+    ],
+  },
+  {
+    label: 'Investing & banking',
+    apps: [
+      { id: 'questrade', name: 'Questrade', url: 'https://www.questrade.com/', color: '#00a651', description: 'Canadian discount brokerage.', icon: LineChart },
+      { id: 'wealthsimple', name: 'Wealthsimple', url: 'https://www.wealthsimple.com/', color: '#000000', description: 'Canadian investing and banking app.', icon: LineChart },
+      { id: 'interactive-brokers', name: 'Interactive Brokers', url: 'https://www.interactivebrokers.com/', color: '#d52b1e', description: 'Global brokerage for stocks, options, futures.', icon: LineChart },
+      { id: 'tangerine', name: 'Tangerine', url: 'https://www.tangerine.ca/', color: '#ff8200', description: 'Canadian no-fee chequing and savings.', icon: Landmark },
+    ],
+  },
+  {
+    label: 'Budgeting & tracking',
+    apps: [
+      { id: 'ynab', name: 'YNAB', url: 'https://www.ynab.com/', color: '#4a90e2', description: 'Zero-based budgeting app.', icon: Landmark },
+      { id: 'monarch', name: 'Monarch Money', url: 'https://www.monarch.com/', color: '#6c5ce7', description: 'Budgeting and net-worth tracking.', icon: Landmark },
+      { id: 'copilot-money', name: 'Copilot Money', url: 'https://copilot.money/', color: '#111111', description: 'AI-assisted budgeting for iPhone/Android.', icon: Landmark },
+    ],
+  },
+];
+
+const newsGroups: HubGroup[] = [
+  {
+    label: 'Canadian news',
+    apps: [
+      { id: 'cbc', name: 'CBC', url: 'https://www.cbc.ca/', color: '#f5423a', description: 'Canada\u2019s public broadcaster — news and TV.', icon: Newspaper },
+      { id: 'ctv-news', name: 'CTV News', url: 'https://www.ctvnews.ca/', color: '#0055a5', description: 'Canadian national and local news.', icon: Newspaper },
+      { id: 'global-news', name: 'Global News', url: 'https://globalnews.ca/', color: '#005baa', description: 'Canadian news with a watch hub.', icon: Newspaper },
+      { id: 'globe-mail', name: 'Globe and Mail', url: 'https://www.theglobeandmail.com/', color: '#1a3c6e', description: 'Canadian business and national news.', icon: Newspaper },
+      { id: 'toronto-star', name: 'Toronto Star', url: 'https://www.thestar.com/', color: '#00205b', description: 'Toronto and Ontario news.', icon: Newspaper },
+    ],
+  },
+  {
+    label: 'World news',
+    apps: [
+      { id: 'bbc-news', name: 'BBC News', url: 'https://www.bbc.com/news', color: '#bb1919', description: 'UK public broadcaster news.', icon: Newspaper },
+      { id: 'cnn', name: 'CNN', url: 'https://www.cnn.com/', color: '#cc0000', description: 'US and world news.', icon: Newspaper },
+      { id: 'reuters', name: 'Reuters', url: 'https://www.reuters.com/', color: '#ff8000', description: 'Wire-service news and markets.', icon: Newspaper },
+      { id: 'associated-press', name: 'AP News', url: 'https://apnews.com/', color: '#003da5', description: 'Associated Press headlines.', icon: Newspaper },
+      { id: 'al-jazeera', name: 'Al Jazeera', url: 'https://www.aljazeera.com/', color: '#a40000', description: 'Qatar-based international news.', icon: Newspaper },
+    ],
+  },
+  {
+    label: 'Weather & environment',
+    apps: [
+      { id: 'weather-network', name: 'The Weather Network', url: 'https://www.theweathernetwork.com/', color: '#005baa', description: 'Canadian forecasts and alerts.', icon: Newspaper },
+      { id: 'accuweather', name: 'AccuWeather', url: 'https://www.accuweather.com/', color: '#f58220', description: 'Minute-by-minute forecasts.', icon: Newspaper },
+      { id: 'eccc', name: 'Environment Canada', url: 'https://weather.gc.ca/', color: '#d52b1e', description: 'Official Canadian weather warnings.', icon: Newspaper },
+      { id: 'windy', name: 'Windy', url: 'https://www.windy.com/', color: '#2b9ff2', description: 'Animated wind, rain and storm maps.', icon: Newspaper },
+    ],
+  },
+];
+
+const healthGroups: HubGroup[] = [
+  {
+    label: 'Fitness & activity',
+    apps: [
+      { id: 'myfitnesspal', name: 'MyFitnessPal', url: 'https://www.myfitnesspal.com/', color: '#0066cc', description: 'Calorie and macro tracking.', icon: Dumbbell },
+      { id: 'strava', name: 'Strava', url: 'https://www.strava.com/', color: '#fc4c02', description: 'Run, ride and workout tracking.', icon: Dumbbell },
+      { id: 'alltrails', name: 'AllTrails', url: 'https://www.alltrails.com/', color: '#4285f4', description: 'Hiking trails and maps.', icon: Dumbbell },
+      { id: 'peloton', name: 'Peloton', url: 'https://www.onepeloton.com/', color: '#d2281c', description: 'Classes and equipment.', icon: Dumbbell },
+      { id: 'fitbit', name: 'Fitbit', url: 'https://www.fitbit.com/', color: '#00b0b9', description: 'Wearables and health metrics.', icon: Dumbbell },
+    ],
+  },
+  {
+    label: 'Mind & sleep',
+    apps: [
+      { id: 'headspace', name: 'Headspace', url: 'https://www.headspace.com/', color: '#f47d31', description: 'Meditation and sleep app.', icon: HeartPulse },
+      { id: 'calm', name: 'Calm', url: 'https://www.calm.com/', color: '#1e2a4a', description: 'Meditation, sleep stories and music.', icon: HeartPulse },
+      { id: 'medisafe', name: 'Medisafe', url: 'https://www.medisafe.com/', color: '#2d8cff', description: 'Medication reminders and interaction checks.', icon: HeartPulse },
+    ],
+  },
+];
+
+const travelGroups: HubGroup[] = [
+  {
+    label: 'Maps & transit',
+    apps: [
+      { id: 'google-maps', name: 'Google Maps', url: 'https://maps.google.com/', color: '#34a853', description: 'Directions, transit and traffic.', icon: Plane },
+      { id: 'apple-maps', name: 'Apple Maps', url: 'https://maps.apple.com/', color: '#007aff', description: 'Apple\u2019s maps — works in any browser.', icon: Plane },
+      { id: 'waze', name: 'Waze', url: 'https://www.waze.com/', color: '#33ccff', description: 'Crowd-sourced driving directions.', icon: Plane },
+      { id: 'transit-app', name: 'Transit', url: 'https://transitapp.com/', color: '#00a86b', description: 'Real-time public transit times.', icon: Plane },
+      { id: 'flightradar24', name: 'Flightradar24', url: 'https://www.flightradar24.com/', color: '#f7931a', description: 'Live flight tracking.', icon: Plane },
+    ],
+  },
+  {
+    label: 'Book & stay',
+    apps: [
+      { id: 'airbnb', name: 'Airbnb', url: 'https://www.airbnb.com/', color: '#ff5a5f', description: 'Homes, rooms and experiences.', icon: Plane },
+      { id: 'booking', name: 'Booking.com', url: 'https://www.booking.com/', color: '#003580', description: 'Hotels and stays worldwide.', icon: Plane },
+      { id: 'expedia', name: 'Expedia', url: 'https://www.expedia.com/', color: '#ffd700', description: 'Flights, hotels and car rentals.', icon: Plane },
+      { id: 'hotels-com', name: 'Hotels.com', url: 'https://www.hotels.com/', color: '#dc1e2a', description: 'Hotel booking with rewards.', icon: Plane },
+      { id: 'kayak', name: 'Kayak', url: 'https://www.kayak.com/', color: '#ff6900', description: 'Compare flights, hotels and cars.', icon: Plane },
+    ],
+  },
+  {
+    label: 'Rideshare',
+    apps: [
+      { id: 'uber', name: 'Uber', url: 'https://www.uber.com/', color: '#000000', description: 'Rides, food delivery and packages.', icon: Plane },
+      { id: 'lyft', name: 'Lyft', url: 'https://www.lyft.com/', color: '#ff00bf', description: 'Rideshare and bike/scooter rentals.', icon: Plane },
+    ],
+  },
+];
+
+const educationGroups: HubGroup[] = [
+  {
+    label: 'Learn & courses',
+    apps: [
+      { id: 'khan-academy', name: 'Khan Academy', url: 'https://www.khanacademy.org/', color: '#1865d8', description: 'Free lessons in math, science and more.', icon: GraduationCap },
+      { id: 'duolingo', name: 'Duolingo', url: 'https://www.duolingo.com/', color: '#58cc02', description: 'Language learning games.', icon: GraduationCap },
+      { id: 'coursera', name: 'Coursera', url: 'https://www.coursera.org/', color: '#0056d2', description: 'University courses and certificates.', icon: GraduationCap },
+      { id: 'edx', name: 'edX', url: 'https://www.edx.org/', color: '#0b42a3', description: 'MIT/Harvard-style online courses.', icon: GraduationCap },
+      { id: 'codecademy', name: 'Codecademy', url: 'https://www.codecademy.com/', color: '#f0c000', description: 'Interactive coding lessons.', icon: GraduationCap },
+    ],
+  },
+  {
+    label: 'Research & reading',
+    apps: [
+      { id: 'google-scholar', name: 'Google Scholar', url: 'https://scholar.google.com/', color: '#4285f4', description: 'Academic paper search.', icon: BookOpen },
+      { id: 'pubmed', name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov/', color: '#2164a5', description: 'Biomedical research database.', icon: BookOpen },
+      { id: 'libby', name: 'Libby', url: 'https://www.overdrive.com/apps/libby/', color: '#e4002b', description: 'Free ebooks and audiobooks via your library.', icon: BookOpen },
+      { id: 'open-library', name: 'Open Library', url: 'https://openlibrary.org/', color: '#a66a00', description: 'Free ebooks — one million+ titles.', icon: BookOpen },
+    ],
+  },
+];
+
+const shoppingGroups: HubGroup[] = [
+  {
+    label: 'Big retailers',
+    apps: [
+      { id: 'amazon-ca', name: 'Amazon.ca', url: 'https://www.amazon.ca/', color: '#ff9900', description: 'Everything store — Canadian site.', icon: ShoppingCart },
+      { id: 'walmart-ca', name: 'Walmart.ca', url: 'https://www.walmart.ca/', color: '#0071dc', description: 'Groceries, electronics and more.', icon: ShoppingCart },
+      { id: 'best-buy-ca', name: 'Best Buy Canada', url: 'https://www.bestbuy.ca/', color: '#0046be', description: 'Electronics and appliances.', icon: ShoppingCart },
+      { id: 'canadian-tire', name: 'Canadian Tire', url: 'https://www.canadiantire.ca/', color: '#d52b1e', description: 'Auto, sports and home — Canadian.', icon: ShoppingCart },
+      { id: 'costco', name: 'Costco', url: 'https://www.costco.ca/', color: '#e31837', description: 'Warehouse club — online ordering.', icon: ShoppingCart },
+    ],
+  },
+  {
+    label: 'Marketplaces',
+    apps: [
+      { id: 'ebay', name: 'eBay', url: 'https://www.ebay.ca/', color: '#e53238', description: 'New and used — auctions and buy-it-now.', icon: ShoppingCart },
+      { id: 'etsy', name: 'Etsy', url: 'https://www.etsy.com/', color: '#f1641e', description: 'Handmade, vintage and craft goods.', icon: ShoppingCart },
+      { id: 'facebook-marketplace', name: 'Facebook Marketplace', url: 'https://www.facebook.com/marketplace', color: '#0866ff', description: 'Buy and sell locally.', icon: ShoppingCart },
+      { id: 'kijiji', name: 'Kijiji', url: 'https://www.kijiji.ca/', color: '#30a0dc', description: 'Canada\u2019s classifieds site.', icon: ShoppingCart },
+    ],
+  },
+  {
+    label: 'Deals & coupons',
+    apps: [
+      { id: 'honey', name: 'Honey', url: 'https://www.joinhoney.com/', color: '#ff9c00', description: 'Auto-applies coupon codes at checkout.', icon: ShoppingCart },
+      { id: 'rakuten', name: 'Rakuten', url: 'https://www.rakuten.ca/', color: '#bf0000', description: 'Cash-back shopping portal.', icon: ShoppingCart },
+      { id: 'slickdeals', name: 'Slickdeals', url: 'https://slickdeals.net/', color: '#ff6f00', description: 'Community-verified deal alerts.', icon: ShoppingCart },
+    ],
+  },
+];
+
+const toolsGroups: HubGroup[] = [
+  {
+    label: 'File & system tools',
+    apps: [
+      { id: '7zip', name: '7-Zip', url: 'https://www.7-zip.org/', color: '#d32f2f', description: 'Free archive extractor/compressor.', icon: Wrench },
+      { id: 'filezilla', name: 'FileZilla', url: 'https://filezilla-project.org/', color: '#bf0000', description: 'FTP/SFTP file transfer.', icon: Wrench },
+      { id: 'everything', name: 'Everything', url: 'https://www.voidtools.com/', color: '#f59e0b', description: 'Instant filename search for Windows.', icon: Wrench },
+      { id: 'powertoys', name: 'PowerToys', url: 'https://learn.microsoft.com/windows/powertoys/', color: '#0078d4', description: 'Microsoft\u2019s Windows power tools.', icon: Wrench },
+      { id: 'notepad-plus-plus', name: 'Notepad++', url: 'https://notepad-plus-plus.org/', color: '#90e59a', description: 'Lightweight code/text editor.', icon: Wrench },
+      { id: 'sharex', name: 'ShareX', url: 'https://getsharex.com/', color: '#00b050', description: 'Screenshots, screen recording and file sharing.', icon: Wrench },
+    ],
+  },
+  {
+    label: 'Media & audio utilities',
+    apps: [
+      { id: 'handbrake', name: 'HandBrake', url: 'https://handbrake.fr/', color: '#f58220', description: 'Video transcoder — rip and compress.', icon: Video },
+      { id: 'lossless-scaling', name: 'Lossless Scaling', url: 'https://losslessscaling.com/', color: '#7c3aed', description: 'Upscale games and video smoothly.', icon: Video },
+      { id: 'foobar2000', name: 'foobar2000', url: 'https://www.foobar2000.org/', color: '#f7931a', description: 'Lightweight advanced music player.', icon: Music2 },
+      { id: 'calibre', name: 'Calibre', url: 'https://calibre-ebook.com/', color: '#e4002b', description: 'Ebook library and converter.', icon: BookOpen },
+      { id: 'paint-net', name: 'Paint.NET', url: 'https://www.getpaint.net/', color: '#ff8c00', description: 'Free image editor for Windows.', icon: Wrench },
+    ],
+  },
+];
+
+const privacyGroups: HubGroup[] = [
+  {
+    label: 'VPNs',
+    apps: [
+      { id: 'mullvad', name: 'Mullvad', url: 'https://mullvad.net/', color: '#e4002b', description: 'Flat-rate VPN — account number only, no email.', icon: ShieldCheck },
+      { id: 'protonvpn', name: 'Proton VPN', url: 'https://protonvpn.com/', color: '#6d4aff', description: 'Swiss no-logs VPN with free tier.', icon: ShieldCheck },
+      { id: 'ivpn', name: 'IVPN', url: 'https://www.ivpn.net/', color: '#00b0b9', description: 'Audited privacy VPN.', icon: ShieldCheck },
+      { id: 'windscribe', name: 'Windscribe', url: 'https://windscribe.com/', color: '#00a8e1', description: 'VPN with a free 10 GB/month tier.', icon: ShieldCheck },
+      { id: 'tunnelbear', name: 'TunnelBear', url: 'https://www.tunnelbear.com/', color: '#ffb700', description: 'Simple VPN — good for beginners.', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Passwords & security',
+    apps: [
+      { id: 'bitwarden', name: 'Bitwarden', url: 'https://bitwarden.com/', color: '#175cd3', description: 'Open-source password manager — free tier.', icon: ShieldCheck },
+      { id: 'keepassxc', name: 'KeePassXC', url: 'https://keepassxc.org/', color: '#519be5', description: 'Offline password database — no cloud.', icon: ShieldCheck },
+      { id: '1password', name: '1Password', url: 'https://1password.com/', color: '#1e6fff', description: 'Popular family/team password manager.', icon: ShieldCheck },
+      { id: 'nextdns', name: 'NextDNS', url: 'https://nextdns.io/', color: '#0085ff', description: 'Encrypted DNS — blocks ads and trackers network-wide.', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Search & privacy tools',
+    apps: [
+      { id: 'duckduckgo', name: 'DuckDuckGo', url: 'https://duckduckgo.com/', color: '#de5833', description: 'Privacy-focused search engine.', icon: ShieldCheck },
+      { id: 'startpage', name: 'Startpage', url: 'https://www.startpage.com/', color: '#6cbf4f', description: 'Google results without tracking.', icon: ShieldCheck },
+      { id: 'privacy-com', name: 'Privacy.com', url: 'https://www.privacy.com/', color: '#1a1a1a', description: 'Virtual cards that lock after one use.', icon: ShieldCheck },
+    ],
+  },
+];
+
+const modsGroups: HubGroup[] = [
+  {
+    label: 'Mod managers',
+    apps: [
+      { id: 'mod-organizer-2', name: 'Mod Organizer 2', url: 'https://github.com/ModOrganizer2/modorganizer', color: '#00a8e1', description: 'The standard load-order manager for Bethesda games — profiles, plugins, MO2 keeps mods isolated.', icon: Gamepad2 },
+      { id: 'vortex', name: 'Vortex', url: 'https://www.nexusmods.com/vortex', color: '#7c3aed', description: 'Nexus Mods\u2019 official mod manager — auto-deploys mods for many games.', icon: Gamepad2 },
+      { id: 'nexus-mods-app', name: 'Nexus Mods App', url: 'https://www.nexusmods.com/site/mods/666', color: '#d43d2a', description: 'Desktop app for downloading and managing Nexus collections.', icon: Gamepad2 },
+    ],
+  },
+  {
+    label: 'Load order & plugin tools',
+    apps: [
+      { id: 'wrye-bash', name: 'Wrye Bash', url: 'https://github.com/wrye1/wryebash', color: '#f59e0b', description: 'Load-order optimizer, conflict detector and patcher for Skyrim/Fallout.', icon: Wrench },
+      { id: 'xedit', name: 'xEdit', url: 'https://github.com/TES5Edit/TES5Edit', color: '#4ade80', description: 'Universal plugin editor — clean masters, fix conflicts, remove ITMs.', icon: Wrench },
+      { id: 'loot', name: 'LOOT', url: 'https://github.com/loot/loot', color: '#38bdf8', description: 'Plugin load-order sorter for Oblivion through Starfield.', icon: Wrench },
+      { id: 'boss', name: 'BOSS', url: 'https://github.com/mwild1/BOSS', color: '#fb923c', description: 'Load-order sorter (older games, works alongside LOOT).', icon: Wrench },
+    ],
+  },
+  {
+    label: 'Mod platforms',
+    apps: [
+      { id: 'nexus-mods', name: 'Nexus Mods', url: 'https://www.nexusmods.com/', color: '#d43d2a', description: 'Largest mod repository — Skyrim, Fallout, Cyberpunk, WoW and more.', icon: Gamepad2 },
+      { id: 'modrinth', name: 'Modrinth', url: 'https://modrinth.com/', color: '#1bd96a', description: 'Minecraft mods, shaders and resource packs.', icon: Gamepad2 },
+      { id: 'curseforge', name: 'CurseForge', url: 'https://www.curseforge.com/', color: '#f1641e', description: 'Minecraft, WoW and game mods with a desktop app.', icon: Gamepad2 },
+    ],
+  },
+  {
+    label: 'Game-specific helpers',
+    apps: [
+      { id: 'skse', name: 'SKSE', url: 'http://skse.silverlock.org/', color: '#8b5cf6', description: 'Skyrim Script Extender — required by most Skyrim mods.', icon: Gamepad2 },
+      { id: 'f4se', name: 'F4SE', url: 'http://f4se.silverlock.org/', color: '#0ea5e9', description: 'Fallout 4 Script Extender.', icon: Gamepad2 },
+      { id: 'bethini', name: 'BethINI', url: 'https://github.com/meh321/BethINI', color: '#10b981', description: 'Auto-configures INI files for Skyrim/Fallout — big FPS gains.', icon: Wrench },
+      { id: 'skyrim-cc', name: 'Skyrim Script Extender (AE)', url: 'https://www.nexusmods.com/skyrimspecialedition/mods/30379', color: '#a855f7', description: 'Updated SKSE build for Skyrim Special/Anniversary Edition.', icon: Gamepad2 },
+    ],
+  },
+];
+
+function GroupedAppsPanel({ groups, note }: { groups: HubGroup[]; note?: string }) {
   return (
     <div className="space-y-4 px-4 pb-4">
-      {cryptoGroups.map((group) => (
+      {groups.map((group) => (
         <div key={group.label}>
           <h3 className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-tertiary)' }}>
             {group.label}
@@ -812,10 +1197,19 @@ function CryptoPanel() {
           </div>
         </div>
       ))}
-      <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-        These open in your browser — exchanges require account signup and KYC. Not financial advice.
-      </p>
+      {note && (
+        <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{note}</p>
+      )}
     </div>
+  );
+}
+
+function CryptoPanel() {
+  return (
+    <GroupedAppsPanel
+      groups={cryptoGroups as HubGroup[]}
+      note="These open in your browser — exchanges require account signup and KYC. Not financial advice."
+    />
   );
 }
 
@@ -1687,6 +2081,39 @@ export function MainPageHub() {
         <ActionButton active={section === 'apps'} onClick={() => selectSection('apps')}>
           <LayoutGrid size={15} /> Apps
         </ActionButton>
+        <ActionButton active={section === 'mods'} onClick={() => selectSection('mods')}>
+          <Wrench size={15} /> Mods
+        </ActionButton>
+        <ActionButton active={section === 'smart_home'} onClick={() => selectSection('smart_home')}>
+          <Home size={15} /> Smart Home
+        </ActionButton>
+        <ActionButton active={section === 'productivity'} onClick={() => selectSection('productivity')}>
+          <Briefcase size={15} /> Productivity
+        </ActionButton>
+        <ActionButton active={section === 'finance'} onClick={() => selectSection('finance')}>
+          <Landmark size={15} /> Finance
+        </ActionButton>
+        <ActionButton active={section === 'news'} onClick={() => selectSection('news')}>
+          <Newspaper size={15} /> News
+        </ActionButton>
+        <ActionButton active={section === 'health'} onClick={() => selectSection('health')}>
+          <HeartPulse size={15} /> Health
+        </ActionButton>
+        <ActionButton active={section === 'travel'} onClick={() => selectSection('travel')}>
+          <Plane size={15} /> Travel
+        </ActionButton>
+        <ActionButton active={section === 'education'} onClick={() => selectSection('education')}>
+          <GraduationCap size={15} /> Education
+        </ActionButton>
+        <ActionButton active={section === 'shopping'} onClick={() => selectSection('shopping')}>
+          <ShoppingCart size={15} /> Shopping
+        </ActionButton>
+        <ActionButton active={section === 'tools'} onClick={() => selectSection('tools')}>
+          <Wrench size={15} /> Tools
+        </ActionButton>
+        <ActionButton active={section === 'privacy'} onClick={() => selectSection('privacy')}>
+          <ShieldCheck size={15} /> Privacy
+        </ActionButton>
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
         </ActionButton>
@@ -1733,6 +2160,17 @@ export function MainPageHub() {
         {visitedSections.has('remote') && <div hidden={section !== 'remote'}><RemotePanel /></div>}
         {visitedSections.has('stores') && <div hidden={section !== 'stores'}><StoresPanel /></div>}
         {visitedSections.has('ai') && <div hidden={section !== 'ai'}><AIPlatformPanel /></div>}
+        {visitedSections.has('mods') && <div hidden={section !== 'mods'}><GroupedAppsPanel groups={modsGroups} note="Mod managers keep mods isolated from your game files — Nexus downloads need a free Nexus account; Modrinth and CurseForge are open." /></div>}
+        {visitedSections.has('smart_home') && <div hidden={section !== 'smart_home'}><GroupedAppsPanel groups={smartHomeGroups} note="These open the companion apps/sites — pair devices in each app. Home Assistant can run fully local on a Raspberry Pi or this PC." /></div>}
+        {visitedSections.has('productivity') && <div hidden={section !== 'productivity'}><GroupedAppsPanel groups={productivityGroups} note="Sign in with each service in your browser — OpenJarvis opens the site or installed app." /></div>}
+        {visitedSections.has('finance') && <div hidden={section !== 'finance'}><GroupedAppsPanel groups={financeGroups} note="Banks and brokerages require your own account and verification — never enter banking passwords anywhere but the official site." /></div>}
+        {visitedSections.has('news') && <div hidden={section !== 'news'}><GroupedAppsPanel groups={newsGroups} note="News sites open in your browser; weather links give current forecasts and official alerts." /></div>}
+        {visitedSections.has('health') && <div hidden={section !== 'health'}><GroupedAppsPanel groups={healthGroups} note="Health apps need your own accounts — OpenJarvis does not collect or store health data." /></div>}
+        {visitedSections.has('travel') && <div hidden={section !== 'travel'}><GroupedAppsPanel groups={travelGroups} note="Booking sites open in your browser — always confirm prices and policies on the official site." /></div>}
+        {visitedSections.has('education') && <div hidden={section !== 'education'}><GroupedAppsPanel groups={educationGroups} note="Khan Academy and Libby are free; Coursera/edX courses are free to audit or paid for certificates." /></div>}
+        {visitedSections.has('shopping') && <div hidden={section !== 'shopping'}><GroupedAppsPanel groups={shoppingGroups} note="Retailers open in your browser — deals sites aggregate community-verified offers." /></div>}
+        {visitedSections.has('tools') && <div hidden={section !== 'tools'}><GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." /></div>}
+        {visitedSections.has('privacy') && <div hidden={section !== 'privacy'}><GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." /></div>}
         {developerModeEnabled && visitedSections.has('developer') && <div hidden={section !== 'developer'}><DeveloperPanel /></div>}
       </div>
     </section>
