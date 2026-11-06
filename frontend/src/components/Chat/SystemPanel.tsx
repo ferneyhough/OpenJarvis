@@ -80,7 +80,6 @@ export function SystemPanel({ embedded = false }: { embedded?: boolean }) {
       className="flex flex-col overflow-y-auto"
       style={embedded ? {
         width: '100%',
-        maxHeight: '46%',
         background: 'transparent',
       } : {
         width: 280,
