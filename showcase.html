@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenJarvis — Your own JARVIS, on your own PC</title>
+<style>
+  :root {
+    --cyan: #22d3ee;
+    --cyan-dim: #0e7490;
+    --bg: #05080f;
+    --panel: #0b1220;
+    --border: #1b2b3a;
+    --text: #dbe7f3;
+    --muted: #7d93a8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  /* animated arc-reactor backdrop */
+  .reactor {
+    position: fixed; top: -140px; right: -140px; width: 480px; height: 480px;
+    border-radius: 50%; pointer-events: none; z-index: 0; opacity: .5;
+    background: radial-gradient(circle, rgba(34,211,238,.14), transparent 65%);
+    animation: pulse 5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  .ring {
+    position: fixed; top: -160px; right: -160px; width: 520px; height: 520px;
+    border-radius: 50%; border: 1px dashed rgba(34,211,238,.25);
+    pointer-events: none; z-index: 0; animation: spin 60s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+  header { padding: 72px 0 40px; text-align: center; }
+  .badge {
+    display: inline-block; padding: 4px 14px; border-radius: 999px;
+    border: 1px solid var(--cyan-dim); color: var(--cyan);
+    font-size: 12px; letter-spacing: .15em; text-transform: uppercase;
+  }
+  h1 {
+    font-size: clamp(2.2rem, 6vw, 3.6rem); margin: 18px 0 12px;
+    background: linear-gradient(120deg, #fff, var(--cyan));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tagline { color: var(--muted); font-size: 1.1rem; max-width: 620px; margin: 0 auto; }
+  .cta { margin-top: 28px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    padding: 12px 26px; border-radius: 10px; text-decoration: none;
+    font-weight: 600; font-size: 15px; transition: transform .15s, box-shadow .15s;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: var(--cyan); color: #04121a; box-shadow: 0 0 24px rgba(34,211,238,.35); }
+  .btn-ghost { border: 1px solid var(--border); color: var(--text); background: var(--panel); }
+  section { padding: 48px 0; }
+  h2 { font-size: 1.6rem; margin-bottom: 8px; }
+  .sub { color: var(--muted); margin-bottom: 28px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px; transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--cyan-dim); }
+  .card h3 { font-size: 1rem; color: var(--cyan); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .card p { color: var(--muted); font-size: .9rem; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .pill {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.25); color: #9fdcec;
+  }
+  .mock {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 18px; font-family: "Cascadia Code", Consolas, monospace; font-size: 13px;
+    color: var(--muted); overflow-x: auto; white-space: pre;
+  }
+  .mock b { color: var(--cyan); font-weight: 600; }
+  footer { padding: 40px 0 60px; text-align: center; color: var(--muted); font-size: .85rem; }
+  a { color: var(--cyan); }
+  @media (prefers-reduced-motion: reduce) { .reactor, .ring { animation: none; } }
+</style>
+</head>
+<body>
+<div class="reactor"></div>
+<div class="ring"></div>
+
+<div class="wrap">
+  <header>
+    <span class="badge">Local-first AI desktop app</span>
+    <h1>OpenJarvis</h1>
+    <p class="tagline">
+      A JARVIS-style AI assistant that lives entirely on your PC — chat, live TV guide,
+      movies &amp; shows, kids' apps, crypto tools, offline AI models, and offline
+      Wikipedia. No subscriptions, no cloud required.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/ferneyhough/OpenJarvis">View on GitHub</a>
+      <a class="btn btn-ghost" href="#features">See what's inside</a>
+    </div>
+  </header>
+
+  <section id="features">
+    <h2>Everything in one window</h2>
+    <p class="sub">Chat-first interface with a pill bar for every part of the system.</p>
+    <div class="grid">
+      <div class="card"><h3>◈ JARVIS Chat</h3><p>Chat page is home. Animated arc-reactor boot screen, mic hotkey (F9), voice, and an assistant that can actually run tools on your machine.</p></div>
+      <div class="card"><h3>▦ TV Guide</h3><p>Rogers-style guide grid merging US, Canada, UK, Ireland, Australia &amp; NZ channels with real schedules, sports/kids sections, and click-to-play streams.</p><div class="pill-row"><span class="pill">6 regions</span><span class="pill">1–3 day EPG</span><span class="pill">live now-line</span></div></div>
+      <div class="card"><h3>▶ Movies &amp; Shows</h3><p>Browse catalogs, pick episodes, choose resolution — "Play best" speed-tests sources and plays the fastest. Torrents download to an app folder and play when done.</p></div>
+      <div class="card"><h3>🧒 Kids</h3><p>YouTube Kids, Google Classroom, PBS/Nick Jr, plus bundled Minecraft (PortableMC) and Roblox launchers and a one-click Minecraft server for friends.</p></div>
+      <div class="card"><h3>₿ Crypto</h3><p>Exchanges, AI trading bots, market graphs, mining pools, faucets and wallets — all one click away.</p></div>
+      <div class="card"><h3>⌘ Apps &amp; Installers</h3><p>Roku, Fire TV, Apple TV, streaming devices and popular apps. The download arrow grabs the real installer and runs it automatically.</p></div>
+      <div class="card"><h3>📚 Offline Wikipedia</h3><p>Download a Kiwix ZIM and the assistant can search and read Wikipedia with zero internet — powered by libzim.</p></div>
+      <div class="card"><h3>🧠 Offline models</h3><p>Runs on local Ollama models — chat, coding, and game-modding models included, all private and offline-capable.</p></div>
+      <div class="card"><h3>🛠 Installer</h3><p>Windows installers with admin/UAC choice, mic/camera/screen permission consent, and global hotkeys — install once, it just works.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Under the hood</h2>
+    <p class="sub">Python FastAPI backend + React frontend, served locally on port 8000.</p>
+    <div class="mock"><b>OpenJarvis</b>
+├── Chat (JARVIS UI, voice, tools, MCP agents)
+├── Guide   → regional playlists + windowed XMLTV EPG
+├── VOD     → Stremio addons + libtorrent progressive playback
+├── Wiki    → offline Kiwix ZIM via libzim
+├── Models  → Ollama (qwen, gemma, coders — all local)
+└── Installers → auto-resolve, download, extract &amp; launch</div>
+  </section>
+
+  <footer>
+    <p>Open-source · runs 100% locally · your data never leaves your machine.<br>
+    <a href="https://github.com/ferneyhough/OpenJarvis">github.com/ferneyhough/OpenJarvis</a></p>
+  </footer>
+</div>
+</body>
+</html>
