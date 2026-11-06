@@ -1252,7 +1252,7 @@ function isReligiousChannel(channel: ChannelMeta): boolean {
 
 // Gaming/esports channels are excluded from the guide entirely.
 const GAMES_RE =
-  /\b(gaming|esports?|e-?sports?|game\s*network|game\s*show|twitch|steam|xbox|playstation|nintendo|roblox|minecraft|riot|league\s*of\s*legends|dota|esl|gaming tv|videogame)\b/i;
+  /\b(gaming|esports?|e-?sports?|game\s*network|twitch|steam|xbox|playstation|nintendo|roblox|minecraft|riot|league\s*of\s*legends|dota|esl|gaming tv|videogame)\b/i;
 
 function isGameChannel(channel: ChannelMeta): boolean {
   return GAMES_RE.test(`${channel.name} ${channel.group} ${channel.id}`);
@@ -1438,7 +1438,7 @@ function IptvTab() {
       lookup: ((channel: M3UChannel) => GuideProgram[]) | null,
     ) => {
       for (const channel of parsed) {
-        if (isReligiousChannel(channel) || isGameChannel(channel) || !isEnglishChannel(channel)) continue;
+        if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
         const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -1482,7 +1482,7 @@ function IptvTab() {
         const data = await fetchIvueGuide();
         for (const region of ivueRegions) {
           for (const channel of data.channels) {
-            if (isReligiousChannel(channel) || isGameChannel(channel) || !isEnglishChannel(channel)) continue;
+            if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
             const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
             if (seen.has(dedupeKey)) continue;
             seen.add(dedupeKey);
@@ -1562,10 +1562,11 @@ function IptvTab() {
       if (regionFilter !== 'ALL' && c.region !== regionFilter) return false;
       if (!matchesQuery(c)) return false;
       const kids = KIDS_RE.test(`${c.name} ${c.group}`);
+      const game = isGameChannel(c);
       const sports = SPORTS_RE.test(`${c.name} ${c.group}`);
-      if (guideView === 'kids') return kids;
+      if (guideView === 'kids') return kids || game;
       if (guideView === 'sports') return sports;
-      return !kids; // main guide excludes kids channels
+      return !kids && !game; // main guide excludes kids and game channels
     });
     if (guideView === 'sports') {
       filtered.sort(
@@ -1575,6 +1576,17 @@ function IptvTab() {
       );
       return filtered;
     }
+    if (guideView === 'kids') {
+      // Kids channels first, then a Games group at the bottom.
+      const groupOf = (c: GuideChannel) =>
+        !KIDS_RE.test(`${c.name} ${c.group}`) && isGameChannel(c) ? 1 : 0;
+      return filtered.sort(
+        (a, b) =>
+          groupOf(a) - groupOf(b) ||
+          (regionOrder.get(a.region) ?? 99) - (regionOrder.get(b.region) ?? 99) ||
+          a.name.localeCompare(b.name),
+      );
+    }
     return filtered.sort(
       (a, b) =>
         (regionOrder.get(a.region) ?? 99) - (regionOrder.get(b.region) ?? 99) ||
@@ -1582,9 +1594,16 @@ function IptvTab() {
     );
   }, [channels, regionFilter, query, regionOrder, guideView]);
 
-  // Sports view inserts a separator row whenever the sport category changes.
+  // Sports and Kids views insert a separator row whenever the group changes.
   const gridRows = useMemo(() => {
-    if (guideView !== 'sports') {
+    const groupOf = (c: GuideChannel): string => {
+      if (guideView === 'sports') return sportOf(c);
+      if (guideView === 'kids') {
+        return KIDS_RE.test(`${c.name} ${c.group}`) ? 'Kids' : 'Games';
+      }
+      return '';
+    };
+    if (guideView === 'main') {
       return visibleChannels.map((channel, idx) => ({ kind: 'channel' as const, channel, idx }));
     }
     const rows: (
@@ -1593,15 +1612,15 @@ function IptvTab() {
     )[] = [];
     const counts = new Map<string, number>();
     for (const c of visibleChannels) {
-      const s = sportOf(c);
+      const s = groupOf(c);
       counts.set(s, (counts.get(s) ?? 0) + 1);
     }
-    let lastSport = '';
+    let lastGroup = '';
     visibleChannels.forEach((channel, idx) => {
-      const sport = sportOf(channel);
-      if (sport !== lastSport) {
-        rows.push({ kind: 'header', label: sport, count: counts.get(sport) ?? 0 });
-        lastSport = sport;
+      const group = groupOf(channel);
+      if (group !== lastGroup) {
+        rows.push({ kind: 'header', label: group, count: counts.get(group) ?? 0 });
+        lastGroup = group;
       }
       rows.push({ kind: 'channel', channel, idx });
     });
