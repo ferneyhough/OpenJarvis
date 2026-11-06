@@ -51,11 +51,10 @@ import { parseM3U, parseXMLTV, type M3UChannel, type GuideProgram } from '../lib
 import { MediaPlayerModal, type MediaPlayerTarget } from '../components/MediaPlayerModal';
 import Hls from 'hls.js';
 
-type Tab = 'tv' | 'iptv' | 'movies' | 'shows' | 'local' | 'links';
+type Tab = 'guide' | 'movies' | 'shows' | 'local' | 'links';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof Tv }> = [
-  { id: 'tv', label: 'TV Guide', icon: Tv },
-  { id: 'iptv', label: 'IPTV', icon: Tv },
+  { id: 'guide', label: 'Guide', icon: Tv },
   { id: 'movies', label: 'Movies', icon: Film },
   { id: 'shows', label: 'Shows', icon: Clapperboard },
   { id: 'local', label: 'Local', icon: FolderOpen },
@@ -1251,6 +1250,14 @@ function isReligiousChannel(channel: ChannelMeta): boolean {
   return RELIGIOUS_RE.test(`${channel.name} ${channel.group} ${channel.id}`);
 }
 
+// Gaming/esports channels are excluded from the guide entirely.
+const GAMES_RE =
+  /\b(gaming|esports?|e-?sports?|game\s*network|game\s*show|twitch|steam|xbox|playstation|nintendo|roblox|minecraft|riot|league\s*of\s*legends|dota|esl|gaming tv|videogame)\b/i;
+
+function isGameChannel(channel: ChannelMeta): boolean {
+  return GAMES_RE.test(`${channel.name} ${channel.group} ${channel.id}`);
+}
+
 // Non-Latin scripts indicate a non-English-spoken channel even when the
 // playlist omits tvg-language.
 const NON_ENGLISH_SCRIPT_RE =
@@ -1431,7 +1438,7 @@ function IptvTab() {
       lookup: ((channel: M3UChannel) => GuideProgram[]) | null,
     ) => {
       for (const channel of parsed) {
-        if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
+        if (isReligiousChannel(channel) || isGameChannel(channel) || !isEnglishChannel(channel)) continue;
         const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -1475,7 +1482,7 @@ function IptvTab() {
         const data = await fetchIvueGuide();
         for (const region of ivueRegions) {
           for (const channel of data.channels) {
-            if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
+            if (isReligiousChannel(channel) || isGameChannel(channel) || !isEnglishChannel(channel)) continue;
             const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
             if (seen.has(dedupeKey)) continue;
             seen.add(dedupeKey);
@@ -2056,7 +2063,7 @@ function IptvTab() {
 // ---------------------------------------------------------------------------
 
 export function MediaPage() {
-  const [tab, setTab] = useState<Tab>('tv');
+  const [tab, setTab] = useState<Tab>('guide');
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden px-6 py-10">
@@ -2086,12 +2093,20 @@ export function MediaPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto pr-1 pb-4">
-          {tab === 'tv' && <TvGuideTab />}
-          {tab === 'iptv' && <IptvTab />}
+          {tab === 'guide' && (
+            <div className="flex flex-col gap-6">
+              <IptvTab />
+              <div>
+                <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text)' }}>
+                  Tonight's Shows
+                </h2>
+                <TvGuideTab />
+              </div>
+            </div>
+          )}
           {tab === 'movies' && <CatalogTab type="movie" />}
           {tab === 'shows' && <CatalogTab type="series" />}
           {tab === 'local' && <LocalTab />}
-
           {tab === 'links' && <LinksTab />}
         </div>
       </div>
