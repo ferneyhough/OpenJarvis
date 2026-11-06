@@ -161,9 +161,45 @@ reloads it. **Save first (Ctrl+S).**
 This project's `.vscode/settings.json` already turns this on. For other projects, click
 Settings → **Enable VS Code 'fix this'** once.
 
-## 8. Games, social, and media
+## 8. Games, guides, kids, crypto, social, and media
 
-The Chat page has Games, Social, and Media controls at the top. Games includes Steam and
+The Chat page is the main page. Its top row has section pills — **Guides** (opens the Media
+guide), **Kids**, **Crypto**, **Games**, **Music**, **Browsers**, **Social**, **Media**,
+**Record**, **Remote**, **Stores**, and **AI** — each opening a panel of launchers below.
+
+**Guide (Media → Guide tab):** a Rogers-style EPG grid merges live channels from regional
+iptv-org playlists (US, Canada, UK, Ireland, Australia, New Zealand), the Mad Titan playlist,
+and the iVue TV Guide scraper, each with windowed XMLTV schedules out to 24h in the channel's
+home timezone. The grid is a fixed-height viewport: scroll vertically through channels and
+horizontally through the timeline; it auto-centers on the now-line (cyan, JARVIS theme) and
+a **Now** button jumps back. Views: **Guide** (main channels), **Kids** (kids channels plus a
+Games group), and **Sports** (channels grouped under per-sport separators). Religious,
+non-English, and gaming channels are filtered out of the main guide; game-show channels stay.
+Channels appear progressively as each playlist/EPG pair finishes loading. Clicking a
+programme opens an iVue-style detail popup with a Watch button; clicking the channel plays
+it in the built-in HLS player. Channels with no playable stream (e.g. `plugin://` Mad Titan
+entries) are marked guide-only. A **Tonight's Shows** section below lists TVMaze schedules
+by show with air times.
+
+**Movies & Shows tabs:** Rogers-style catalog rows browse movies and series with genre
+filters and global dedupe. Title details offer season/episode pickers, quality filters,
+**Play best** (speed-tests the top torrent candidates and plays the fastest), direct-stream
+playback, and torrent download/progressive streaming via the `/v1/vod` Stremio/Torrentio/
+Comet/MediaFusion sources. Downloads land under `~/.openjarvis/torrents`.
+
+**Kids pill:** YouTube Kids, Messenger Kids, PBS Kids, Nick Jr., Google Classroom, plus
+Minecraft (bundled PortableMC), Roblox (detects an installed client), and **Host MC Server**
+which downloads the official dedicated server + Java runtime and hosts it on port 25565
+(friends on your network can join; remote players need port forwarding).
+
+**Crypto pill:** grouped launchers for exchanges (Coinbase, Kraken, Crypto.com, Gemini,
+KuCoin, Bitstamp), AI trading bots (Pionex, 3Commas, Cryptohopper, Coinrule, Bitsgap),
+market charts (CoinGecko, CoinMarketCap, TradingView, CoinStats), mining (Kryptex, NiceHash,
+Salad, Cudo Miner, Honeygain, EarnApp), mining pools (F2Pool, Antpool, ViaBTC, Braiins,
+Foundry, Poolin, CTPool), faucets, and wallets (Coinbase Wallet, Exodus, Electrum,
+MetaMask, Trust Wallet, Ledger Live, Tangem, NC Wallet). These are browser launch links.
+
+Games includes Steam and
 Playnite libraries plus launchers for Xbox, GOG Galaxy, Epic, EA, Ubisoft Connect,
 Battle.net, Riot, Rockstar, itch.io, Amazon Games, GeForce NOW, and Amazon Luna. Cloud
 gaming services open in their official browser apps. On Windows Desktop, OpenJarvis
@@ -212,12 +248,12 @@ The bridge is a small Playnite add-on in `playnite_extension/OpenJarvisBridge`. 
 game list to `%APPDATA%\Playnite\ExtensionsData\OpenJarvisBridge\library.json`.
 Everything stays on your PC.
 
-The Media section opens YouTube, Twitch, Plex, Crave, Crunchyroll, and other streaming services and
-can load a user-provided M3U/M3U8 playlist with an optional XMLTV schedule. Channel streams
-open in VLC; install VLC or set `VLC_PATH` to its `vlc.exe` if it isn't detected automatically.
-Only add playlists and streams you are authorized to access. OpenJarvis does not download,
-scrape, or import videos from streaming websites. The English filter uses playlist language
-metadata and leaves channels without a language tag visible.
+The Guide tab merges regional M3U playlists with their XMLTV schedules server-side
+(`GET /v1/guide/epg`, `GET /v1/guide/ivue`). Streams play in the built-in HLS player with
+the playlist's required User-Agent/Referer headers; many free streams are dead,
+geo-blocked, or flaky — try another channel if one fails. Only add playlists and streams
+you are authorized to access. Guide data is cached on disk and prefetches daily; the
+server warms each region's EPG once a day in 1h→6h→12h→24h passes.
 
 The Record tab captures your own screen or gameplay locally using browser screen-share
 permission and lets you download the resulting WebM. It does not need the OpenJarvis backend
@@ -241,8 +277,9 @@ each entry in Settings → Remote access and play.
 The main-page hub also includes Stores and AI sections. Configure hub launchers in Settings;
 only enabled apps appear unless Developer Mode is on. Social services open in your browser,
 but private feeds and account authentication are not integrated. Media streaming services and
-stores are launch links rather than unified provider catalogs; the TV guide combines only your
-own M3U/M3U8 playlist and optional XMLTV schedule. The AI section lists cloud providers with configured API keys and authorized local models.
+stores are launch links rather than unified provider catalogs; guide channels come from the
+built-in regional playlists plus any custom M3U/M3U8 playlist and optional XMLTV schedule
+you add in the Guide tab. The AI section lists cloud providers with configured API keys and authorized local models.
 Base44 and Microsoft Copilot can also be enabled as website launchers in Settings;
 they use their own sign-in and are not connected as OpenJarvis chat model providers.
 
