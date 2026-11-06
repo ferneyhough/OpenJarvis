@@ -1804,7 +1804,8 @@ function ToolboxCard() {
   );
 }
 
-function SystemPanel() {
+function ToolboxPanel() {
+  const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
   const apps = [
     { name: 'File Explorer', app: 'explorer', desc: 'Windows file manager' },
     { name: 'Notepad', app: 'notepad', desc: 'Plain-text editor' },
@@ -1829,6 +1830,8 @@ function SystemPanel() {
   return (
     <div className="space-y-4 px-4 pb-4">
       <PcCareCard />
+      <ToolboxCard />
+      <FilesCard />
       <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
         <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>Windows apps</h3>
         <div className="flex flex-wrap gap-2">
@@ -1845,22 +1848,11 @@ function SystemPanel() {
           Or say it: "Jarvis open notepad", "Jarvis open calculator", "Jarvis open file explorer".
         </div>
       </div>
-    </div>
-  );
-}
-
-function FilesPanel() {
-  return (
-    <div className="px-4 pb-4">
-      <FilesCard />
-    </div>
-  );
-}
-
-function ToolboxPanel() {
-  return (
-    <div className="px-4 pb-4">
-      <ToolboxCard />
+      <GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." />
+      <GroupedAppsPanel groups={cleanerGroups} note="Cleaners and uninstallers — the download arrow grabs the real installer where one exists." />
+      <GroupedAppsPanel groups={securityGroups} note="Antivirus needs a real install — the download arrow fetches it; Malwarebytes free is a good second-opinion scanner." />
+      <GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." />
+      {developerModeEnabled && <DeveloperPanel />}
     </div>
   );
 }
@@ -3021,24 +3013,6 @@ export function MainPageHub() {
         <ActionButton active={section === 'shopping'} onClick={() => selectSection('shopping')}>
           <ShoppingCart size={15} /> Shopping
         </ActionButton>
-        <ActionButton active={section === 'tools'} onClick={() => selectSection('tools')}>
-          <Wrench size={15} /> Tools
-        </ActionButton>
-        <ActionButton active={section === 'privacy'} onClick={() => selectSection('privacy')}>
-          <ShieldCheck size={15} /> Privacy
-        </ActionButton>
-        <ActionButton active={section === 'system'} onClick={() => selectSection('system')}>
-          <HardDrive size={15} /> System
-        </ActionButton>
-        <ActionButton active={section === 'cleaner'} onClick={() => selectSection('cleaner')}>
-          <Eraser size={15} /> Cleaner
-        </ActionButton>
-        <ActionButton active={section === 'security'} onClick={() => selectSection('security')}>
-          <ShieldCheck size={15} /> Security
-        </ActionButton>
-        <ActionButton active={section === 'files'} onClick={() => selectSection('files')}>
-          <FolderOpen size={15} /> Files
-        </ActionButton>
         <ActionButton active={section === 'toolbox'} onClick={() => selectSection('toolbox')}>
           <Cpu size={15} /> Toolbox
         </ActionButton>
@@ -3077,11 +3051,6 @@ export function MainPageHub() {
             </ActionButton>
           );
         })}
-        {developerModeEnabled && (
-          <ActionButton active={section === 'developer'} onClick={() => selectSection('developer')}>
-            <Code2 size={15} /> Developer
-          </ActionButton>
-        )}
       </nav>
       <div className={`max-h-[42vh] overflow-y-auto pb-2 relative ${section ? '' : 'hidden'}`}>
         {section && (
@@ -3118,13 +3087,19 @@ export function MainPageHub() {
         {visitedSections.has('travel') && <div hidden={section !== 'travel'}><GroupedAppsPanel groups={travelGroups} note="Booking sites open in your browser — always confirm prices and policies on the official site." /><CustomAppsBlock section="travel" /></div>}
         {visitedSections.has('education') && <div hidden={section !== 'education'}><GroupedAppsPanel groups={educationGroups} note="Khan Academy and Libby are free; Coursera/edX courses are free to audit or paid for certificates." /><CustomAppsBlock section="education" /></div>}
         {visitedSections.has('shopping') && <div hidden={section !== 'shopping'}><GroupedAppsPanel groups={shoppingGroups} note="Retailers open in your browser — deals sites aggregate community-verified offers." /><CustomAppsBlock section="shopping" /></div>}
-        {visitedSections.has('tools') && <div hidden={section !== 'tools'}><GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." /><CustomAppsBlock section="tools" /></div>}
-        {visitedSections.has('privacy') && <div hidden={section !== 'privacy'}><GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." /><CustomAppsBlock section="privacy" /></div>}
-        {visitedSections.has('system') && <div hidden={section !== 'system'}><SystemPanel /><CustomAppsBlock section="system" /></div>}
-        {visitedSections.has('cleaner') && <div hidden={section !== 'cleaner'}><GroupedAppsPanel groups={cleanerGroups} note="Cleaners and uninstallers — the download arrow grabs the real installer where one exists." /><CustomAppsBlock section="cleaner" /></div>}
-        {visitedSections.has('security') && <div hidden={section !== 'security'}><GroupedAppsPanel groups={securityGroups} note="Antivirus needs a real install — the download arrow fetches it; Malwarebytes free is a good second-opinion scanner." /><CustomAppsBlock section="security" /></div>}
-        {visitedSections.has('files') && <div hidden={section !== 'files'}><FilesPanel /><CustomAppsBlock section="files" /></div>}
-        {visitedSections.has('toolbox') && <div hidden={section !== 'toolbox'}><ToolboxPanel /><CustomAppsBlock section="toolbox" /></div>}
+        {visitedSections.has('toolbox') && (
+          <div hidden={section !== 'toolbox'}>
+            <ToolboxPanel />
+            <CustomAppsBlock section="system" />
+            <CustomAppsBlock section="files" />
+            <CustomAppsBlock section="toolbox" />
+            <CustomAppsBlock section="tools" />
+            <CustomAppsBlock section="privacy" />
+            <CustomAppsBlock section="cleaner" />
+            <CustomAppsBlock section="security" />
+            {developerModeEnabled && <CustomAppsBlock section="developer" />}
+          </div>
+        )}
         {customSections.map((custom) =>
           visitedSections.has(custom.id) ? (
             <div key={custom.id} hidden={section !== custom.id}>
@@ -3132,7 +3107,6 @@ export function MainPageHub() {
             </div>
           ) : null,
         )}
-        {developerModeEnabled && visitedSections.has('developer') && <div hidden={section !== 'developer'}><DeveloperPanel /><CustomAppsBlock section="developer" /></div>}
       </div>
     </section>
   );
