@@ -3,7 +3,9 @@ export interface M3UChannel {
   name: string;
   group: string;
   language: string;
+  logo: string;
   url: string;
+  region?: string;
 }
 
 export interface GuideProgram {
@@ -59,6 +61,7 @@ export function parseM3U(text: string): M3UChannel[] {
       name: attribute(metadata, 'tvg-name') || displayName || id || 'Unnamed channel',
       group: attribute(metadata, 'group-title'),
       language: attribute(metadata, 'tvg-language') || attribute(metadata, 'language'),
+      logo: attribute(metadata, 'tvg-logo'),
       url,
     });
   }

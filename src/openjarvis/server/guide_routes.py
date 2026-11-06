@@ -14,6 +14,7 @@ enabled; local media and links keep working.
 
 from __future__ import annotations
 
+import gzip
 import ipaddress
 import json
 import logging
@@ -24,6 +25,7 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -487,6 +489,164 @@ def guide_fetch_document(url: str, kind: str = "playlist") -> dict:
         raise HTTPException(status_code=502, detail="source is not valid UTF-8 text")
     content_type = resp.headers.get("Content-Type", "")
     return {"text": text, "bytes": size, "content_type": content_type}
+
+
+# ---------------------------------------------------------------------------
+# Windowed XMLTV EPG (server-side parse keeps payloads small)
+# ---------------------------------------------------------------------------
+
+_EPG_MAX_COMPRESSED = 32 * 1024 * 1024
+_EPG_MAX_DECOMPRESSED = 256 * 1024 * 1024
+_EPG_CACHE_TTL = 900.0
+
+_xmltv_attr_re = {
+    "id": re.compile(r'\bid="([^"]*)"', re.IGNORECASE),
+    "channel": re.compile(r'\bchannel="([^"]*)"', re.IGNORECASE),
+    "start": re.compile(r'\bstart="([^"]*)"', re.IGNORECASE),
+    "stop": re.compile(r'\bstop="([^"]*)"', re.IGNORECASE),
+}
+_xmltv_channel_re = re.compile(r"<channel\b([^>]*)>([\s\S]*?)</channel>", re.IGNORECASE)
+_xmltv_programme_re = re.compile(
+    r"<programme\b([^>]*)>([\s\S]*?)</programme>", re.IGNORECASE
+)
+_xmltv_title_re = re.compile(r"<title\b[^>]*>([\s\S]*?)</title>", re.IGNORECASE)
+_xmltv_display_re = re.compile(
+    r"<display-name\b[^>]*>([\s\S]*?)</display-name>", re.IGNORECASE
+)
+_xmltv_time_re = re.compile(
+    r"(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-])(\d{2})(\d{2}))?"
+)
+
+
+def _xmltv_time(value: str) -> Optional[float]:
+    match = _xmltv_time_re.search(value.strip())
+    if not match:
+        return None
+    (
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        sign,
+        offset_hour,
+        offset_minute,
+    ) = match.groups()
+    try:
+        stamp = datetime(
+            int(year),
+            int(month),
+            int(day),
+            int(hour),
+            int(minute),
+            int(second),
+            tzinfo=timezone.utc,
+        ).timestamp()
+    except ValueError:
+        return None
+    if sign:
+        offset = (int(offset_hour) * 60 + int(offset_minute)) * (
+            1 if sign == "+" else -1
+        )
+        stamp -= offset * 60
+    return stamp
+
+
+def _fetch_epg_bytes(url: str) -> bytes:
+    parsed = _check_fetch_url(url)
+    target = urllib.parse.urlunparse(parsed)
+    req = urllib.request.Request(
+        target, headers={"User-Agent": "OpenJarvis/1.0", "Accept": "*/*"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read(_EPG_MAX_COMPRESSED + 1)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"EPG fetch failed: {exc}")
+    if len(raw) > _EPG_MAX_COMPRESSED:
+        raise HTTPException(
+            status_code=413,
+            detail=f"EPG source exceeds the {_EPG_MAX_COMPRESSED // (1024 * 1024)} MB limit",
+        )
+    if raw[:2] == b"\x1f\x8b":
+        try:
+            decompressed = gzip.decompress(raw)
+        except OSError as exc:
+            raise HTTPException(status_code=502, detail=f"EPG gunzip failed: {exc}")
+        if len(decompressed) > _EPG_MAX_DECOMPRESSED:
+            raise HTTPException(
+                status_code=413,
+                detail="EPG source expands beyond the 256 MB limit",
+            )
+        return decompressed
+    return raw
+
+
+@guide_router.get("/epg")
+def guide_epg(url: str, hours: float = 24.0) -> dict:
+    """Fetch an XMLTV guide and return channel names + programmes in a window.
+
+    Only programmes overlapping ``[now - 1h, now + hours]`` are returned so the
+    payload stays small even for multi-day guide files. ``hours`` is clamped
+    to 1-72.
+    """
+    _require_online()
+    hours = min(max(float(hours or 24.0), 1.0), 72.0)
+    cache_key = f"epg:{url}:{hours:g}:{int(time.time() // 900)}"
+    hit = _cache.get(cache_key)
+    if hit is not None and time.monotonic() - hit[0] < _EPG_CACHE_TTL:
+        return hit[1]
+
+    raw = _fetch_epg_bytes(url)
+    try:
+        text = raw.decode("utf-8-sig", errors="replace")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"EPG is not valid text: {exc}")
+
+    channels: dict[str, str] = {}
+    for match in _xmltv_channel_re.finditer(text):
+        attrs, body = match.groups()
+        cid = _xmltv_attr_re["id"].search(attrs)
+        if not cid:
+            continue
+        name_match = _xmltv_display_re.search(body) or _xmltv_title_re.search(body)
+        channels[cid.group(1)] = _strip_html(name_match.group(1)) if name_match else cid.group(1)
+
+    now = time.time()
+    window_start = now - 3600
+    window_stop = now + hours * 3600
+    programmes: dict[str, list[dict]] = {}
+    for match in _xmltv_programme_re.finditer(text):
+        attrs, body = match.groups()
+        channel = _xmltv_attr_re["channel"].search(attrs)
+        start_raw = _xmltv_attr_re["start"].search(attrs)
+        stop_raw = _xmltv_attr_re["stop"].search(attrs)
+        if not (channel and start_raw and stop_raw):
+            continue
+        start = _xmltv_time(start_raw.group(1))
+        stop = _xmltv_time(stop_raw.group(1))
+        if start is None or stop is None or stop <= start:
+            continue
+        if stop < window_start or start > window_stop:
+            continue
+        title_match = _xmltv_title_re.search(body)
+        title = _strip_html(title_match.group(1)) if title_match else ""
+        programmes.setdefault(channel.group(1), []).append(
+            {"title": title, "start": start, "stop": stop}
+        )
+    for entries in programmes.values():
+        entries.sort(key=lambda p: p["start"])
+
+    result = {
+        "channels": channels,
+        "programmes": programmes,
+        "window_start": window_start,
+        "window_stop": window_stop,
+        "fetched_at": now,
+    }
+    _cache[cache_key] = (time.monotonic(), result)
+    return result
 
 
 # ---------------------------------------------------------------------------

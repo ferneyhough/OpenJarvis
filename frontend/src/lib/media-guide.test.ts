@@ -16,6 +16,7 @@ https://streams.example/sports.m3u8
         name: 'World, News',
         group: 'News',
         language: 'English',
+        logo: '',
         url: 'https://streams.example/news.m3u8',
       },
       {
@@ -23,6 +24,7 @@ https://streams.example/sports.m3u8
         name: 'Sports One',
         group: 'Sports',
         language: '',
+        logo: '',
         url: 'https://streams.example/sports.m3u8',
       },
     ]);

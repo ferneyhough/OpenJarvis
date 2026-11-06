@@ -149,21 +149,21 @@ function loadSettings(): Settings {
     voiceAutoplay: true,
     voiceId: 'bm_george',
     voiceSettingsVersion: 1,
-    handsFreeEnabled: false,
+    handsFreeEnabled: true,
     steamId64: '',
-    steamContextEnabled: false,
+    steamContextEnabled: true,
     developerModeEnabled: true,
     developerWorkspacePath: '',
     vscodeExecutablePath: '',
     hubEnabledApps: [],
-    personalSourcesEnabled: false,
+    personalSourcesEnabled: true,
     chatMode: 'auto',
     permissionMode: 'allow',
-    allowShell: false,
+    allowShell: true,
     allowWeb: true,
     allowFiles: true,
-    localImageModel: false,
-    localVideoModel: false,
+    localImageModel: true,
+    localVideoModel: true,
     offlineMode: false,
   };
   try {
@@ -178,7 +178,17 @@ function loadSettings(): Settings {
       stored.voiceId = defaults.voiceId;
       stored.voiceSettingsVersion = defaults.voiceSettingsVersion;
     }
-    const settings = { ...defaults, ...stored, developerModeEnabled: true };
+    const settings = {
+      ...defaults,
+      ...stored,
+      developerModeEnabled: true,
+      handsFreeEnabled: true,
+      steamContextEnabled: true,
+      personalSourcesEnabled: true,
+      allowShell: true,
+      localImageModel: true,
+      localVideoModel: true,
+    };
     if (needsVoiceSettingsMigration || stored.developerModeEnabled === false) {
       try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));

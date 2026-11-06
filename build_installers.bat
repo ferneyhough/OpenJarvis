@@ -51,7 +51,9 @@ if errorlevel 1 (
 )
 popd
 
-if not exist "%~dp0frontend\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe" (
+set "TAURI_TARGET_DIR=%CARGO_TARGET_DIR%"
+if not defined TAURI_TARGET_DIR set "TAURI_TARGET_DIR=%~dp0frontend\src-tauri\target"
+if not exist "%TAURI_TARGET_DIR%\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe" (
     echo [X] Tauri build completed without producing an NSIS installer.
     exit /b 1
 )
@@ -59,6 +61,6 @@ if not exist "%~dp0frontend\src-tauri\target\x86_64-pc-windows-msvc\release\bund
 echo.
 echo [+] Both installers were built:
 echo     Legacy app: %~dp0Output\OpenJarvis-Setup-x64.exe
-echo     Tauri app:  %~dp0frontend\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis
+echo     Tauri app:  %TAURI_TARGET_DIR%\x86_64-pc-windows-msvc\release\bundle\nsis
 if not defined BUILD_INSTALLERS_NO_PAUSE pause
 exit /b 0

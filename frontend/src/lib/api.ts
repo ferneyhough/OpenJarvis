@@ -1650,3 +1650,33 @@ export async function fetchGuideDocument(url: string, kind: 'playlist' | 'guide'
   const data = await res.json();
   return String(data?.text ?? '');
 }
+
+export interface GuideEpgProgram {
+  title: string;
+  start: number;
+  stop: number;
+}
+
+export interface GuideEpgResponse {
+  channels: Record<string, string>;
+  programmes: Record<string, GuideEpgProgram[]>;
+  window_start: number;
+  window_stop: number;
+  fetched_at: number;
+}
+
+export async function fetchGuideEpg(url: string, hours = 24): Promise<GuideEpgResponse> {
+  const params = new URLSearchParams({ url, hours: String(hours) });
+  const res = await apiFetch(`/v1/guide/epg?${params}`);
+  if (!res.ok) {
+    let detail = `EPG failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* keep default */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}

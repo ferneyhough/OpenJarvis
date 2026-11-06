@@ -40,6 +40,8 @@ import {
   type LocalMediaGroup,
   type GuideLink,
   fetchGuideDocument,
+  fetchGuideEpg,
+  type GuideEpgResponse,
 } from '../lib/api';
 import { parseM3U, parseXMLTV, type M3UChannel, type GuideProgram } from '../lib/media-guide';
 import { MediaPlayerModal, type MediaPlayerTarget } from '../components/MediaPlayerModal';
@@ -875,30 +877,175 @@ function GameCard({
 }
 
 // ---------------------------------------------------------------------------
-// IPTV tab: M3U playlist + XMLTV guide + embedded player
+// IPTV tab: merged regional playlists + windowed XMLTV EPG
 // ---------------------------------------------------------------------------
 
-const IPTV_SOURCE_KEY = 'openjarvis.iptv.sources';
+interface RegionPreset {
+  key: string;
+  label: string;
+  playlist: string;
+  epg: string;
+  tz: string;
+}
 
-function loadIptvSources(): { playlist: string; guide: string } {
+const REGION_PRESETS: RegionPreset[] = [
+  {
+    key: 'US',
+    label: 'United States',
+    playlist: 'https://iptv-org.github.io/iptv/countries/us.m3u',
+    epg: 'https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz',
+    tz: 'America/New_York',
+  },
+  {
+    key: 'CA',
+    label: 'Canada',
+    playlist: 'https://iptv-org.github.io/iptv/countries/ca.m3u',
+    epg: 'https://epgshare01.online/epgshare01/epg_ripper_CA2.xml.gz',
+    tz: 'America/Toronto',
+  },
+  {
+    key: 'GB',
+    label: 'Britain',
+    playlist: 'https://iptv-org.github.io/iptv/countries/uk.m3u',
+    epg: 'https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz',
+    tz: 'Europe/London',
+  },
+  {
+    key: 'IE',
+    label: 'Ireland',
+    playlist: 'https://iptv-org.github.io/iptv/countries/ie.m3u',
+    epg: 'https://epgshare01.online/epgshare01/epg_ripper_IE1.xml.gz',
+    tz: 'Europe/Dublin',
+  },
+  {
+    key: 'AU',
+    label: 'Australia',
+    playlist: 'https://iptv-org.github.io/iptv/countries/au.m3u',
+    epg: 'https://epgshare01.online/epgshare01/epg_ripper_AU1.xml.gz',
+    tz: 'Australia/Sydney',
+  },
+  {
+    key: 'NZ',
+    label: 'New Zealand',
+    playlist: 'https://iptv-org.github.io/iptv/countries/nz.m3u',
+    epg: 'https://epgshare01.online/epgshare01/epg_ripper_NZ1.xml.gz',
+    tz: 'Pacific/Auckland',
+  },
+];
+
+interface GuideChannel extends M3UChannel {
+  region: string;
+  regionLabel: string;
+  tz: string;
+  schedule: GuideProgram[];
+}
+
+const IPTV_STATE_KEY = 'openjarvis.iptv.merged';
+
+function loadIptvState(): { regions: string[]; playlist: string; guide: string } {
   try {
-    const raw = localStorage.getItem(IPTV_SOURCE_KEY);
-    if (raw) return JSON.parse(raw);
+    const raw = localStorage.getItem(IPTV_STATE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.regions)) {
+        return {
+          regions: parsed.regions,
+          playlist: typeof parsed.playlist === 'string' ? parsed.playlist : '',
+          guide: typeof parsed.guide === 'string' ? parsed.guide : '',
+        };
+      }
+    }
   } catch {
     /* ignore */
   }
-  return { playlist: '', guide: '' };
+  return { regions: REGION_PRESETS.map((r) => r.key), playlist: '', guide: '' };
+}
+
+function normalizeGuideName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\b(720|1080|480|576|2160|540|4k|uhd|fhd|hd|sd)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function epgLookup(epg: GuideEpgResponse): (channel: M3UChannel) => GuideProgram[] {
+  const nameToId = new Map<string, string>();
+  for (const [id, name] of Object.entries(epg.channels)) {
+    for (const key of [normalizeGuideName(name), normalizeGuideName(id)]) {
+      if (key && !nameToId.has(key)) nameToId.set(key, id);
+    }
+  }
+  return (channel) => {
+    for (const candidate of [channel.id, channel.name]) {
+      const direct = epg.programmes[candidate];
+      if (direct && direct.length > 0) return direct;
+    }
+    for (const candidate of [channel.name, channel.id]) {
+      const epgId = nameToId.get(normalizeGuideName(candidate));
+      if (epgId) {
+        const entries = epg.programmes[epgId];
+        if (entries && entries.length > 0) return entries;
+      }
+    }
+    return [];
+  };
+}
+
+const tzFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function tzFormatter(tz: string): Intl.DateTimeFormat {
+  let formatter = tzFormatters.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZoneName: 'short',
+    });
+    tzFormatters.set(tz, formatter);
+  }
+  return formatter;
+}
+
+function formatTzTime(ts: number, tz: string): string {
+  return tzFormatter(tz).format(new Date(ts));
+}
+
+function formatTzDateTime(ts: number, tz: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZoneName: 'short',
+  }).formatToParts(new Date(ts));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('weekday')} ${get('day')} ${get('month')} ${get('hour')}:${get('minute')} ${get('timeZoneName')}`;
 }
 
 function IptvTab() {
-  const [sources, setSources] = useState(loadIptvSources);
-  const [channels, setChannels] = useState<M3UChannel[]>([]);
-  const [programs, setPrograms] = useState<Map<string, GuideProgram[]>>(new Map());
+  const [initialState] = useState(loadIptvState);
+  const [enabledRegions, setEnabledRegions] = useState<Set<string>>(
+    () => new Set(initialState.regions),
+  );
+  const [customPlaylist, setCustomPlaylist] = useState(initialState.playlist);
+  const [customGuide, setCustomGuide] = useState(initialState.guide);
+  const [channels, setChannels] = useState<GuideChannel[]>([]);
   const [loading, setLoading] = useState(false);
-  const [playing, setPlaying] = useState<M3UChannel | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [playing, setPlaying] = useState<GuideChannel | null>(null);
   const [englishOnly, setEnglishOnly] = useState(true);
+  const [regionFilter, setRegionFilter] = useState<string>('ALL');
+  const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [error, setError] = useState('');
-  const [guideError, setGuideError] = useState('');
+  const [guideErrors, setGuideErrors] = useState<string[]>([]);
   const [playerError, setPlayerError] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
@@ -906,8 +1053,20 @@ function IptvTab() {
   const hlsRef = useRef<Hls | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(IPTV_SOURCE_KEY, JSON.stringify(sources));
-  }, [sources]);
+    localStorage.setItem(
+      IPTV_STATE_KEY,
+      JSON.stringify({
+        regions: Array.from(enabledRegions),
+        playlist: customPlaylist,
+        guide: customGuide,
+      }),
+    );
+  }, [enabledRegions, customPlaylist, customGuide]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const destroyPlayer = useCallback(() => {
     if (hlsRef.current) {
@@ -923,56 +1082,142 @@ function IptvTab() {
 
   useEffect(() => destroyPlayer, [destroyPlayer]);
 
-  const visibleChannels = useMemo(
-    () =>
-      englishOnly
-        ? channels.filter((c) => !c.language || /^(en|eng|english)([-_].*)?$/i.test(c.language))
-        : channels,
-    [channels, englishOnly],
-  );
-
-  const loadChannels = async () => {
-    if (!sources.playlist.trim()) {
-      setError('Enter an M3U or M3U8 playlist URL first.');
+  const loadChannels = useCallback(async () => {
+    const regions = REGION_PRESETS.filter((r) => enabledRegions.has(r.key));
+    const customUrl = customPlaylist.trim();
+    if (regions.length === 0 && !customUrl) {
+      setError('Enable at least one region or enter a custom playlist URL.');
       return;
     }
     setLoading(true);
     setError('');
-    setGuideError('');
+    setGuideErrors([]);
     destroyPlayer();
     setPlaying(null);
-    try {
-      const playlistText = await fetchGuideDocument(sources.playlist.trim(), 'playlist');
-      const parsed = parseM3U(playlistText);
-      if (parsed.length === 0) {
-        throw new Error('The playlist contains no supported channels. Check its URL and M3U format.');
+    const errors: string[] = [];
+    const merged: GuideChannel[] = [];
+    const seen = new Set<string>();
+
+    const attach = (
+      parsed: M3UChannel[],
+      regionKey: string,
+      regionLabel: string,
+      tz: string,
+      lookup: ((channel: M3UChannel) => GuideProgram[]) | null,
+    ) => {
+      for (const channel of parsed) {
+        const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        merged.push({
+          ...channel,
+          region: regionKey,
+          regionLabel,
+          tz,
+          schedule: lookup ? lookup(channel) : [],
+        });
       }
-      setChannels(parsed);
-      setPrograms(new Map());
-      if (sources.guide.trim()) {
+    };
+
+    await Promise.all(
+      regions.map(async (region) => {
         try {
-          const guideText = await fetchGuideDocument(sources.guide.trim(), 'guide');
-          const parsedPrograms = parseXMLTV(guideText);
-          if (parsedPrograms.size === 0) {
-            setGuideError('The XMLTV file contains no usable programme entries.');
-          } else {
-            setPrograms(parsedPrograms);
+          const [playlistText, epg] = await Promise.all([
+            fetchGuideDocument(region.playlist, 'playlist'),
+            fetchGuideEpg(region.epg, 24).catch(() => null),
+          ]);
+          const parsed = parseM3U(playlistText);
+          const lookup = epg ? epgLookup(epg) : null;
+          attach(parsed, region.key, region.label, region.tz, lookup);
+          if (!epg) {
+            errors.push(`${region.label}: playlist loaded, TV schedule unavailable`);
           }
-        } catch (guideLoadError) {
-          setGuideError(
-            guideLoadError instanceof Error ? guideLoadError.message : String(guideLoadError),
+        } catch (regionError) {
+          errors.push(
+            `${region.label}: ${regionError instanceof Error ? regionError.message : String(regionError)}`,
           );
         }
+      }),
+    );
+
+    if (customUrl) {
+      try {
+        const playlistText = await fetchGuideDocument(customUrl, 'playlist');
+        const parsed = parseM3U(playlistText);
+        let lookup: ((channel: M3UChannel) => GuideProgram[]) | null = null;
+        const guideUrl = customGuide.trim();
+        if (guideUrl) {
+          try {
+            const guideText = await fetchGuideDocument(guideUrl, 'guide');
+            const programs = parseXMLTV(guideText);
+            if (programs.size > 0) {
+              lookup = (channel) => programs.get(channel.id) ?? [];
+            } else {
+              errors.push('Custom guide: XMLTV file contains no usable programme entries');
+            }
+          } catch (guideError) {
+            errors.push(
+              `Custom guide: ${guideError instanceof Error ? guideError.message : String(guideError)}`,
+            );
+          }
+        }
+        const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        attach(parsed, 'CUSTOM', 'Custom', localTz, lookup);
+      } catch (customError) {
+        errors.push(
+          `Custom playlist: ${customError instanceof Error ? customError.message : String(customError)}`,
+        );
       }
-    } catch (loadError) {
-      setChannels([]);
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    } finally {
-      setLoading(false);
     }
+
+    setGuideErrors(errors);
+    setChannels(merged);
+    setLoaded(true);
+    setLoading(false);
+  }, [enabledRegions, customPlaylist, customGuide, destroyPlayer]);
+
+  useEffect(() => {
+    if (!loaded && !loading) void loadChannels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const regionOrder = useMemo(() => {
+    const order = new Map(REGION_PRESETS.map((r, i) => [r.key, i]));
+    order.set('CUSTOM', REGION_PRESETS.length);
+    return order;
+  }, []);
+
+  const visibleChannels = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return channels
+      .filter((c) => {
+        if (englishOnly && c.language && !/^(en|eng|english)([-_].*)?$/i.test(c.language))
+          return false;
+        if (regionFilter !== 'ALL' && c.region !== regionFilter) return false;
+        if (q && !c.name.toLowerCase().includes(q) && !c.group.toLowerCase().includes(q))
+          return false;
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          (regionOrder.get(a.region) ?? 99) - (regionOrder.get(b.region) ?? 99) ||
+          a.name.localeCompare(b.name),
+      );
+  }, [channels, englishOnly, regionFilter, query, regionOrder]);
+
+  const channelKey = (channel: GuideChannel) => `${channel.region}:${channel.id || channel.url}`;
+
+  const toggleExpanded = (channel: GuideChannel) => {
+    const key = channelKey(channel);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
-  const playChannel = (channel: M3UChannel) => {
+  const playChannel = (channel: GuideChannel) => {
     const video = videoRef.current;
     if (!video) return;
     setPlayerError('');
@@ -1011,26 +1256,53 @@ function IptvTab() {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        Add an M3U/M3U8 playlist and optional XMLTV guide you are authorized to use.
-        Channels play in the built-in player below — no external app needed.
+        Live channels merged from regional playlists with TV schedules for the next 24 hours.
+        Times are shown in each channel's home timezone. Channels play in the built-in player.
       </p>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        {REGION_PRESETS.map((region) => {
+          const active = enabledRegions.has(region.key);
+          return (
+            <button
+              key={region.key}
+              onClick={() =>
+                setEnabledRegions((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(region.key)) next.delete(region.key);
+                  else next.add(region.key);
+                  return next;
+                })
+              }
+              className="px-2.5 py-1 rounded-lg text-xs cursor-pointer"
+              style={{
+                background: active ? 'var(--color-accent-subtle)' : 'var(--color-bg-secondary)',
+                color: active ? 'var(--color-text)' : 'var(--color-text-tertiary)',
+                border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              }}
+            >
+              {region.label}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="grid gap-2 md:grid-cols-2">
         <label className="space-y-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-          Playlist URL (M3U/M3U8)
+          Custom playlist URL (M3U/M3U8, optional)
           <input
-            value={sources.playlist}
-            onChange={(e) => setSources((s) => ({ ...s, playlist: e.target.value }))}
+            value={customPlaylist}
+            onChange={(e) => setCustomPlaylist(e.target.value)}
             placeholder="https://…/channels.m3u8"
             className="h-9 w-full rounded-lg bg-transparent px-3 text-sm outline-none"
             style={inputStyle}
           />
         </label>
         <label className="space-y-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-          XMLTV guide URL (optional)
+          Custom XMLTV guide URL (optional)
           <input
-            value={sources.guide}
-            onChange={(e) => setSources((s) => ({ ...s, guide: e.target.value }))}
+            value={customGuide}
+            onChange={(e) => setCustomGuide(e.target.value)}
             placeholder="https://…/guide.xml"
             className="h-9 w-full rounded-lg bg-transparent px-3 text-sm outline-none"
             style={inputStyle}
@@ -1038,7 +1310,7 @@ function IptvTab() {
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => void loadChannels()}
           disabled={loading}
@@ -1046,17 +1318,34 @@ function IptvTab() {
           style={{ background: 'var(--color-accent)', color: '#fff' }}
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-          Load channels
+          {loaded ? 'Reload channels' : 'Load channels'}
         </button>
-        {channels.length > 0 && (
-          <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-            <input type="checkbox" checked={englishOnly} onChange={(e) => setEnglishOnly(e.target.checked)} />
-            English channels
-          </label>
-        )}
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter channels…"
+          className="h-8 w-44 rounded-lg bg-transparent px-3 text-xs outline-none"
+          style={inputStyle}
+        />
+        <select
+          value={regionFilter}
+          onChange={(e) => setRegionFilter(e.target.value)}
+          className="h-8 rounded-lg px-2 text-xs"
+          style={inputStyle}
+        >
+          <option value="ALL">All regions</option>
+          {REGION_PRESETS.filter((r) => enabledRegions.has(r.key)).map((r) => (
+            <option key={r.key} value={r.key}>{r.label}</option>
+          ))}
+          {customPlaylist.trim() && <option value="CUSTOM">Custom</option>}
+        </select>
+        <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+          <input type="checkbox" checked={englishOnly} onChange={(e) => setEnglishOnly(e.target.checked)} />
+          English channels
+        </label>
         {channels.length > 0 && (
           <span className="text-xs ml-auto" style={{ color: 'var(--color-text-tertiary)' }}>
-            {visibleChannels.length} channels
+            {visibleChannels.length} of {channels.length} channels
           </span>
         )}
       </div>
@@ -1095,9 +1384,14 @@ function IptvTab() {
       </p>
 
       {error && <ErrorNote message={error} />}
-      {guideError && (
-        <div className="text-xs" style={{ color: 'var(--color-warning)' }}>
-          Playlist loaded, but the TV schedule could not load: {guideError}
+      {guideErrors.map((message) => (
+        <div key={message} className="text-xs" style={{ color: 'var(--color-warning)' }}>
+          {message}
+        </div>
+      ))}
+      {loading && (
+        <div className="flex items-center gap-2 text-xs py-2" style={{ color: 'var(--color-text-tertiary)' }}>
+          <Loader2 size={12} className="animate-spin" /> Loading regional playlists and TV schedules…
         </div>
       )}
 
@@ -1121,37 +1415,121 @@ function IptvTab() {
 
       {channels.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="max-h-[28rem] overflow-y-auto divide-y" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="max-h-[32rem] overflow-y-auto divide-y" style={{ borderColor: 'var(--color-border)' }}>
             {visibleChannels.map((channel) => {
-              const entries = programs.get(channel.id) ?? [];
-              const now = Date.now();
+              const entries = channel.schedule;
+              const now = nowTick;
               const current = entries.find((p) => p.start <= now && p.stop > now);
               const next = entries.find((p) => p.start > now);
+              const upcoming = entries.filter((p) => p.start > now).slice(0, 6);
               const isPlaying = playing?.url === channel.url;
+              const isOpen = expanded.has(channelKey(channel));
               return (
-                <button
-                  key={`${channel.id}:${channel.url}`}
-                  onClick={() => playChannel(channel)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer hover:opacity-90"
-                  style={{ background: isPlaying ? 'var(--color-accent-subtle)' : 'transparent' }}
-                >
-                  <Play size={14} style={{ color: isPlaying ? 'var(--color-accent)' : 'var(--color-text-tertiary)', flexShrink: 0 }} />
-                  <span className="flex-1 min-w-0">
-                    <span className="text-sm truncate block" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
-                    <span className="text-[11px] truncate block" style={{ color: 'var(--color-text-tertiary)' }}>
-                      {channel.group}
-                      {current && (
-                        <span style={{ color: 'var(--color-accent)' }}> · Now: {current.title}</span>
-                      )}
-                      {!current && next && <span> · Next: {next.title}</span>}
+                <div key={channelKey(channel)}>
+                  <button
+                    onClick={() => toggleExpanded(channel)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer hover:opacity-90"
+                    style={{ background: isPlaying ? 'var(--color-accent-subtle)' : 'transparent' }}
+                    title="Click for the full 24-hour schedule"
+                  >
+                    {channel.logo ? (
+                      <img src={channel.logo} alt="" className="w-8 h-8 rounded object-cover shrink-0" loading="lazy" />
+                    ) : (
+                      <span className="w-8 h-8 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--color-bg-tertiary)' }}>
+                        <Tv size={14} style={{ color: 'var(--color-text-tertiary)' }} />
+                      </span>
+                    )}
+                    <span className="flex-1 min-w-0">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-sm truncate" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
+                        <span
+                          className="text-[9px] px-1 py-0.5 rounded shrink-0"
+                          style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}
+                        >
+                          {channel.regionLabel}
+                        </span>
+                      </span>
+                      <span className="text-[11px] truncate block" style={{ color: 'var(--color-text-tertiary)' }}>
+                        {channel.group}
+                        {current && (
+                          <span style={{ color: 'var(--color-accent)' }}>
+                            {' '}· Now: {current.title} ({formatTzTime(current.start, channel.tz)}–{formatTzTime(current.stop, channel.tz)})
+                          </span>
+                        )}
+                        {!current && next && (
+                          <span>
+                            {' '}· Next: {next.title} ({formatTzTime(next.start, channel.tz)})
+                          </span>
+                        )}
+                        {entries.length === 0 && <span> · no schedule data</span>}
+                      </span>
                     </span>
-                  </span>
-                </button>
+                    <span className="flex items-center gap-1 shrink-0">
+                      {entries.length > 0 && (
+                        <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                          {isOpen ? '▾' : `▸ ${upcoming.length}`}
+                        </span>
+                      )}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playChannel(channel);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.stopPropagation();
+                            playChannel(channel);
+                          }
+                        }}
+                        title="Play channel"
+                        className="p-1.5 rounded cursor-pointer"
+                        style={{ color: isPlaying ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
+                      >
+                        <Play size={13} />
+                      </span>
+                    </span>
+                  </button>
+                  {isOpen && entries.length > 0 && (
+                    <div className="px-3 pb-2.5 pl-14">
+                      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                        {entries.map((program, index) => {
+                          const isCurrent = program.start <= now && program.stop > now;
+                          const isUpNext = !isCurrent && program.start > now && index === entries.findIndex((p) => p.start > now);
+                          return (
+                            <div
+                              key={`${program.start}-${index}`}
+                              className="flex items-baseline gap-2 px-2.5 py-1.5 text-[11px]"
+                              style={{
+                                background: isCurrent
+                                  ? 'var(--color-accent-subtle)'
+                                  : isUpNext
+                                    ? 'var(--color-bg-secondary)'
+                                    : 'transparent',
+                              }}
+                            >
+                              <span className="font-mono shrink-0 w-[7.5rem]" style={{ color: 'var(--color-accent)' }}>
+                                {formatTzDateTime(program.start, channel.tz)}
+                              </span>
+                              <span className="truncate" style={{ color: 'var(--color-text)' }}>
+                                {program.title || '—'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="text-[10px] mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                        Times in {channel.regionLabel} local time ({channel.tz})
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
             {visibleChannels.length === 0 && (
               <div className="px-3 py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
-                No channels match the English filter.
+                {loading ? 'Loading…' : 'No channels match the current filters.'}
               </div>
             )}
           </div>
