@@ -192,23 +192,28 @@ interface OllamaModelInfo {
 }
 
 const MODEL_CATALOG: Array<{ name: string; blurb: string; tag: string }> = [
-  // Chat / assistant
+  // Chat / assistant — main chat, Guides, Media, Crypto, Stores, Social, Remote, Browsers, Apps, Music
   { name: 'qwen3.5:4b', blurb: 'Default chat model — fast, tools + vision', tag: 'chat' },
   { name: 'gemma3:4b', blurb: 'Alternative chat model with vision', tag: 'chat' },
   { name: 'qwen2.5:14b', blurb: 'Bigger general model — better reasoning, slower', tag: 'chat' },
   { name: 'llama3.1:8b', blurb: 'General-purpose all-rounder', tag: 'chat' },
   { name: 'phi4:14b', blurb: 'Strong reasoning in a mid-size package', tag: 'chat' },
-  // Coding / game modding
+  { name: 'mistral:7b', blurb: 'Solid all-round chat alternative', tag: 'chat' },
+  // Light/fast — Kids panel Q&A, quick commands, low-RAM fallback
+  { name: 'gemma3:1b', blurb: 'Ultra-light (~815 MB) — instant answers, kids-safe simple tasks', tag: 'light' },
+  { name: 'llama3.2:3b', blurb: 'Tiny fast model (~2 GB) — quick questions, low spec PCs', tag: 'light' },
+  // Coding / game modding — Games, Developer, Kids (Minecraft/Roblox mods)
   { name: 'qwen2.5-coder:7b', blurb: 'Best local coding model — write, debug, mod games', tag: 'coding' },
   { name: 'starcoder2:7b', blurb: 'Code completion and generation', tag: 'coding' },
   { name: 'deepseek-coder:6.7b', blurb: 'Lightweight coder — fills, refactors, reviews', tag: 'coding' },
   { name: 'codellama:7b', blurb: 'Meta\'s code-specialized model', tag: 'coding' },
-  // Reasoning
+  // Reasoning — analysis, planning, crypto/market breakdowns
   { name: 'deepseek-r1:8b', blurb: 'Reasoning model — step-by-step thinking', tag: 'reasoning' },
-  // Vision (images/screenshots)
+  // Vision — screenshots, images, guide thumbnails, Record previews
   { name: 'moondream:latest', blurb: 'Tiny vision model (~1.7 GB) — describe images', tag: 'vision' },
   { name: 'llava:7b', blurb: 'Vision + chat — analyze images and screenshots', tag: 'vision' },
-  // Embeddings / memory
+  { name: 'qwen2.5vl:7b', blurb: 'Strong vision-language model — UI/screen understanding', tag: 'vision' },
+  // Embeddings — memory, knowledge search, guide/program matching
   { name: 'nomic-embed-text:latest', blurb: 'Embeddings for memory/search', tag: 'embed' },
 ];
 
@@ -401,6 +406,47 @@ function MediaModelsRow() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function VoiceModelsRow() {
+  const [speech, setSpeech] = useState<{ available: boolean; backend?: string; reason?: string }>({ available: false });
+  const [tts, setTts] = useState<{ available: boolean; backend?: string; reason?: string }>({ available: false });
+
+  useEffect(() => {
+    fetchSpeechHealth().then(setSpeech).catch(() => {});
+    fetchTtsHealth().then(setTts).catch(() => {});
+  }, []);
+
+  const rows = [
+    { name: 'Speech-to-text (Whisper)', blurb: 'Voice commands & transcription — bundled faster-whisper', ready: speech.available, detail: speech.backend },
+    { name: 'Text-to-speech (Kokoro)', blurb: 'Jarvis voice replies — bundled Kokoro-82M', ready: tts.available, detail: tts.backend },
+  ];
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      {rows.map((row) => (
+        <div key={row.name} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+          style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)' }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+            background: row.ready ? 'var(--color-success)' : 'var(--color-text-tertiary)',
+          }} />
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{row.name}</div>
+            <div className="text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+              {row.blurb}{row.detail ? ` · ${row.detail}` : ''}
+            </div>
+          </div>
+          <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0"
+            style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-tertiary)' }}>bundled</span>
+          <span className="text-[10px] px-2 py-1 rounded flex-shrink-0"
+            style={{ color: row.ready ? 'var(--color-success)' : 'var(--color-text-tertiary)' }}>
+            {row.ready ? 'Ready' : 'Off'}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1443,6 +1489,9 @@ export function SettingsPage() {
             </SettingRow>
             <SettingRow label="Media generation models" description="Image & video generation for the Record/Media tools">
               <MediaModelsRow />
+            </SettingRow>
+            <SettingRow label="Voice models" description="Speech-to-text and text-to-speech — bundled, no download needed">
+              <VoiceModelsRow />
             </SettingRow>
             <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
               Green dot = installed. Hit <b>Download</b> to fetch a model into Ollama, or <b>Delete</b> to free disk space. Models run fully offline once downloaded.
