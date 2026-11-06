@@ -53,7 +53,6 @@ import {
   Eraser,
   FolderOpen,
   Cpu,
-  Layers,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -2064,6 +2063,8 @@ function ToolboxPanel() {
       <GroupedAppsPanel groups={securityGroups} note="Antivirus needs a real install — the download arrow fetches it; Malwarebytes free is a good second-opinion scanner." />
       <GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." />
       {developerModeEnabled && <DeveloperPanel />}
+      <ActivationCard />
+      <GroupedAppsPanel groups={osGroups} note="Official Microsoft downloads first; community builds are unofficial — the download arrow grabs real installers where available." />
     </div>
   );
 }
@@ -3225,9 +3226,7 @@ export function MainPageHub() {
         <ActionButton active={section === 'shopping'} onClick={() => selectSection('shopping')}>
           <ShoppingCart size={15} /> Shopping
         </ActionButton>
-        <ActionButton active={section === 'toolbox'} onClick={() => selectSection('toolbox')}>
-          <Cpu size={15} /> Toolbox
-        </ActionButton>
+        {/* Toolbox and OS live in the Menu drawer, not the pill bar. */}
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
         </ActionButton>
@@ -3255,9 +3254,7 @@ export function MainPageHub() {
         <ActionButton active={section === 'ai'} onClick={() => selectSection('ai')}>
           <BrainCircuit size={15} /> AI
         </ActionButton>
-        <ActionButton active={section === 'os'} onClick={() => selectSection('os')}>
-          <Layers size={15} /> OS
-        </ActionButton>
+        {/* Toolbox + OS live in the Menu drawer, not the pill bar. */}
         {customSections.map((custom) => {
           const Icon = customSectionIcon(custom.icon);
           return (
@@ -3314,6 +3311,7 @@ export function MainPageHub() {
             <CustomAppsBlock section="cleaner" />
             <CustomAppsBlock section="security" />
             {developerModeEnabled && <CustomAppsBlock section="developer" />}
+            <CustomAppsBlock section="os" />
           </div>
         )}
         {customSections.map((custom) =>

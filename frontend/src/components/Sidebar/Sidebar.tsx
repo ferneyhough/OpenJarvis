@@ -6,7 +6,6 @@ import {
   BarChart3,
   Settings,
   Search,
-  PanelLeftClose,
   Cpu,
   Rocket,
   Bot,
@@ -17,6 +16,8 @@ import {
   ScrollText,
   Database,
   WifiOff,
+  Layers,
+  X,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { useAppStore } from '../../lib/store';
@@ -66,10 +67,12 @@ export function Sidebar() {
     // Don't create a new chat if the current one is empty
     if (messages.length === 0) {
       navigate('/');
+      toggleSidebar();
       return;
     }
     createConversation(selectedModel);
     navigate('/');
+    toggleSidebar();
   };
 
   const navItems = [
@@ -81,6 +84,20 @@ export function Sidebar() {
     { path: '/settings', icon: Settings, label: 'Settings' },
     { path: '/get-started', icon: Rocket, label: 'Get Started' },
   ];
+
+  // Hub panels that live in the Menu drawer instead of the pill bar.
+  const panelItems = [
+    { section: 'toolbox', icon: Cpu, label: 'Toolbox' },
+    { section: 'os', icon: Layers, label: 'Operating Systems' },
+  ];
+
+  const openHubPanel = (section: string) => {
+    if (window.location.pathname !== '/') navigate('/');
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('jarvis:open-section', { detail: { section } }));
+    }, 200);
+    toggleSidebar();
+  };
 
   return (
     <>
@@ -116,7 +133,7 @@ export function Sidebar() {
               onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
-              <PanelLeftClose size={18} />
+              <X size={18} />
             </button>
             <div className="flex items-center gap-1">
               <button
@@ -260,7 +277,7 @@ export function Sidebar() {
                 )}
                 <button
                   key={item.path}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => { navigate(item.path); toggleSidebar(); }}
                   className="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer"
                   style={{
                     background: isActive ? 'var(--color-accent-subtle)' : 'transparent',
@@ -291,6 +308,26 @@ export function Sidebar() {
               );
             })}
           </nav>
+          <div className="px-3 pb-2">
+            <div className="text-[10px] font-semibold uppercase tracking-widest px-1 pb-1" style={{ color: 'var(--color-text-tertiary)' }}>
+              Panels
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {panelItems.map((item) => (
+                <button
+                  key={item.section}
+                  onClick={() => openHubPanel(item.section)}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <item.icon size={16} />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </aside>
     </>
