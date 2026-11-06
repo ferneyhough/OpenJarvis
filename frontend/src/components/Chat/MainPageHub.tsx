@@ -735,6 +735,17 @@ const cryptoGroups: CryptoGroup[] = [
     ],
   },
   {
+    label: 'Faucets — small crypto rewards',
+    apps: [
+      { id: 'earnbitmoon', name: 'Earnbitmoon', url: 'https://earnbitmoon.club/', color: '#f59e0b', description: 'Faucet claims plus offerwalls and PTC tasks.', icon: Bitcoin },
+      { id: 'fire-faucet', name: 'Fire Faucet', url: 'https://firefaucet.win/', color: '#ef4444', description: 'Faucet with games, staking and a rewards marketplace.', icon: Bitcoin },
+      { id: 'freebitcoin', name: 'FreeBitcoin', url: 'https://freebitcoin.com/', color: '#f7931a', description: 'Long-running BTC faucet — roll every 30 min for a chance at 0.0001+ BTC.', icon: Bitcoin },
+      { id: 'cointiply', name: 'Cointiply', url: 'https://cointiply.com/', color: '#22c55e', description: 'Faucet plus offerwalls, surveys and PTC earning.', icon: Bitcoin },
+      { id: 'faucetpay', name: 'FaucetPay', url: 'https://faucetpay.io/', color: '#3b82f6', description: 'Faucet list, wallet and micro-earning ecosystem.', icon: Bitcoin },
+      { id: 'adbtc', name: 'AdBTC.top', url: 'https://adbtc.top/', color: '#a855f7', description: 'Watch ads and complete tasks for BTC rewards.', icon: Bitcoin },
+    ],
+  },
+  {
     label: 'Wallets',
     apps: [
       { id: 'coinbase-wallet', name: 'Coinbase Wallet', url: 'https://www.coinbase.com/wallet', color: '#0052ff', description: 'Self-custody wallet — separate from the exchange account.', icon: Wallet },
