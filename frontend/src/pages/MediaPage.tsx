@@ -1396,6 +1396,7 @@ function IptvTab() {
   const [playerError, setPlayerError] = useState('');
   const [playNotice, setPlayNotice] = useState('');
   const [guideView, setGuideView] = useState<'main' | 'kids' | 'sports'>('main');
+  const [guideDays, setGuideDays] = useState<1 | 2 | 3>(1);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1494,7 +1495,7 @@ function IptvTab() {
           attach(parsed, region.key, region.label, region.tz, null);
           publish();
           const epg = await withDeadline(
-            fetchGuideEpg(region.epg, 24).catch(() => null),
+            fetchGuideEpg(region.epg, guideDays * 24).catch(() => null),
             `${region.label} schedule`,
           ).catch(() => null);
           if (epg) {
@@ -1582,12 +1583,22 @@ function IptvTab() {
 
     setGuideErrors(errors);
     setLoading(false);
-  }, [enabledRegions, customPlaylist, customGuide, destroyPlayer]);
+  }, [enabledRegions, customPlaylist, customGuide, destroyPlayer, guideDays]);
 
   useEffect(() => {
     if (!loaded && !loading) void loadChannels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Changing the guide horizon refetches schedules for the new window.
+  const guideDaysRef = useRef(guideDays);
+  useEffect(() => {
+    if (guideDaysRef.current === guideDays) return;
+    guideDaysRef.current = guideDays;
+    scrolledToNow.current = false;
+    if (loaded) void loadChannels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideDays]);
 
   const regionOrder = useMemo(() => {
     const order = new Map(REGION_PRESETS.map((r, i) => [r.key, i]));
@@ -1673,8 +1684,8 @@ function IptvTab() {
   const channelKey = (channel: GuideChannel) => `${channel.region}:${channel.id || channel.url}`;
 
   // EPG grid: 24h window starting one hour before now, in the viewer's local time.
-  const GRID_HOURS = 24;
-  const PX_PER_HOUR = 120;
+  const GRID_HOURS = guideDays * 24;
+  const PX_PER_HOUR = guideDays > 1 ? 80 : 120;
   const GRID_LEFT_W = 240;
   const NOW_COLOR = '#22d3ee'; // JARVIS cyan — matches the boot screen theme
   const gridStart = useMemo(() => {
@@ -1873,6 +1884,20 @@ function IptvTab() {
         >
           ● Now
         </button>
+        <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+          Guide range
+          <select
+            value={guideDays}
+            onChange={(e) => setGuideDays(Number(e.target.value) as 1 | 2 | 3)}
+            className="rounded-lg px-2 py-1.5 text-xs cursor-pointer"
+            style={inputStyle}
+            title="How many days of schedule to fetch and display"
+          >
+            <option value={1}>1 day</option>
+            <option value={2}>2 days</option>
+            <option value={3}>3 days</option>
+          </select>
+        </label>
         <button
           onClick={() => void loadChannels()}
           disabled={loading}
