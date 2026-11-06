@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 # Priority order: local first, then cloud
 DISCOVERY_ORDER = [
     "faster-whisper",
+    "windows-speech",
     "openai",
     "deepgram",
 ]
@@ -66,7 +67,7 @@ def get_speech_backend(config: "JarvisConfig") -> Optional["SpeechBackend"]:
     # Offline mode: local Whisper only — cloud STT backends are never tried,
     # even when ``speech.backend`` names one explicitly.
     if getattr(config, "offline_mode", False):
-        order = ["faster-whisper"]
+        order = ["windows-speech", "faster-whisper"]
     elif backend_key != "auto":
         order = [backend_key]
     else:

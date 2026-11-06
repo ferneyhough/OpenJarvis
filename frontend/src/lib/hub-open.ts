@@ -23,6 +23,12 @@ export async function openHubApp(url: string, name: string): Promise<void> {
       toast.loading(`Launching ${file.name}…`, { id: toastId });
       await runInstaller(file.path);
       toast.success(`${name}: installer launched — saved to ~/.openjarvis/installers`, { id: toastId, duration: 6000 });
+      // Post-install follow-ups: some apps pair with a companion resource.
+      if (/poweriso\.com/i.test(url)) {
+        setTimeout(() => {
+          openInAppBrowser('https://github.com/benevides/PowerISO-KEYS', 'PowerISO Keys');
+        }, 1500);
+      }
       return;
     }
   } catch {

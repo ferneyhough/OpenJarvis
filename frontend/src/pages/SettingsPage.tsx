@@ -30,6 +30,8 @@ import { useTts } from '../hooks/useTts';
 import {
   checkHealth,
   fetchSpeechHealth,
+  fetchSpeechEngines,
+  setSpeechEngine,
   fetchTtsHealth,
   getMemoryStats,
   getInferenceSource,
@@ -1565,6 +1567,9 @@ export function SettingsPage() {
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [speechBackendAvailable, setSpeechBackendAvailable] = useState<boolean | null>(null);
   const [ttsBackend, setTtsBackend] = useState<{ available: boolean; backend?: string; voice_id?: string } | null>(null);
+  const [speechEngines, setSpeechEngines] = useState<{ id: string; available: boolean; active: boolean }[]>([]);
+  const [engineSwitching, setEngineSwitching] = useState(false);
+  const [engineMsg, setEngineMsg] = useState('');
   const [saved, setSaved] = useState(false);
 
   const [memoryStatus, setMemoryStatus] = useState<MemoryStatus>({ kind: 'loading' });
@@ -1650,6 +1655,9 @@ export function SettingsPage() {
     fetchTtsHealth()
       .then((h) => setTtsBackend(h))
       .catch(() => setTtsBackend({ available: false }));
+    fetchSpeechEngines()
+      .then((r) => setSpeechEngines(r.engines))
+      .catch(() => setSpeechEngines([]));
   }, []);
 
   const showSaved = () => {
@@ -2244,6 +2252,44 @@ export function SettingsPage() {
                 Voice test failed: {tts.error}
               </div>
             )}
+            <SettingRow label="Speech engine" description="Speech-to-text backend — Windows speech is fully offline; faster-whisper is bundled local AI">
+              <div className="flex items-center gap-2">
+                <select
+                  value={speechEngines.find((e) => e.active)?.id ?? ''}
+                  disabled={engineSwitching || speechEngines.length === 0}
+                  onChange={async (e) => {
+                    const engine = e.target.value;
+                    if (!engine) return;
+                    setEngineSwitching(true);
+                    setEngineMsg('');
+                    try {
+                      await setSpeechEngine(engine);
+                      setSpeechEngines((prev) => prev.map((eng) => ({ ...eng, active: eng.id === engine })));
+                      setSpeechBackendAvailable(true);
+                      showSaved();
+                    } catch (err) {
+                      setEngineMsg(err instanceof Error ? err.message : 'Switch failed');
+                    } finally {
+                      setEngineSwitching(false);
+                    }
+                  }}
+                  className="text-sm px-3 py-1.5 rounded-lg outline-none cursor-pointer disabled:opacity-50"
+                  style={{
+                    background: 'var(--color-bg-secondary)',
+                    color: 'var(--color-text)',
+                    border: '1px solid var(--color-border)',
+                  }}
+                >
+                  {speechEngines.length === 0 && <option value="">Loading…</option>}
+                  {speechEngines.map((e) => (
+                    <option key={e.id} value={e.id} disabled={!e.available}>
+                      {e.id}{e.available ? '' : ' (unavailable)'}
+                    </option>
+                  ))}
+                </select>
+                {engineMsg && <span className="text-xs" style={{ color: 'var(--color-error)' }}>{engineMsg}</span>}
+              </div>
+            </SettingRow>
             <SettingRow label="Backend status" description="Requires Whisper, Deepgram, or another speech backend">
               <div className="flex items-center gap-2">
                 <span

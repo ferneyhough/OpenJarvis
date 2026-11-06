@@ -414,6 +414,99 @@ SYSTEM_APPS = {
     "control panel": ["control.exe"],
 }
 
+# Every launchable Windows target, grouped for the Toolbox UI. Commands ending
+# in ":" are shell URIs opened via os.startfile; the rest are executables.
+WINDOWS_GROUPS: dict[str, dict[str, str]] = {
+    "Win+X menu": {
+        "terminal": "wt.exe",
+        "file explorer": "explorer.exe",
+        "task manager": "taskmgr.exe",
+        "settings": "ms-settings:",
+        "control panel": "control.exe",
+    },
+    "Control Panel": {
+        "programs and features": "appwiz.cpl",
+        "uninstall a program": "appwiz.cpl",
+        "power options": "powercfg.cpl",
+        "internet options": "inetcpl.cpl",
+        "mouse": "main.cpl",
+        "keyboard": "main.cpl",
+        "display": "desk.cpl",
+        "sound": "mmsys.cpl",
+        "speech recognition": "mmsys.cpl",
+        "date and time": "timedate.cpl",
+        "region": "intl.cpl",
+        "user accounts": "netplwiz.exe",
+        "windows defender": "windowsdefender:",
+        "windows security": "windowsdefender:",
+        "bitlocker": "BitLockerWizard.exe",
+        "credential manager": "rundll32.exe keymgr.dll,KRShowKeyMgr",
+        "indexing options": "control.exe /name Microsoft.IndexingOptions",
+        "windows features": "optionalfeatures.exe",
+        "environment variables": "SystemPropertiesAdvanced.exe",
+        "system properties": "SystemPropertiesComputerName.exe",
+    },
+    "System tools": {
+        "device manager": "devmgmt.msc",
+        "disk management": "diskmgmt.msc",
+        "computer management": "compmgmt.msc",
+        "services": "services.msc",
+        "event viewer": "eventvwr.msc",
+        "task scheduler": "taskschd.msc",
+        "system configuration": "msconfig.exe",
+        "system information": "msinfo32.exe",
+        "directx diagnostics": "dxdiag.exe",
+        "resource monitor": "resmon.exe",
+        "performance monitor": "perfmon.exe",
+        "registry editor": "regedit.exe",
+        "local users": "lusrmgr.msc",
+        "group policy": "gpedit.msc",
+        "windows security console": "secpol.msc",
+        "disk cleanup": "cleanmgr.exe",
+        "defrag and optimize": "dfrgui.exe",
+        "memory diagnostic": "mdsched.exe",
+        "print management": "printmanagement.msc",
+        "shared folders": "fsmgmt.msc",
+        "iSCSI initiator": "iscsicpl.exe",
+        "odbc data sources": "odbcad32.exe",
+    },
+    "Windows apps": {
+        "notepad": "notepad.exe",
+        "calculator": "calc.exe",
+        "paint": "mspaint.exe",
+        "wordpad": "write.exe",
+        "snipping tool": "SnippingTool.exe",
+        "steps recorder": "psr.exe",
+        "character map": "charmap.exe",
+        "on-screen keyboard": "osk.exe",
+        "magnifier": "magnify.exe",
+        "narrator": "narrator.exe",
+        "voice access": "ms-settings:easeofaccess-voice",
+        "windows media player": "wmplayer.exe",
+        "clock": "ms-clock:",
+        "camera": "microsoft.windows.camera:",
+        "photos": "ms-photos:",
+        "store": "ms-windows-store:",
+        "Xbox app": "xbox:",
+        "get help": "ms-gethelp:",
+        "feedback hub": "ms-feedback:",
+    },
+}
+
+# Flat lookup used by /pc/launch. Values are command strings (may include args
+# or be a shell URI like "ms-settings:").
+_LAUNCH_TARGETS: dict[str, str] = {}
+for _group in WINDOWS_GROUPS.values():
+    _LAUNCH_TARGETS.update(_group)
+for _key, _cmd in SYSTEM_APPS.items():
+    _LAUNCH_TARGETS.setdefault(_key, " ".join(_cmd))
+
+
+@pc_router.get("/pc/launchable")
+def launchable_targets() -> dict:
+    """Grouped list of Windows apps, Control Panel applets, and tools."""
+    return {"groups": WINDOWS_GROUPS}
+
 
 class LaunchBody(BaseModel):
     app: str
@@ -422,14 +515,22 @@ class LaunchBody(BaseModel):
 @pc_router.post("/pc/launch")
 def launch_system(body: LaunchBody) -> dict:
     key = body.app.strip().lower()
-    cmd = SYSTEM_APPS.get(key)
-    if not cmd:
+    target = _LAUNCH_TARGETS.get(key) or _LAUNCH_TARGETS.get(key.replace(" ", "-"))
+    if not target:
+        # Fall back to the original flat map for aliases like "cmd".
+        legacy = SYSTEM_APPS.get(key)
+        target = " ".join(legacy) if legacy else None
+    if not target:
         raise HTTPException(status_code=404, detail=f"Unknown system app: {body.app}")
     try:
-        if cmd[0].endswith(":"):
-            os.startfile(cmd[0])  # type: ignore[attr-defined]
+        if ":" in target.split(" ", 1)[0] and not target.split(" ", 1)[0].endswith(".exe"):
+            # Shell URI (ms-settings:, windowsdefender:, ms-photos:, …)
+            os.startfile(target.split(" ", 1)[0])  # type: ignore[attr-defined]
+        elif target.endswith(".cpl") or ".cpl " in target or target.startswith("control.exe"):
+            # Control Panel applets accept args like "control.exe /name X"
+            subprocess.Popen(["control.exe"] + target.split()[1:] if target.startswith("control.exe") else [target.split()[0]] + target.split()[1:])
         else:
-            subprocess.Popen(cmd)
+            subprocess.Popen(target.split())
         return {"ok": True, "app": key}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -818,3 +919,115 @@ def power(body: PowerBody) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+
+
+# ------------------------------------------------------------------ OS tools
+# Operating-systems pill support: key-source fetching (user-triggered),
+# activation status, and key install via slmgr /ipk (install only — Windows
+# still requires legitimate activation; no KMS/auto-activation is performed).
+
+import re
+import urllib.request
+
+_KEY_RE = re.compile(r"\b[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}\b")
+
+OS_KEY_SOURCES: dict[str, dict[str, str]] = {
+    "gist-keys": {
+        "name": "sergeibystrov key list",
+        "url": "https://gist.githubusercontent.com/sergeibystrov/b15d63ea7da8661bf921cb15b9ee1ede/raw",
+        "kind": "raw",
+    },
+    "poweriso-keys": {
+        "name": "PowerISO-KEYS repo",
+        "url": "https://api.github.com/repos/benevides/PowerISO-KEYS/contents",
+        "kind": "github-dir",
+    },
+}
+
+
+def _fetch_text(url: str, timeout: int = 20) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": "OpenJarvis/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+@pc_router.get("/os/key-sources")
+def os_key_sources() -> dict:
+    return {"sources": [{"id": k, **v} for k, v in OS_KEY_SOURCES.items()]}
+
+
+@pc_router.get("/os/keys")
+def os_keys(source: str = "gist-keys") -> dict:
+    src = OS_KEY_SOURCES.get(source)
+    if not src:
+        raise HTTPException(status_code=404, detail=f"Unknown source: {source}")
+    keys: list[str] = []
+    try:
+        if src["kind"] == "raw":
+            text = _fetch_text(src["url"])
+            keys = sorted(set(_KEY_RE.findall(text.upper())))
+        elif src["kind"] == "github-dir":
+            listing = json.loads(_fetch_text(src["url"]))
+            for item in listing:
+                if item.get("type") != "file":
+                    continue
+                name = item.get("name", "")
+                if not name.lower().endswith((".txt", ".md", ".json")):
+                    continue
+                raw = item.get("download_url")
+                if not raw:
+                    continue
+                text = _fetch_text(raw)
+                keys.extend(_KEY_RE.findall(text.upper()))
+            keys = sorted(set(keys))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Fetch failed: {exc}")
+    return {"source": source, "count": len(keys), "keys": keys}
+
+
+def _slmgr(*args: str) -> tuple[int, str]:
+    """Run slmgr.vbs via cscript and return (returncode, decoded output)."""
+    script = r"C:\Windows\System32\slmgr.vbs"
+    proc = subprocess.run(
+        ["cscript", "//nologo", script, *args],
+        capture_output=True, timeout=60,
+    )
+    raw = proc.stdout or proc.stderr or b""
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")) or raw.count(b"\x00") > len(raw) // 4:
+        for enc in ("utf-16", "utf-16-le", "utf-16-be"):
+            try:
+                return proc.returncode, raw.decode(enc, errors="strict").strip()
+            except (UnicodeDecodeError, LookupError):
+                continue
+    for enc in ("utf-8", "mbcs"):
+        try:
+            return proc.returncode, raw.decode(enc, errors="strict").strip()
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return proc.returncode, raw.decode("utf-8", errors="replace").strip()
+
+
+@pc_router.get("/os/activation-status")
+def os_activation_status() -> dict:
+    try:
+        code, out = _slmgr("/xpr")
+        return {"ok": code == 0, "output": out[:2000]}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class InstallKeyBody(BaseModel):
+    key: str
+
+
+@pc_router.post("/os/install-key")
+def os_install_key(body: InstallKeyBody) -> dict:
+    key = body.key.strip().upper()
+    if not _KEY_RE.fullmatch(key):
+        raise HTTPException(status_code=400, detail="Invalid product key format")
+    try:
+        code, out = _slmgr("/ipk", key)
+        ok = code == 0 and "error" not in out.lower()
+        return {"ok": ok, "output": out[:2000]}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

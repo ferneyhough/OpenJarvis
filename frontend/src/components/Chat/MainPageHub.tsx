@@ -53,6 +53,7 @@ import {
   Eraser,
   FolderOpen,
   Cpu,
+  Layers,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -70,6 +71,11 @@ import {
   browseFiles,
   fileAction,
   launchSystemApp,
+  fetchLaunchableTargets,
+  fetchOsKeySources,
+  fetchOsKeys,
+  fetchActivationStatus,
+  installOsKey,
   fetchPcInfo,
   fetchPcDrives,
   fetchPcProcesses,
@@ -98,7 +104,7 @@ import { useEnabledMusicApps } from '../PageDetails';
 import { InstallerButton } from '../InstallerButton';
 import { useHubCustom } from '../../lib/hub-custom';
 import { openHubApp } from '../../lib/hub-open';
-import type { HubCustomApp } from '../../lib/api';
+import type { HubCustomApp, OsKeySource } from '../../lib/api';
 import { getCloudKeyStatus, fetchNativeApps } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
 import { openHubService } from '../../lib/hub-voice';
@@ -113,7 +119,7 @@ type HubSection =
   | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps'
   | 'smart_home' | 'productivity' | 'finance' | 'news' | 'health'
   | 'travel' | 'education' | 'shopping' | 'tools' | 'privacy' | 'mods' | 'create'
-  | 'system' | 'cleaner' | 'security' | 'files' | 'toolbox'
+  | 'system' | 'cleaner' | 'security' | 'files' | 'toolbox' | 'os'
   // User-defined pills get dynamic string ids.
   | (string & {});
 type GameSource = 'steam' | 'playnite';
@@ -1335,6 +1341,161 @@ const securityGroups: HubGroup[] = [
   },
 ];
 
+const osGroups: HubGroup[] = [
+  {
+    label: 'Official Microsoft sources',
+    apps: [
+      { id: 'ms-win11-iso', name: 'Windows 11 ISO', url: 'https://www.microsoft.com/software-download/windows11', color: '#0078d4', description: 'Official Windows 11 disk image download from Microsoft.', icon: Monitor },
+      { id: 'ms-media-creation', name: 'Media Creation Tool', url: 'https://www.microsoft.com/software-download/windows11', color: '#0078d4', description: 'Microsoft tool to create bootable USB or ISO.', icon: Download },
+      { id: 'ms-adk', name: 'Windows ADK / WinPE', url: 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install', color: '#0078d4', description: 'Assessment and Deployment Kit for custom Windows PE images.', icon: Cpu },
+      { id: 'ms-eval', name: 'Windows Evaluation', url: 'https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise', color: '#0078d4', description: '90-day evaluation of Windows Enterprise editions.', icon: Monitor },
+      { id: 'ms-surface-recovery', name: 'Surface Recovery', url: 'https://support.microsoft.com/surface/recovery-image', color: '#0078d4', description: 'Official recovery images for Surface devices.', icon: HardDrive },
+    ],
+  },
+  {
+    label: 'Community builds (unofficial — use at your own risk)',
+    apps: [
+      { id: 'tiny11builder', name: 'tiny11builder', url: 'https://github.com/ntdevlabs/tiny11builder', color: '#8b5cf6', description: 'Builds a debloated Windows 11 ISO from your own official ISO — the safest community option.', icon: Cpu },
+      { id: 'ghostspectre', name: 'GhostSpectre ISOs', url: 'https://ghostspectre.the-ninja.jp/20H2.21H1.HOME.X64.html', color: '#f59e0b', description: 'Unofficial modified Windows ISOs (20H2/21H1). Modified by a third party — verify hashes and scan before use.', icon: Monitor },
+      { id: 'atlasos', name: 'AtlasOS', url: 'https://atlasos.net/', color: '#10b981', description: 'Community debloated Windows builds — unofficial, review before installing.', icon: Monitor },
+      { id: 'winutil', name: 'ChrisTitusTech winutil', url: 'https://github.com/ChrisTitusTech/winutil', color: '#3b82f6', description: 'Popular Windows debloat/optimization script — runs on a stock ISO, no modified image needed.', icon: Cpu },
+    ],
+  },
+  {
+    label: 'USB & boot tools',
+    apps: [
+      { id: 'rufus', name: 'Rufus', url: 'https://rufus.ie/', color: '#f59e0b', description: 'The standard tool for writing bootable USB drives.', icon: Download },
+      { id: 'ventoy', name: 'Ventoy', url: 'https://www.ventoy.net/', color: '#22c55e', description: 'Multiboot USB — drop ISOs on the drive and pick at boot.', icon: HardDrive },
+      { id: 'balena-etcher', name: 'balenaEtcher', url: 'https://etcher.balena.io/', color: '#0078d4', description: 'Dead-simple ISO-to-USB writer.', icon: Download },
+      { id: 'hirens', name: 'Hiren\'s BootCD PE', url: 'https://www.hirensbootcd.org/', color: '#ef4444', description: 'Recommended — the standard Windows rescue/repair environment with hundreds of tools.', icon: Cpu },
+      { id: 'strelec', name: 'Sergei Strelec', url: 'https://s-train.club/sergei-strelec/', color: '#a855f7', description: 'Popular WinPE rescue environment — unofficial build, use at your own risk.', icon: Cpu },
+    ],
+  },
+  {
+    label: 'PowerISO & disk tools',
+    apps: [
+      { id: 'poweriso', name: 'PowerISO', url: 'https://www.poweriso.com/download.htm', color: '#7c3aed', description: 'ISO mounter/burner — closed-source freeware; Rufus or Ventoy cover the same jobs.', icon: HardDrive },
+      { id: 'oscdimg-alt', name: 'Windows ADK oscdimg', url: 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install', color: '#0078d4', description: 'Microsoft\'s own command-line ISO builder (free with the ADK).', icon: Cpu },
+    ],
+  },
+  {
+    label: 'Activation tools',
+    apps: [
+      { id: 'showkeyplus', name: 'ShowKeyPlus', url: 'https://www.nirsoft.net/utils/product-key.html', color: '#0ea5e9', description: 'Views the Windows product key already installed on this PC.', icon: Monitor },
+      { id: 'ms-activation', name: 'Activation settings', url: 'ms-settings:activation', color: '#0078d4', description: 'Opens Windows activation settings.', icon: Settings },
+    ],
+  },
+];
+
+function ActivationCard() {
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [sources, setSources] = useState<OsKeySource[]>([]);
+  const [keys, setKeys] = useState<Record<string, string[]>>({});
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetchOsKeySources().then(setSources).catch(() => {});
+  }, []);
+
+  const checkStatus = async () => {
+    setBusy('status'); setMsg('');
+    try {
+      const r = await fetchActivationStatus();
+      setStatus(r.output || 'No output');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Status check failed');
+    } finally { setBusy(null); }
+  };
+
+  const loadKeys = async (sourceId: string) => {
+    setBusy(`keys-${sourceId}`); setMsg('');
+    try {
+      const r = await fetchOsKeys(sourceId);
+      setKeys((prev) => ({ ...prev, [sourceId]: r.keys }));
+      if (r.count === 0) setMsg('No keys found in that source.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Key fetch failed');
+    } finally { setBusy(null); }
+  };
+
+  const installKey = async (key: string) => {
+    setBusy(`install-${key}`); setMsg('');
+    try {
+      const r = await installOsKey(key);
+      setMsg(r.ok ? `Key installed: ${key}` : `Install failed: ${r.output.slice(0, 200)}`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Install failed');
+    } finally { setBusy(null); }
+  };
+
+  const smallBtn = 'text-[11px] px-2 py-1 rounded cursor-pointer disabled:opacity-50';
+  const smallBtnStyle = { background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' } as const;
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+      <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text)' }}>Windows activation</h3>
+      <div className="text-[11px] mb-3" style={{ color: 'var(--color-text-tertiary)' }}>
+        Keys below are fetched from public lists — installing one does not activate Windows by itself.
+        Activation still requires a legitimate license or KMS server.
+      </div>
+      <div className="flex flex-wrap gap-2 mb-3">
+        <button className={smallBtn} style={smallBtnStyle} disabled={busy !== null} onClick={() => void checkStatus()}>
+          {busy === 'status' ? 'Checking…' : 'Check activation status'}
+        </button>
+        <button className={smallBtn} style={smallBtnStyle} onClick={() => void launchSystemApp('ms-settings:activation')}>
+          Open activation settings
+        </button>
+      </div>
+      {status && (
+        <pre className="text-[11px] mb-3 p-2 rounded overflow-x-auto whitespace-pre-wrap" style={{ background: 'var(--color-bg)', color: 'var(--color-text-secondary)' }}>{status}</pre>
+      )}
+      <div className="space-y-2">
+        {sources.map((s) => (
+          <div key={s.id}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: 'var(--color-text)' }}>{s.name}</span>
+              <button className={smallBtn} style={smallBtnStyle} disabled={busy !== null}
+                onClick={() => void loadKeys(s.id)}>
+                {busy === `keys-${s.id}` ? 'Fetching…' : keys[s.id] ? 'Refetch' : 'Fetch keys'}
+              </button>
+              <a href={s.url.replace('api.github.com/repos/benevides/PowerISO-KEYS/contents', 'github.com/benevides/PowerISO-KEYS')}
+                target="_blank" rel="noopener noreferrer" className="text-[11px]"
+                style={{ color: 'var(--color-accent)' }}>source</a>
+            </div>
+            {keys[s.id] && keys[s.id].length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                {keys[s.id].slice(0, 60).map((k) => (
+                  <button key={k} className="text-[11px] px-2 py-1 rounded font-mono"
+                    style={{ ...smallBtnStyle, color: 'var(--color-text)' }}
+                    disabled={busy !== null}
+                    title="Install this key (slmgr /ipk) — does not activate"
+                    onClick={() => void installKey(k)}>
+                    {busy === `install-${k}` ? '…' : k}
+                  </button>
+                ))}
+                {keys[s.id].length > 60 && (
+                  <span className="text-[11px] self-center" style={{ color: 'var(--color-text-tertiary)' }}>+{keys[s.id].length - 60} more</span>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {msg && <div className="text-xs mt-2" style={{ color: 'var(--color-text-secondary)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+function OSPanel() {
+  return (
+    <div className="space-y-4 px-4 pb-4">
+      <ActivationCard />
+      <GroupedAppsPanel groups={osGroups} note="Official Microsoft downloads first; community builds are unofficial — the download arrow grabs real installers where available." />
+    </div>
+  );
+}
+
 function PcCareCard() {
   const [scan, setScan] = useState<PcScanResult | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -1804,6 +1965,55 @@ function ToolboxCard() {
   );
 }
 
+function WindowsLaunchCard() {
+  const [groups, setGroups] = useState<Record<string, Record<string, string>>>({});
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetchLaunchableTargets().then((r) => setGroups(r.groups)).catch(() => {});
+  }, []);
+
+  const launch = async (label: string) => {
+    setMsg('');
+    try {
+      await launchSystemApp(label);
+      toast.success(`${label} launched.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Launch failed');
+      toast.error(`Could not launch ${label}`);
+    }
+  };
+
+  const entries = Object.entries(groups);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+      <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text)' }}>Windows control</h3>
+      <div className="text-[11px] mb-3" style={{ color: 'var(--color-text-tertiary)' }}>
+        Control Panel applets, Win+X menu items, and system tools — everything the right-click Windows button offers, launchable from here or by voice.
+      </div>
+      <div className="space-y-3">
+        {entries.map(([group, items]) => (
+          <div key={group}>
+            <div className="text-[11px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-tertiary)' }}>{group}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.keys(items).map((label) => (
+                <button key={label} onClick={() => void launch(label)} title={items[label]}
+                  className="text-xs px-2.5 py-1.5 rounded-lg cursor-pointer"
+                  style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {msg && <div className="text-xs mt-2" style={{ color: 'var(--color-danger, #ef4444)' }}>{msg}</div>}
+    </div>
+  );
+}
+
 function ToolboxPanel() {
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
   const apps = [
@@ -1848,6 +2058,7 @@ function ToolboxPanel() {
           Or say it: "Jarvis open notepad", "Jarvis open calculator", "Jarvis open file explorer".
         </div>
       </div>
+      <WindowsLaunchCard />
       <GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." />
       <GroupedAppsPanel groups={cleanerGroups} note="Cleaners and uninstallers — the download arrow grabs the real installer where one exists." />
       <GroupedAppsPanel groups={securityGroups} note="Antivirus needs a real install — the download arrow fetches it; Malwarebytes free is a good second-opinion scanner." />
@@ -2908,6 +3119,7 @@ export function allHubVoiceEntries(): HubVoiceEntry[] {
     ...grouped(privacyGroups, 'privacy'),
     ...grouped(cleanerGroups, 'cleaner'),
     ...grouped(securityGroups, 'security'),
+    ...grouped(osGroups, 'os'),
     ...flat(musicServiceApps(MUSIC_APPS), 'music'),
     ...flat(browserApps, 'browsers'),
     ...flat(socialApps, 'social'),
@@ -3043,6 +3255,9 @@ export function MainPageHub() {
         <ActionButton active={section === 'ai'} onClick={() => selectSection('ai')}>
           <BrainCircuit size={15} /> AI
         </ActionButton>
+        <ActionButton active={section === 'os'} onClick={() => selectSection('os')}>
+          <Layers size={15} /> OS
+        </ActionButton>
         {customSections.map((custom) => {
           const Icon = customSectionIcon(custom.icon);
           return (
@@ -3077,6 +3292,7 @@ export function MainPageHub() {
         {visitedSections.has('remote') && <div hidden={section !== 'remote'}><RemotePanel /><CustomAppsBlock section="remote" /></div>}
         {visitedSections.has('stores') && <div hidden={section !== 'stores'}><StoresPanel /><CustomAppsBlock section="stores" /></div>}
         {visitedSections.has('ai') && <div hidden={section !== 'ai'}><AIPlatformPanel /><CustomAppsBlock section="ai" /></div>}
+        {visitedSections.has('os') && <div hidden={section !== 'os'}><OSPanel /><CustomAppsBlock section="os" /></div>}
         {visitedSections.has('mods') && <div hidden={section !== 'mods'}><GroupedAppsPanel groups={modsGroups} note="Mod managers keep mods isolated from your game files — Nexus downloads need a free Nexus account; Modrinth and CurseForge are open." /><CustomAppsBlock section="mods" /></div>}
         {visitedSections.has('create') && <div hidden={section !== 'create'}><GroupedAppsPanel groups={createGroups} note="Photo, design, video and audio editors — the download arrow grabs the real installer; browser editors like Photopea and Canva open instantly." /><CustomAppsBlock section="create" /></div>}
         {visitedSections.has('smart_home') && <div hidden={section !== 'smart_home'}><GroupedAppsPanel groups={smartHomeGroups} note="These open the companion apps/sites — pair devices in each app. Home Assistant can run fully local on a Raspberry Pi or this PC." /><CustomAppsBlock section="smart_home" /></div>}

@@ -1072,6 +1072,99 @@ async def speech_health(request: Request):
     }
 
 
+_STT_ENGINE_IDS = ["faster-whisper", "windows-speech", "openai", "deepgram"]
+
+
+def _set_speech_backend_toml(engine: str) -> None:
+    """Persist ``speech.backend`` in ~/.openjarvis/config.toml (best effort)."""
+    try:
+        from openjarvis.core.paths import get_config_dir
+
+        path = get_config_dir() / "config.toml"
+        if not path.exists():
+            return
+        text = path.read_text(encoding="utf-8")
+        lines = text.splitlines(keepends=True)
+        in_speech = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                in_speech = stripped == "[speech]"
+                continue
+            if in_speech and stripped.startswith("backend") and "=" in stripped:
+                lines[i] = f'backend = "{engine}"\n'
+                break
+        else:
+            return
+        path.write_text("".join(lines), encoding="utf-8")
+    except Exception:
+        logger.debug("Could not persist speech.backend to config.toml", exc_info=True)
+
+
+@speech_router.get("/engines")
+async def speech_engines(request: Request):
+    """List available speech-to-text engines and the active one."""
+    config = getattr(request.app.state, "config", None)
+    active = getattr(getattr(request.app.state, "speech_backend", None), "backend_id", None)
+    engines = []
+    if config is not None:
+        from openjarvis.speech._discovery import _create_backend
+
+        for key in _STT_ENGINE_IDS:
+            try:
+                backend = await asyncio.to_thread(_create_backend, key, config)
+            except Exception:
+                backend = None
+            engines.append({
+                "id": key,
+                "available": backend is not None,
+                "active": key == active,
+            })
+    return {"engines": engines, "active": active}
+
+
+class SpeechEngineBody(BaseModel):
+    engine: str
+
+
+@speech_router.post("/engine")
+async def speech_engine_switch(request: Request, body: SpeechEngineBody):
+    """Switch the active speech-to-text engine at runtime and persist it."""
+    engine = body.engine.strip()
+    if engine not in _STT_ENGINE_IDS:
+        raise HTTPException(status_code=400, detail=f"Unknown engine: {engine}")
+
+    config = getattr(request.app.state, "config", None)
+    if config is None:
+        raise HTTPException(status_code=501, detail="Config not available")
+
+    from openjarvis.speech._discovery import _create_backend
+
+    try:
+        backend = await asyncio.to_thread(_create_backend, engine, config)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if backend is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Engine '{engine}' is not available (missing dependency or API key)",
+        )
+    try:
+        healthy = await asyncio.to_thread(backend.health)
+    except Exception:
+        healthy = False
+    if not healthy:
+        reason = backend.last_error() if callable(getattr(backend, "last_error", None)) else None
+        raise HTTPException(
+            status_code=400,
+            detail=f"Engine '{engine}' failed its health check{f': {reason}' if reason else ''}",
+        )
+
+    request.app.state.speech_backend = backend
+    _set_speech_backend_toml(engine)
+    return {"ok": True, "engine": engine, "backend": backend.backend_id}
+
+
 # Synthesis is CPU-bound and runs in a worker thread; cap the input so one
 # request cannot occupy that thread for minutes.
 _MAX_TTS_CHARS = 5000

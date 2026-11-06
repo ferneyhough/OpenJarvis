@@ -571,6 +571,75 @@ export async function fetchSpeechHealth(): Promise<SpeechHealth> {
   return res.json();
 }
 
+export interface SpeechEngineInfo {
+  id: string;
+  available: boolean;
+  active: boolean;
+}
+
+export async function fetchSpeechEngines(): Promise<{ engines: SpeechEngineInfo[]; active: string | null }> {
+  const res = await apiFetch(`/v1/speech/engines`);
+  if (!res.ok) return { engines: [], active: null };
+  return res.json();
+}
+
+export async function setSpeechEngine(engine: string): Promise<void> {
+  const res = await apiFetch(`/v1/speech/engine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ engine }),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === 'string' ? body.detail : '';
+    } catch { /* keep status message */ }
+    throw new Error(detail || `Engine switch failed: ${res.status}`);
+  }
+}
+
+export async function fetchLaunchableTargets(): Promise<{ groups: Record<string, Record<string, string>> }> {
+  const res = await apiFetch(`/v1/pc/launchable`);
+  if (!res.ok) return { groups: {} };
+  return res.json();
+}
+
+export interface OsKeySource { id: string; name: string; url: string; kind: string }
+
+export async function fetchOsKeySources(): Promise<OsKeySource[]> {
+  const res = await apiFetch(`/v1/os/key-sources`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.sources ?? [];
+}
+
+export async function fetchOsKeys(source: string): Promise<{ count: number; keys: string[] }> {
+  const res = await apiFetch(`/v1/os/keys?source=${encodeURIComponent(source)}`);
+  if (!res.ok) {
+    let detail = '';
+    try { const b = await res.json(); detail = typeof b.detail === 'string' ? b.detail : ''; } catch { /* */ }
+    throw new Error(detail || `Key fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchActivationStatus(): Promise<{ ok: boolean; output: string }> {
+  const res = await apiFetch(`/v1/os/activation-status`);
+  if (!res.ok) return { ok: false, output: 'Status check failed' };
+  return res.json();
+}
+
+export async function installOsKey(key: string): Promise<{ ok: boolean; output: string }> {
+  const res = await apiFetch(`/v1/os/install-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+  const data = await res.json().catch(() => ({ ok: false, output: `HTTP ${res.status}` }));
+  return data;
+}
+
 // ---------------------------------------------------------------------------
 // Offline mode
 // ---------------------------------------------------------------------------
