@@ -1949,3 +1949,75 @@ export async function runInstaller(path: string): Promise<void> {
     throw new Error(detail);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Custom hub pills & apps (server-side, shared with the hub_manage agent tool)
+// ---------------------------------------------------------------------------
+
+export interface HubCustomSection {
+  id: string;
+  label: string;
+  icon: string;
+}
+
+export interface HubCustomApp {
+  id: string;
+  name: string;
+  url: string;
+  section: string;
+  color: string;
+  description: string;
+}
+
+export interface HubCustomData {
+  sections: HubCustomSection[];
+  apps: HubCustomApp[];
+}
+
+export async function fetchHubCustom(): Promise<HubCustomData> {
+  const res = await apiFetch('/v1/hub/custom');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function addHubSection(label: string, icon: string): Promise<HubCustomSection> {
+  const res = await apiFetch('/v1/hub/custom/sections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label, icon }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteHubSection(id: string): Promise<void> {
+  const res = await apiFetch(`/v1/hub/custom/sections/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function addHubApp(app: {
+  name: string;
+  url: string;
+  section: string;
+  color?: string;
+  description?: string;
+}): Promise<HubCustomApp> {
+  const res = await apiFetch('/v1/hub/custom/apps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(app),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteHubApp(id: string): Promise<void> {
+  const res = await apiFetch(`/v1/hub/custom/apps/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+}

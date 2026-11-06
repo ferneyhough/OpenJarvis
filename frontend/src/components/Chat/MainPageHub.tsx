@@ -43,6 +43,11 @@ import {
   Lightbulb,
   Dumbbell,
   BookOpen,
+  Star,
+  Heart,
+  Zap,
+  Palette,
+  Images,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
@@ -56,6 +61,8 @@ import { useMusicStore } from '../../lib/music';
 import { MUSIC_APPS } from '../../lib/music-commands';
 import { Links, useEnabledMusicApps } from '../PageDetails';
 import { InstallerButton } from '../InstallerButton';
+import { useHubCustom } from '../../lib/hub-custom';
+import type { HubCustomApp } from '../../lib/api';
 import { getCloudKeyStatus, fetchNativeApps } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
 import { openHubService } from '../../lib/hub-voice';
@@ -65,8 +72,13 @@ import {
   type GameLauncherId,
 } from '../../lib/game-launchers';
 
-type HubSection = 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps'
-  | 'smart_home' | 'productivity' | 'finance' | 'news' | 'health' | 'travel' | 'education' | 'shopping' | 'tools' | 'privacy' | 'mods';
+type HubSection =
+  | 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media'
+  | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps'
+  | 'smart_home' | 'productivity' | 'finance' | 'news' | 'health'
+  | 'travel' | 'education' | 'shopping' | 'tools' | 'privacy' | 'mods' | 'create'
+  // User-defined pills get dynamic string ids.
+  | (string & {});
 type GameSource = 'steam' | 'playnite';
 
 interface HubService {
@@ -1162,6 +1174,53 @@ const modsGroups: HubGroup[] = [
   },
 ];
 
+const createGroups: HubGroup[] = [
+  {
+    label: 'Photo editors',
+    apps: [
+      { id: 'photopea', name: 'Photopea', url: 'https://www.photopea.com/', color: '#112f52', description: 'Free browser Photoshop clone — layers, PSD support, no install.', icon: Images },
+      { id: 'gimp', name: 'GIMP', url: 'https://www.gimp.org/', color: '#4e9a51', description: 'Free open-source Photoshop alternative.', icon: Images },
+      { id: 'krita', name: 'Krita', url: 'https://krita.org/', color: '#3b6ea5', description: 'Digital painting and illustration — great with a tablet.', icon: Images },
+      { id: 'photoshop', name: 'Photoshop', url: 'https://www.adobe.com/products/photoshop.html', color: '#31a8ff', description: 'Industry-standard photo editor (subscription).', icon: Images },
+      { id: 'affinity-photo', name: 'Affinity Photo', url: 'https://affinity.serif.com/photo/', color: '#0186ff', description: 'Pro photo editor — one-time purchase, no subscription.', icon: Images },
+      { id: 'pixlr', name: 'Pixlr', url: 'https://pixlr.com/', color: '#f97316', description: 'Free browser photo editor — quick edits and templates.', icon: Images },
+      { id: 'fotor', name: 'Fotor', url: 'https://www.fotor.com/', color: '#7c3aed', description: 'Photo editor with AI tools and templates.', icon: Images },
+      { id: 'luminar-ne', name: 'Luminar Neo', url: 'https://skylum.com/luminar', color: '#0ea5e9', description: 'AI photo editor — one-time purchase.', icon: Images },
+      { id: 'darktable', name: 'darktable', url: 'https://www.darktable.org/', color: '#8b5cf6', description: 'Free RAW developer and photo workflow tool.', icon: Images },
+      { id: 'rawtherapee', name: 'RawTherapee', url: 'https://www.rawtherapee.com/', color: '#f59e0b', description: 'Free RAW photo processor with advanced controls.', icon: Images },
+    ],
+  },
+  {
+    label: 'Design & illustration',
+    apps: [
+      { id: 'canva-design', name: 'Canva', url: 'https://www.canva.com/', color: '#8b3dff', description: 'Posters, cards, invitations and social graphics — free tier.', icon: Palette },
+      { id: 'figma', name: 'Figma', url: 'https://www.figma.com/', color: '#a259ff', description: 'Interface and graphic design in the browser.', icon: Palette },
+      { id: 'inkscape', name: 'Inkscape', url: 'https://inkscape.org/', color: '#ed8b00', description: 'Free vector graphics editor (SVG).', icon: Palette },
+      { id: 'ibis-paint', name: 'ibis Paint', url: 'https://ibispaint.com/', color: '#ff6b9d', description: 'Free drawing app — huge brush library.', icon: Palette },
+      { id: 'procreate', name: 'Procreate', url: 'https://procreate.com/', color: '#1e88e5', description: 'iPad illustration app (Apple devices).', icon: Palette },
+    ],
+  },
+  {
+    label: 'Video editors',
+    apps: [
+      { id: 'premiere-pro', name: 'Premiere Pro', url: 'https://www.adobe.com/products/premiere.html', color: '#9999ff', description: 'Professional video editor (subscription).', icon: Video },
+      { id: 'filmora', name: 'Filmora', url: 'https://filmora.wondershare.com/', color: '#2d8cff', description: 'Easy video editor with effects and templates.', icon: Video },
+      { id: 'openshot', name: 'OpenShot', url: 'https://www.openshot.org/', color: '#4caf50', description: 'Free open-source video editor.', icon: Video },
+      { id: 'shotcut', name: 'Shotcut', url: 'https://shotcut.org/', color: '#2e7d32', description: 'Free open-source video editor — no watermark.', icon: Video },
+      { id: 'kdenlive', name: 'Kdenlive', url: 'https://kdenlive.org/', color: '#4a90d9', description: 'Free open-source video editor for Windows/Linux.', icon: Video },
+    ],
+  },
+  {
+    label: 'Audio & music makers',
+    apps: [
+      { id: 'ocenaudio', name: 'ocenaudio', url: 'https://www.ocenaudio.com/', color: '#00a8e1', description: 'Fast, clean audio editor for Windows.', icon: Music2 },
+      { id: 'lmms', name: 'LMMS', url: 'https://lmms.io/', color: '#8bc34a', description: 'Free music-production software — make beats.', icon: Music2 },
+      { id: 'bandlab', name: 'BandLab', url: 'https://www.bandlab.com/', color: '#ff4d6d', description: 'Browser DAW — record, mix and share music.', icon: Music2 },
+      { id: 'soundtrap', name: 'Soundtrap', url: 'https://www.soundtrap.com/', color: '#00b8d9', description: 'Online music studio — collab in real time.', icon: Music2 },
+    ],
+  },
+];
+
 function GroupedAppsPanel({ groups, note }: { groups: HubGroup[]; note?: string }) {
   return (
     <div className="space-y-4 px-4 pb-4">
@@ -2053,11 +2112,107 @@ function AppsPanel() {
   );
 }
 
+const CUSTOM_SECTION_ICONS: Record<string, typeof Tv> = {
+  star: Star,
+  heart: Heart,
+  gamepad: Gamepad2,
+  music: Music2,
+  tv: Tv,
+  globe: Globe,
+  wrench: Wrench,
+  shield: ShieldCheck,
+  home: Home,
+  briefcase: Briefcase,
+  plane: Plane,
+  book: BookOpen,
+  cart: ShoppingCart,
+  bot: BrainCircuit,
+  zap: Zap,
+};
+
+function customSectionIcon(name: string): typeof Tv {
+  return CUSTOM_SECTION_ICONS[name] ?? Star;
+}
+
+/** Tiles for user-added apps — same look as built-in hub tiles. */
+function CustomAppTiles({ apps }: { apps: HubCustomApp[] }) {
+  return (
+    <>
+      {apps.map((app) => {
+        const color = app.color || '#22d3ee';
+        const Icon = LayoutGrid;
+        return (
+          <span key={app.id} className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void openExternal(app.url)}
+              title={app.description || app.name}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
+              style={{
+                color,
+                background: `${color}18`,
+                border: `1px solid ${color}55`,
+              }}
+            >
+              <Icon size={14} />
+              {app.name}
+              <ExternalLink size={11} />
+            </button>
+            <InstallerButton url={app.url} name={app.name} color={color} />
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** "My apps" block appended to a built-in pill when the user added tiles to it. */
+function CustomAppsBlock({ section }: { section: string }) {
+  const { apps } = useHubCustom();
+  const mine = apps.filter((app) => app.section === section);
+  if (mine.length === 0) return null;
+  return (
+    <div className="px-4 pb-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-tertiary)' }}>
+        My apps
+      </h3>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="My apps">
+        <CustomAppTiles apps={mine} />
+      </div>
+    </div>
+  );
+}
+
+/** Panel body for a user-created pill. */
+function CustomPillPanel({ sectionId, label }: { sectionId: string; label: string }) {
+  const navigate = useNavigate();
+  const { apps } = useHubCustom();
+  const mine = apps.filter((app) => app.section === sectionId);
+  return (
+    <div className="px-4 pb-4">
+      {mine.length > 0 ? (
+        <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+          <CustomAppTiles apps={mine} />
+        </div>
+      ) : (
+        <p className="py-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          No apps in this pill yet — add some in{' '}
+          <button type="button" onClick={() => navigate('/settings')} className="underline underline-offset-2" style={{ color: 'var(--color-accent)' }}>
+            Settings → Custom hub pills &amp; apps
+          </button>
+          , or ask Jarvis to add one.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function MainPageHub() {
   const navigate = useNavigate();
   const [section, setSection] = useState<HubSection | null>(null);
   const [visitedSections, setVisitedSections] = useState<Set<HubSection>>(() => new Set());
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
+  const { sections: customSections } = useHubCustom();
   useEffect(() => {
     if (!developerModeEnabled && section === 'developer') setSection(null);
   }, [developerModeEnabled, section]);
@@ -2083,6 +2238,9 @@ export function MainPageHub() {
         </ActionButton>
         <ActionButton active={section === 'mods'} onClick={() => selectSection('mods')}>
           <Wrench size={15} /> Mods
+        </ActionButton>
+        <ActionButton active={section === 'create'} onClick={() => selectSection('create')}>
+          <Palette size={15} /> Create
         </ActionButton>
         <ActionButton active={section === 'smart_home'} onClick={() => selectSection('smart_home')}>
           <Home size={15} /> Smart Home
@@ -2141,6 +2299,14 @@ export function MainPageHub() {
         <ActionButton active={section === 'ai'} onClick={() => selectSection('ai')}>
           <BrainCircuit size={15} /> AI
         </ActionButton>
+        {customSections.map((custom) => {
+          const Icon = customSectionIcon(custom.icon);
+          return (
+            <ActionButton key={custom.id} active={section === custom.id} onClick={() => selectSection(custom.id)}>
+              <Icon size={15} /> {custom.label}
+            </ActionButton>
+          );
+        })}
         {developerModeEnabled && (
           <ActionButton active={section === 'developer'} onClick={() => selectSection('developer')}>
             <Code2 size={15} /> Developer
@@ -2148,30 +2314,38 @@ export function MainPageHub() {
         )}
       </nav>
       <div className={`max-h-[42vh] overflow-y-auto pb-2 ${section ? '' : 'hidden'}`}>
-        {visitedSections.has('kids') && <div hidden={section !== 'kids'}><KidsPanel /></div>}
-        {visitedSections.has('crypto') && <div hidden={section !== 'crypto'}><CryptoPanel /></div>}
-        {visitedSections.has('apps') && <div hidden={section !== 'apps'}><AppsPanel /></div>}
-        {visitedSections.has('browsers') && <div hidden={section !== 'browsers'}><BrowsersPanel /></div>}
-        {visitedSections.has('games') && <div hidden={section !== 'games'}><GamesPanel /></div>}
-        {visitedSections.has('social') && <div hidden={section !== 'social'}><SocialPanel /></div>}
-        {visitedSections.has('music') && <div hidden={section !== 'music'}><MusicPanel /></div>}
-        {visitedSections.has('media') && <div hidden={section !== 'media'}><MediaPanel /></div>}
-        {visitedSections.has('record') && <div hidden={section !== 'record'}><LocalRecorder /></div>}
-        {visitedSections.has('remote') && <div hidden={section !== 'remote'}><RemotePanel /></div>}
-        {visitedSections.has('stores') && <div hidden={section !== 'stores'}><StoresPanel /></div>}
-        {visitedSections.has('ai') && <div hidden={section !== 'ai'}><AIPlatformPanel /></div>}
-        {visitedSections.has('mods') && <div hidden={section !== 'mods'}><GroupedAppsPanel groups={modsGroups} note="Mod managers keep mods isolated from your game files — Nexus downloads need a free Nexus account; Modrinth and CurseForge are open." /></div>}
-        {visitedSections.has('smart_home') && <div hidden={section !== 'smart_home'}><GroupedAppsPanel groups={smartHomeGroups} note="These open the companion apps/sites — pair devices in each app. Home Assistant can run fully local on a Raspberry Pi or this PC." /></div>}
-        {visitedSections.has('productivity') && <div hidden={section !== 'productivity'}><GroupedAppsPanel groups={productivityGroups} note="Sign in with each service in your browser — OpenJarvis opens the site or installed app." /></div>}
-        {visitedSections.has('finance') && <div hidden={section !== 'finance'}><GroupedAppsPanel groups={financeGroups} note="Banks and brokerages require your own account and verification — never enter banking passwords anywhere but the official site." /></div>}
-        {visitedSections.has('news') && <div hidden={section !== 'news'}><GroupedAppsPanel groups={newsGroups} note="News sites open in your browser; weather links give current forecasts and official alerts." /></div>}
-        {visitedSections.has('health') && <div hidden={section !== 'health'}><GroupedAppsPanel groups={healthGroups} note="Health apps need your own accounts — OpenJarvis does not collect or store health data." /></div>}
-        {visitedSections.has('travel') && <div hidden={section !== 'travel'}><GroupedAppsPanel groups={travelGroups} note="Booking sites open in your browser — always confirm prices and policies on the official site." /></div>}
-        {visitedSections.has('education') && <div hidden={section !== 'education'}><GroupedAppsPanel groups={educationGroups} note="Khan Academy and Libby are free; Coursera/edX courses are free to audit or paid for certificates." /></div>}
-        {visitedSections.has('shopping') && <div hidden={section !== 'shopping'}><GroupedAppsPanel groups={shoppingGroups} note="Retailers open in your browser — deals sites aggregate community-verified offers." /></div>}
-        {visitedSections.has('tools') && <div hidden={section !== 'tools'}><GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." /></div>}
-        {visitedSections.has('privacy') && <div hidden={section !== 'privacy'}><GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." /></div>}
-        {developerModeEnabled && visitedSections.has('developer') && <div hidden={section !== 'developer'}><DeveloperPanel /></div>}
+        {visitedSections.has('kids') && <div hidden={section !== 'kids'}><KidsPanel /><CustomAppsBlock section="kids" /></div>}
+        {visitedSections.has('crypto') && <div hidden={section !== 'crypto'}><CryptoPanel /><CustomAppsBlock section="crypto" /></div>}
+        {visitedSections.has('apps') && <div hidden={section !== 'apps'}><AppsPanel /><CustomAppsBlock section="apps" /></div>}
+        {visitedSections.has('browsers') && <div hidden={section !== 'browsers'}><BrowsersPanel /><CustomAppsBlock section="browsers" /></div>}
+        {visitedSections.has('games') && <div hidden={section !== 'games'}><GamesPanel /><CustomAppsBlock section="games" /></div>}
+        {visitedSections.has('social') && <div hidden={section !== 'social'}><SocialPanel /><CustomAppsBlock section="social" /></div>}
+        {visitedSections.has('music') && <div hidden={section !== 'music'}><MusicPanel /><CustomAppsBlock section="music" /></div>}
+        {visitedSections.has('media') && <div hidden={section !== 'media'}><MediaPanel /><CustomAppsBlock section="media" /></div>}
+        {visitedSections.has('record') && <div hidden={section !== 'record'}><LocalRecorder /><CustomAppsBlock section="record" /></div>}
+        {visitedSections.has('remote') && <div hidden={section !== 'remote'}><RemotePanel /><CustomAppsBlock section="remote" /></div>}
+        {visitedSections.has('stores') && <div hidden={section !== 'stores'}><StoresPanel /><CustomAppsBlock section="stores" /></div>}
+        {visitedSections.has('ai') && <div hidden={section !== 'ai'}><AIPlatformPanel /><CustomAppsBlock section="ai" /></div>}
+        {visitedSections.has('mods') && <div hidden={section !== 'mods'}><GroupedAppsPanel groups={modsGroups} note="Mod managers keep mods isolated from your game files — Nexus downloads need a free Nexus account; Modrinth and CurseForge are open." /><CustomAppsBlock section="mods" /></div>}
+        {visitedSections.has('create') && <div hidden={section !== 'create'}><GroupedAppsPanel groups={createGroups} note="Photo, design, video and audio editors — the download arrow grabs the real installer; browser editors like Photopea and Canva open instantly." /><CustomAppsBlock section="create" /></div>}
+        {visitedSections.has('smart_home') && <div hidden={section !== 'smart_home'}><GroupedAppsPanel groups={smartHomeGroups} note="These open the companion apps/sites — pair devices in each app. Home Assistant can run fully local on a Raspberry Pi or this PC." /><CustomAppsBlock section="smart_home" /></div>}
+        {visitedSections.has('productivity') && <div hidden={section !== 'productivity'}><GroupedAppsPanel groups={productivityGroups} note="Sign in with each service in your browser — OpenJarvis opens the site or installed app." /><CustomAppsBlock section="productivity" /></div>}
+        {visitedSections.has('finance') && <div hidden={section !== 'finance'}><GroupedAppsPanel groups={financeGroups} note="Banks and brokerages require your own account and verification — never enter banking passwords anywhere but the official site." /><CustomAppsBlock section="finance" /></div>}
+        {visitedSections.has('news') && <div hidden={section !== 'news'}><GroupedAppsPanel groups={newsGroups} note="News sites open in your browser; weather links give current forecasts and official alerts." /><CustomAppsBlock section="news" /></div>}
+        {visitedSections.has('health') && <div hidden={section !== 'health'}><GroupedAppsPanel groups={healthGroups} note="Health apps need your own accounts — OpenJarvis does not collect or store health data." /><CustomAppsBlock section="health" /></div>}
+        {visitedSections.has('travel') && <div hidden={section !== 'travel'}><GroupedAppsPanel groups={travelGroups} note="Booking sites open in your browser — always confirm prices and policies on the official site." /><CustomAppsBlock section="travel" /></div>}
+        {visitedSections.has('education') && <div hidden={section !== 'education'}><GroupedAppsPanel groups={educationGroups} note="Khan Academy and Libby are free; Coursera/edX courses are free to audit or paid for certificates." /><CustomAppsBlock section="education" /></div>}
+        {visitedSections.has('shopping') && <div hidden={section !== 'shopping'}><GroupedAppsPanel groups={shoppingGroups} note="Retailers open in your browser — deals sites aggregate community-verified offers." /><CustomAppsBlock section="shopping" /></div>}
+        {visitedSections.has('tools') && <div hidden={section !== 'tools'}><GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." /><CustomAppsBlock section="tools" /></div>}
+        {visitedSections.has('privacy') && <div hidden={section !== 'privacy'}><GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." /><CustomAppsBlock section="privacy" /></div>}
+        {customSections.map((custom) =>
+          visitedSections.has(custom.id) ? (
+            <div key={custom.id} hidden={section !== custom.id}>
+              <CustomPillPanel sectionId={custom.id} label={custom.label} />
+            </div>
+          ) : null,
+        )}
+        {developerModeEnabled && visitedSections.has('developer') && <div hidden={section !== 'developer'}><DeveloperPanel /><CustomAppsBlock section="developer" /></div>}
       </div>
     </section>
   );

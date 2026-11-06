@@ -103,6 +103,11 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.tools.hub_manage  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.tools.file_write  # noqa: F401
 except ImportError:
     pass

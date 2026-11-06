@@ -44,9 +44,14 @@ import {
   deleteModel,
   fetchMediaModelStatus,
   downloadMediaModel,
+  addHubSection,
+  deleteHubSection,
+  addHubApp,
+  deleteHubApp,
   type InferenceSource,
   type MemoryStats,
 } from '../lib/api';
+import { useHubCustom, refreshHubCustom } from '../lib/hub-custom';
 import { getSteamApiKeyStatus, saveSteamApiKey } from '../lib/steam';
 import { gameLaunchers } from '../lib/game-launchers';
 import { MUSIC_APPS } from '../lib/music-commands';
@@ -1000,6 +1005,201 @@ export function AppIntegrationsSettings() {
   );
 }
 
+const HUB_SECTION_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: 'kids', label: 'Kids' },
+  { id: 'crypto', label: 'Crypto' },
+  { id: 'mods', label: 'Mods' },
+  { id: 'create', label: 'Create' },
+  { id: 'apps', label: 'Apps' },
+  { id: 'smart_home', label: 'Smart Home' },
+  { id: 'productivity', label: 'Productivity' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'news', label: 'News' },
+  { id: 'health', label: 'Health' },
+  { id: 'travel', label: 'Travel' },
+  { id: 'education', label: 'Education' },
+  { id: 'shopping', label: 'Shopping' },
+  { id: 'tools', label: 'Tools' },
+  { id: 'privacy', label: 'Privacy' },
+  { id: 'music', label: 'Music' },
+  { id: 'browsers', label: 'Browsers' },
+  { id: 'games', label: 'Games' },
+  { id: 'social', label: 'Social' },
+  { id: 'media', label: 'Media' },
+  { id: 'record', label: 'Record' },
+  { id: 'remote', label: 'Remote' },
+  { id: 'stores', label: 'Stores' },
+  { id: 'ai', label: 'AI' },
+];
+
+const HUB_ICON_OPTIONS = ['star', 'heart', 'gamepad', 'music', 'tv', 'globe', 'wrench', 'shield', 'home', 'briefcase', 'plane', 'book', 'cart', 'bot', 'zap'];
+
+const inputStyle: React.CSSProperties = {
+  background: 'var(--color-bg-tertiary)',
+  border: '1px solid var(--color-border)',
+  color: 'var(--color-text)',
+  borderRadius: 8,
+  padding: '6px 10px',
+  fontSize: 12,
+  width: '100%',
+};
+
+export function CustomHubSettings() {
+  const { sections, apps } = useHubCustom();
+  const [sectionLabel, setSectionLabel] = useState('');
+  const [sectionIcon, setSectionIcon] = useState('star');
+  const [appName, setAppName] = useState('');
+  const [appUrl, setAppUrl] = useState('');
+  const [appSection, setAppSection] = useState('tools');
+  const [appColor, setAppColor] = useState('');
+  const [appDescription, setAppDescription] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const sectionOptions = [
+    ...HUB_SECTION_OPTIONS,
+    ...sections.map((s) => ({ id: s.id, label: s.label })),
+  ];
+  const sectionLabelFor = (id: string) =>
+    sectionOptions.find((o) => o.id === id)?.label ?? id;
+
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      await refreshHubCustom();
+      toast.success(ok);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Custom hub pills & apps">
+      <p className="mb-3 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+        Add your own pills to the chat-page hub and drop app tiles into any pill — built-in or custom.
+        Tiles get the same look, open-in-app detection, and installer download button as built-ins.
+        You can also just ask Jarvis: &quot;add example.com to my Tools pill&quot;.
+      </p>
+
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-tertiary)' }}>
+        Custom pills
+      </h3>
+      {sections.length > 0 && (
+        <div className="mb-2 flex flex-col gap-1.5">
+          {sections.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+              style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)' }}>
+              <span className="flex-1 text-xs" style={{ color: 'var(--color-text)' }}>{s.label}</span>
+              <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>{s.id}</span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run(() => deleteHubSection(s.id), `Removed pill "${s.label}"`)}
+                className="text-[11px] px-2 py-1 rounded"
+                style={{ color: 'var(--color-error)' }}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mb-4 flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1" style={{ minWidth: 180 }}>
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>New pill name</span>
+          <input value={sectionLabel} onChange={(e) => setSectionLabel(e.target.value)} placeholder="e.g. Homework" style={inputStyle} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>Icon</span>
+          <select value={sectionIcon} onChange={(e) => setSectionIcon(e.target.value)} style={inputStyle}>
+            {HUB_ICON_OPTIONS.map((icon) => <option key={icon} value={icon}>{icon}</option>)}
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={busy || !sectionLabel.trim()}
+          onClick={() => {
+            const label = sectionLabel.trim();
+            void run(async () => { await addHubSection(label, sectionIcon); setSectionLabel(''); }, `Created pill "${label}"`);
+          }}
+          className="min-h-9 rounded-lg px-3 text-xs disabled:opacity-50"
+          style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)', border: '1px solid var(--color-border)' }}
+        >
+          Add pill
+        </button>
+      </div>
+
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-tertiary)' }}>
+        Custom apps
+      </h3>
+      {apps.length > 0 && (
+        <div className="mb-2 flex flex-col gap-1.5">
+          {apps.map((app) => (
+            <div key={app.id} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+              style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)' }}>
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: app.color || '#22d3ee' }} />
+              <span className="flex-1 min-w-0 text-xs truncate" style={{ color: 'var(--color-text)' }}>{app.name}</span>
+              <span className="text-[10px] truncate max-w-[140px]" style={{ color: 'var(--color-text-tertiary)' }}>{sectionLabelFor(app.section)}</span>
+              <a href={app.url} target="_blank" rel="noopener noreferrer" className="text-[11px] underline underline-offset-2 flex-shrink-0" style={{ color: 'var(--color-accent)' }}>open</a>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run(() => deleteHubApp(app.id), `Removed "${app.name}"`)}
+                className="text-[11px] px-2 py-1 rounded flex-shrink-0"
+                style={{ color: 'var(--color-error)' }}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1" style={{ minWidth: 140 }}>
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>Name</span>
+          <input value={appName} onChange={(e) => setAppName(e.target.value)} placeholder="App name" style={inputStyle} />
+        </label>
+        <label className="flex flex-col gap-1" style={{ minWidth: 200, flex: 1 }}>
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>URL</span>
+          <input value={appUrl} onChange={(e) => setAppUrl(e.target.value)} placeholder="https://…" style={inputStyle} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>Pill</span>
+          <select value={appSection} onChange={(e) => setAppSection(e.target.value)} style={inputStyle}>
+            {sectionOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>Color</span>
+          <input type="color" value={appColor || '#22d3ee'} onChange={(e) => setAppColor(e.target.value)} style={{ width: 36, height: 32, padding: 2, background: 'none', border: '1px solid var(--color-border)', borderRadius: 8 }} />
+        </label>
+        <label className="flex flex-col gap-1" style={{ minWidth: 160 }}>
+          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>Description (optional)</span>
+          <input value={appDescription} onChange={(e) => setAppDescription(e.target.value)} placeholder="What it does" style={inputStyle} />
+        </label>
+        <button
+          type="button"
+          disabled={busy || !appName.trim() || !appUrl.trim()}
+          onClick={() => {
+            const name = appName.trim();
+            const url = appUrl.trim();
+            void run(async () => {
+              await addHubApp({ name, url, section: appSection, color: appColor, description: appDescription });
+              setAppName(''); setAppUrl(''); setAppDescription('');
+            }, `Added "${name}" to ${sectionLabelFor(appSection)}`);
+          }}
+          className="min-h-9 rounded-lg px-3 text-xs disabled:opacity-50"
+          style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)', border: '1px solid var(--color-border)' }}
+        >
+          Add app
+        </button>
+      </div>
+    </Section>
+  );
+}
+
 function PersonalSourcesSettings() {
   const enabled = useAppStore((state) => state.settings.personalSourcesEnabled);
   const updateSettings = useAppStore((state) => state.updateSettings);
@@ -1596,6 +1796,7 @@ export function SettingsPage() {
 
           <SteamSettings />
           <AppIntegrationsSettings />
+          <CustomHubSettings />
           <PersonalSourcesSettings />
           <DeveloperSettings />
 
