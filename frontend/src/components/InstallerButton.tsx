@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { downloadInstaller, resolveInstaller, runInstaller } from '../lib/api';
+import { openInAppBrowser } from '../lib/in-app-browser';
 
 /**
  * Small icon button that turns a product/repo link into an installed app:
@@ -25,8 +26,8 @@ export function InstallerButton({
     try {
       const candidates = await resolveInstaller(url);
       if (!candidates.length) {
-        toast.info(`${name}: no direct installer found — opening the site instead.`, { id: toastId });
-        window.open(url, '_blank', 'noopener,noreferrer');
+        toast.info(`${name}: no direct installer found — opening inside Jarvis.`, { id: toastId });
+        openInAppBrowser(url, name);
         return;
       }
       const best = candidates[0];

@@ -59,9 +59,10 @@ import { parseM3U, parseXMLTV, type GuideProgram, type M3UChannel } from '../../
 import { useAppStore } from '../../lib/store';
 import { useMusicStore } from '../../lib/music';
 import { MUSIC_APPS } from '../../lib/music-commands';
-import { Links, useEnabledMusicApps } from '../PageDetails';
+import { useEnabledMusicApps } from '../PageDetails';
 import { InstallerButton } from '../InstallerButton';
 import { useHubCustom } from '../../lib/hub-custom';
+import { openHubApp } from '../../lib/hub-open';
 import type { HubCustomApp } from '../../lib/api';
 import { getCloudKeyStatus, fetchNativeApps } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
@@ -701,7 +702,7 @@ function KidsPanel() {
             <span key={app.id} className="inline-flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => void openExternal(app.url)}
+                onClick={() => void openHubApp(app.url, app.name)}
                 title={app.description}
                 className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
                 style={{
@@ -1236,7 +1237,7 @@ function GroupedAppsPanel({ groups, note }: { groups: HubGroup[]; note?: string 
                 <span key={app.id} className="inline-flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void openExternal(app.url)}
+                    onClick={() => void openHubApp(app.url, app.name)}
                     title={app.description}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
                     style={{
@@ -1293,7 +1294,7 @@ function ConnectedServicesPanel({ apps, category }: { apps: HubService[]; catego
     setSelectedId(app.id);
     setOpening(app.id);
     try {
-      await openExternal(app.url);
+      await openHubApp(app.url, app.name);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1950,6 +1951,34 @@ function DeveloperPanel() {
   );
 }
 
+const MUSIC_APP_COLORS: Record<string, string> = {
+  'youtube-music': '#ff0000',
+  spotify: '#1db954',
+  'apple-music': '#fa243c',
+  'amazon-music': '#00a8e1',
+  tidal: '#000000',
+  soundcloud: '#ff5500',
+  audible: '#f8991c',
+  deezer: '#a238ff',
+  pandora: '#005483',
+  bandcamp: '#629aa9',
+  qobuz: '#5a4fcf',
+  mixcloud: '#5b5bd6',
+  iheartradio: '#ed1c24',
+  'music-iheartradio': '#ed1c24',
+};
+
+function musicServiceApps(apps: Array<{ id: string; label: string; url: string }>): HubService[] {
+  return apps.map((app) => ({
+    id: app.id,
+    name: app.label,
+    url: app.url,
+    color: MUSIC_APP_COLORS[app.id] ?? '#22d3ee',
+    description: `Open ${app.label} inside Jarvis.`,
+    icon: Music2,
+  }));
+}
+
 function MusicPanel() {
   const openPlayer = useMusicStore((s) => s.openPlayer);
   const playlists = useMusicStore((s) => s.playlists);
@@ -2018,10 +2047,15 @@ function MusicPanel() {
           ))}
         </div>
       )}
-      <div className="text-xs">
-        {apps.length
-          ? <Links items={apps} />
-          : <p style={{ color: 'var(--color-text-tertiary)' }}>No music apps activated yet. Turn on Developer Mode, then activate apps in Settings → Music. Activated apps stay here afterwards.</p>}
+      <div>
+        {apps.length ? (
+          <GroupedAppsPanel
+            groups={[{ label: 'Music apps', apps: musicServiceApps(apps) }]}
+            note="Tiles open inside Jarvis — installer first when one exists, otherwise the site loads in the built-in browser."
+          />
+        ) : (
+          <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>No music apps activated yet. Turn on Developer Mode, then activate apps in Settings → Music. Activated apps stay here afterwards.</p>
+        )}
       </div>
     </div>
   );
@@ -2084,7 +2118,7 @@ function AppsPanel() {
                 <span key={app.id} className="inline-flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void openExternal(app.url)}
+                    onClick={() => void openHubApp(app.url, app.name)}
                     title={app.description}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
                     style={{
@@ -2145,7 +2179,7 @@ function CustomAppTiles({ apps }: { apps: HubCustomApp[] }) {
           <span key={app.id} className="inline-flex items-center gap-1">
             <button
               type="button"
-              onClick={() => void openExternal(app.url)}
+              onClick={() => void openHubApp(app.url, app.name)}
               title={app.description || app.name}
               className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
               style={{

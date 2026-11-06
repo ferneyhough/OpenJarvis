@@ -16,6 +16,7 @@ import { useAppStore } from './lib/store';
 import { applyAppearance, APPEARANCE_EVENT } from './lib/themes';
 import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri, getOfflineMode } from './lib/api';
 import { OptInModal } from './components/OptInModal';
+import { InAppBrowser } from './components/InAppBrowser';
 import { track, hashId } from './lib/analytics';
 import { markAnalyticsChoiceSeen } from './lib/analytics-invitation';
 
@@ -209,6 +210,7 @@ export default function App() {
         </Route>
       </Routes>
       <Toaster position="bottom-right" />
+      <InAppBrowser />
       {commandPaletteOpen && <CommandPalette />}
       {optInModalOpen && (
         <OptInModal onClose={() => setOptInModalOpen(false)} />
