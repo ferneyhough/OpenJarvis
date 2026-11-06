@@ -1371,6 +1371,7 @@ function IptvTab() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [playing, setPlaying] = useState<GuideChannel | null>(null);
+  const [detail, setDetail] = useState<{ channel: GuideChannel; program: GuideProgram } | null>(null);
   const [regionFilter, setRegionFilter] = useState<string>('ALL');
   const [query, setQuery] = useState('');
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -1632,7 +1633,7 @@ function IptvTab() {
   // EPG grid: 24h window starting one hour before now, in the viewer's local time.
   const GRID_HOURS = 24;
   const PX_PER_HOUR = 120;
-  const GRID_LEFT_W = 220;
+  const GRID_LEFT_W = 240;
   const NOW_COLOR = '#22d3ee'; // JARVIS cyan — matches the boot screen theme
   const gridStart = useMemo(() => {
     const d = new Date(nowTick);
@@ -1985,6 +1986,12 @@ function IptvTab() {
                       }}
                       title={`Play ${channel.name}`}
                     >
+                      <span
+                        className="w-6 text-center text-[11px] font-mono shrink-0"
+                        style={{ color: 'var(--color-text-tertiary)' }}
+                      >
+                        {rowIndex + 1}
+                      </span>
                       {channel.logo ? (
                         <img src={channel.logo} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" style={{ background: '#000' }} loading="lazy" />
                       ) : (
@@ -2012,7 +2019,7 @@ function IptvTab() {
                         return (
                           <button
                             key={`${program.start}-${pIndex}`}
-                            onClick={() => playChannel(channel)}
+                            onClick={() => setDetail({ channel, program })}
                             className="absolute top-1 bottom-1 rounded-md px-2 text-left overflow-hidden cursor-pointer transition-opacity hover:opacity-80"
                             style={{
                               left,
@@ -2068,6 +2075,61 @@ function IptvTab() {
                 />
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Program detail popup — iVue-style: click a programme for info + play */}
+      {detail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setDetail(null)}
+        >
+          <div
+            className="rounded-2xl w-full max-w-sm p-5"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              {detail.channel.logo ? (
+                <img src={detail.channel.logo} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" style={{ background: '#000' }} />
+              ) : (
+                <span className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-bg-tertiary)' }}>
+                  <Tv size={20} style={{ color: 'var(--color-text-tertiary)' }} />
+                </span>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate" style={{ color: 'var(--color-text)' }}>{detail.channel.name}</div>
+                <div className="text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                  {detail.channel.regionLabel} · {detail.channel.group}
+                </div>
+              </div>
+              <button onClick={() => setDetail(null)} className="text-xs cursor-pointer px-2 py-1 rounded" style={{ color: 'var(--color-text-tertiary)' }}>✕</button>
+            </div>
+            <div className="mt-4 rounded-xl p-3" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+              <div className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: NOW_COLOR }}>Now / Next</div>
+              <div className="text-sm font-medium mt-1" style={{ color: 'var(--color-text)' }}>{detail.program.title || '—'}</div>
+              <div className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
+                {new Date(detail.program.start).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                {' – '}
+                {new Date(detail.program.stop).toLocaleString([], { hour: 'numeric', minute: '2-digit' })}
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => { playChannel(detail.channel); setDetail(null); }}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer"
+                style={{ background: NOW_COLOR, color: '#062a33' }}
+              >
+                <Play size={14} /> {detail.channel.playable ? 'Watch live' : 'Guide only'}
+              </button>
+            </div>
+            {!detail.channel.playable && (
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                This channel has schedule data but no stream OpenJarvis can play.
+              </p>
+            )}
           </div>
         </div>
       )}
