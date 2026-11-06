@@ -255,6 +255,7 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
   const [streams, setStreams] = useState<VodStream[] | null>(null);
   const [streamsLoading, setStreamsLoading] = useState(false);
   const [streamsError, setStreamsError] = useState('');
+  const [vodNotice, setVodNotice] = useState('');
   const [qualityFilter, setQualityFilter] = useState('');
   const [bestTesting, setBestTesting] = useState(false);
   const [playerTarget, setPlayerTarget] = useState<MediaPlayerTarget | null>(null);
@@ -432,7 +433,16 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
     }
     try {
       const tid = await ensureTorrent(stream);
-      setPlayerTarget({ src: vodTorrentStreamUrl(tid), title });
+      // Only play a torrent once the file is fully on disk — never stream
+      // while it's still downloading. Otherwise just download it.
+      const st = await vodTorrentStatus(tid);
+      if (st.finished) {
+        setPlayerTarget({ src: vodTorrentStreamUrl(tid), title });
+      } else {
+        setVodNotice(
+          `${title}: downloading (${Math.round((st.progress ?? 0) * 100)}%) — it'll be playable from Media → Local when done.`,
+        );
+      }
     } catch (e) {
       setStreamsError(e instanceof Error ? e.message : 'Could not start torrent');
     }
@@ -559,10 +569,26 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
     setBestTesting(false);
     if (winner) {
       const w = winner.stream;
-      setPlayerTarget({
-        src: vodTorrentStreamUrl(winner.tid),
-        title: `${title} — ${w.name || w.title || w.quality} (best source)`,
-      });
+      // Only play if the file is already fully downloaded; otherwise keep the
+      // fastest torrent downloading and point the user at Media → Local.
+      try {
+        const st = await vodTorrentStatus(winner.tid);
+        if (st.finished) {
+          setPlayerTarget({
+            src: vodTorrentStreamUrl(winner.tid),
+            title: `${title} — ${w.name || w.title || w.quality} (best source)`,
+          });
+        } else {
+          setVodNotice(
+            `${title}: fastest source is downloading (${Math.round((st.progress ?? 0) * 100)}%) — it'll be playable from Media → Local when done.`,
+          );
+        }
+      } catch {
+        setPlayerTarget({
+          src: vodTorrentStreamUrl(winner.tid),
+          title: `${title} — ${w.name || w.title || w.quality} (best source)`,
+        });
+      }
     } else if (directs[0]) {
       void playStream(directs[0]);
     } else {
@@ -780,6 +806,9 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
                 {streamsError && (
                   <p className="text-xs mt-2" style={{ color: 'var(--color-error, #f87171)' }}>{streamsError}</p>
                 )}
+                {vodNotice && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--color-text-secondary)' }}>{vodNotice}</p>
+                )}
                 {streams && (
                   <div className="mt-2 space-y-1.5">
                     {filteredStreams!.length === 0 && (
@@ -826,7 +855,7 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
                               </div>
                             )}
                             {job?.status?.finished && (
-                              <div className="text-[10px] mt-0.5" style={{ color: 'var(--color-success, #4ade80)' }}>Downloaded — saved to ~/.openjarvis/torrents</div>
+                              <div className="text-[10px] mt-0.5" style={{ color: 'var(--color-success, #4ade80)' }}>Downloaded — saved to ~/.openjarvis/downloads</div>
                             )}
                           </div>
                           <button
