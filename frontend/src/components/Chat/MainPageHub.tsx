@@ -724,6 +724,17 @@ const cryptoGroups: CryptoGroup[] = [
     ],
   },
   {
+    label: 'Mining & earn',
+    apps: [
+      { id: 'kryptex', name: 'Kryptex', url: 'https://www.kryptex.com/en/', color: '#f97316', description: 'Cloud mining, mining contracts and the Kryptex Miner app.', icon: Bitcoin },
+      { id: 'nicehash', name: 'NiceHash', url: 'https://www.nicehash.com/', color: '#3b82f6', description: 'Hashpower marketplace — sell or buy mining power.', icon: Bitcoin },
+      { id: 'salad', name: 'Salad', url: 'https://salad.com/', color: '#22c55e', description: 'Share idle GPU/CPU power and earn crypto payouts.', icon: Bitcoin },
+      { id: 'cudo-miner', name: 'Cudo Miner', url: 'https://cudominer.com/', color: '#a855f7', description: 'Free miner app — auto-switches to the most profitable coin.', icon: Bitcoin },
+      { id: 'honeygain', name: 'Honeygain', url: 'https://www.honeygain.com/', color: '#facc15', description: 'Earn from unused bandwidth (pays in BTC/JumpToken).', icon: Bitcoin },
+      { id: 'earnapp', name: 'EarnApp', url: 'https://earnapp.com/', color: '#38bdf8', description: 'Bandwidth-sharing earnings paid in BTC or gift cards.', icon: Bitcoin },
+    ],
+  },
+  {
     label: 'Wallets',
     apps: [
       { id: 'coinbase-wallet', name: 'Coinbase Wallet', url: 'https://www.coinbase.com/wallet', color: '#0052ff', description: 'Self-custody wallet — separate from the exchange account.', icon: Wallet },
