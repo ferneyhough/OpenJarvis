@@ -18,6 +18,7 @@ import {
   Play,
   Music,
   Zap,
+  Gamepad2,
 } from 'lucide-react';
 import {
   fetchTvGuide,
@@ -1445,10 +1446,14 @@ function IptvTab() {
   const [guideDays, setGuideDays] = useState<1 | 2 | 3>(1);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
+  const [guideCursor, setGuideCursor] = useState<{ row: number; time: number } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
   const scrolledToNow = useRef(false);
+  const rowRefs = useRef<Map<number, HTMLElement>>(new Map());
+  const dragRef = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(
@@ -1809,6 +1814,211 @@ function IptvTab() {
       .finally(() => setProbing(null));
   };
 
+  // ---- D-pad / keyboard spatial navigation ---------------------------------
+  // Cursor = { row: index into channelRows, time: ms timestamp }. Arrows and
+  // gamepad D-pad move it; Enter/A plays the channel; I/X opens program info.
+
+  const channelRows = useMemo(
+    () =>
+      gridRows.filter(
+        (r): r is Extract<(typeof gridRows)[number], { kind: 'channel' }> =>
+          r.kind === 'channel',
+      ),
+    [gridRows],
+  );
+
+  const cursorRef = useRef(guideCursor);
+  useEffect(() => {
+    cursorRef.current = guideCursor;
+  }, [guideCursor]);
+
+  const playChannelRef = useRef(playChannel);
+  useEffect(() => {
+    playChannelRef.current = playChannel;
+  });
+
+  // Seed the cursor on the first channel at "now" once the grid appears.
+  useEffect(() => {
+    if (guideCursor === null && channelRows.length > 0) {
+      setGuideCursor({ row: 0, time: Date.now() });
+    }
+  }, [guideCursor, channelRows.length]);
+
+  const moveGuideCursor = useCallback(
+    (dRow: number, dMinutes: number) => {
+      if (channelRows.length === 0) return;
+      const cur = cursorRef.current ?? { row: 0, time: Date.now() };
+      const row = Math.min(Math.max(0, cur.row + dRow), channelRows.length - 1);
+      const time = Math.min(Math.max(cur.time + dMinutes * 60_000, gridStart), gridEnd);
+      const next = { row, time };
+      cursorRef.current = next;
+      setGuideCursor(next);
+      requestAnimationFrame(() => {
+        rowRefs.current.get(row)?.scrollIntoView({ block: 'nearest' });
+        const el = gridScrollRef.current;
+        if (!el) return;
+        const x = GRID_LEFT_W + ((time - gridStart) / 3_600_000) * PX_PER_HOUR;
+        if (x < el.scrollLeft + GRID_LEFT_W + 60 || x > el.scrollLeft + el.clientWidth - 120) {
+          el.scrollLeft = Math.max(0, x - 260);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [channelRows.length, gridStart, gridEnd, guideDays],
+  );
+
+  const guideCursorChannel = useCallback(() => {
+    const cur = cursorRef.current;
+    if (!cur) return null;
+    return channelRows[cur.row]?.channel ?? null;
+  }, [channelRows]);
+
+  const openCursorProgram = useCallback(() => {
+    const cur = cursorRef.current;
+    const ch = guideCursorChannel();
+    if (!cur || !ch) return;
+    const program = ch.schedule.find((p) => p.start <= cur.time && p.stop > cur.time);
+    if (program) {
+      setDetail({ channel: ch, program });
+    } else {
+      setPlayNotice(`${ch.name}: no schedule data at the cursor — move ◄ ► to browse.`);
+    }
+  }, [guideCursorChannel]);
+
+  // Keyboard: arrows move, Enter plays, I opens program info, Esc closes info.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      )
+        return;
+      if (detail) {
+        if (e.key === 'Escape') setDetail(null);
+        return;
+      }
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          moveGuideCursor(-1, 0);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          moveGuideCursor(1, 0);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          moveGuideCursor(0, -30);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          moveGuideCursor(0, 30);
+          break;
+        case 'Enter': {
+          const ch = guideCursorChannel();
+          if (ch) {
+            e.preventDefault();
+            playChannelRef.current(ch);
+          }
+          break;
+        }
+        case 'i':
+        case 'I': {
+          e.preventDefault();
+          openCursorProgram();
+          break;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveGuideCursor, guideCursorChannel, openCursorProgram, detail, channelRows]);
+
+  // Gamepad: standard mapping — D-pad/stick moves, A plays, X info, B closes.
+  // Held directions auto-repeat so you can "pull" through the grid.
+  useEffect(() => {
+    let raf = 0;
+    const prev = { up: false, down: false, left: false, right: false, a: false, x: false, b: false };
+    const held = { dir: '' as '' | 'up' | 'down' | 'left' | 'right', next: 0 };
+    const fire = (dir: 'up' | 'down' | 'left' | 'right') => {
+      if (dir === 'up') moveGuideCursor(-1, 0);
+      else if (dir === 'down') moveGuideCursor(1, 0);
+      else if (dir === 'left') moveGuideCursor(0, -30);
+      else moveGuideCursor(0, 30);
+    };
+    const poll = () => {
+      const pads = typeof navigator !== 'undefined' ? navigator.getGamepads?.() : [];
+      const gp = pads ? Array.from(pads).find((p) => p && p.connected) : undefined;
+      if (gp) {
+        const b = (i: number) => !!gp.buttons[i]?.pressed;
+        const ax = gp.axes[0] ?? 0;
+        const ay = gp.axes[1] ?? 0;
+        const dirs = {
+          up: b(12) || ay < -0.6,
+          down: b(13) || ay > 0.6,
+          left: b(14) || ax < -0.6,
+          right: b(15) || ax > 0.6,
+        } as const;
+        const now = performance.now();
+        (Object.keys(dirs) as (keyof typeof dirs)[]).forEach((dir) => {
+          const pressed = dirs[dir];
+          const was = prev[dir];
+          if (pressed && (!was || (held.dir === dir && now >= held.next))) {
+            fire(dir);
+            held.dir = dir;
+            held.next = now + (was ? 160 : 380);
+          } else if (!pressed && held.dir === dir) {
+            held.dir = '';
+          }
+          prev[dir] = pressed;
+        });
+        const a = b(0);
+        const x = b(2);
+        const bb = b(1);
+        if (a && !prev.a) {
+          const ch = guideCursorChannel();
+          if (ch) playChannelRef.current(ch);
+        }
+        if (x && !prev.x) openCursorProgram();
+        if (bb && !prev.b && detail) setDetail(null);
+        prev.a = a;
+        prev.x = x;
+        prev.b = bb;
+      } else {
+        (Object.keys(prev) as (keyof typeof prev)[]).forEach((k) => {
+          prev[k] = false;
+        });
+        held.dir = '';
+      }
+      raf = requestAnimationFrame(poll);
+    };
+    raf = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveGuideCursor, guideCursorChannel, openCursorProgram, detail, channelRows]);
+
+  // Escape closes the program detail popup.
+  useEffect(() => {
+    if (!detail) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDetail(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [detail]);
+
+  // Map channel key → cursor row index for highlight rendering.
+  const cursorRowByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    channelRows.forEach((r, i) => m.set(channelKey(r.channel), i));
+    return m;
+  }, [channelRows]);
+
   // Voice commands: "Jarvis play channel <name>" / "tune to <name>".
   const pendingVoiceChannel = useRef<string | null>(null);
   useEffect(() => {
@@ -2099,8 +2309,61 @@ function IptvTab() {
       )}
 
       {channels.length > 0 && (
+        <p className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
+          <Gamepad2 size={11} />
+          <span>
+            D-pad / arrow keys: ↑↓ channels · ←→ ±30 min · Enter play · I program info · Esc close
+          </span>
+          <span className="ml-auto">Drag the grid to pan</span>
+        </p>
+      )}
+
+      {channels.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div ref={gridScrollRef} className="overflow-auto" style={{ height: 'min(74vh, 56rem)', minHeight: '26rem' }}>
+          <div
+            ref={gridScrollRef}
+            className="overflow-auto"
+            style={{ height: 'min(74vh, 56rem)', minHeight: '26rem', cursor: 'grab' }}
+            onPointerDown={(e) => {
+              if (e.pointerType !== 'mouse' || e.button !== 0) return;
+              const el = e.currentTarget;
+              dragRef.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop, moved: false };
+              el.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              const d = dragRef.current;
+              if (!d) return;
+              const dx = e.clientX - d.x;
+              const dy = e.clientY - d.y;
+              if (!d.moved && Math.hypot(dx, dy) > 6) {
+                d.moved = true;
+                suppressClickRef.current = true;
+                e.currentTarget.style.cursor = 'grabbing';
+              }
+              if (d.moved) {
+                e.currentTarget.scrollLeft = d.sl - dx;
+                e.currentTarget.scrollTop = d.st - dy;
+              }
+            }}
+            onPointerUp={(e) => {
+              dragRef.current = null;
+              e.currentTarget.style.cursor = 'grab';
+              // Keep suppression alive through the click that follows pointerup.
+              setTimeout(() => {
+                suppressClickRef.current = false;
+              }, 0);
+            }}
+            onPointerCancel={() => {
+              dragRef.current = null;
+            }}
+            onClickCapture={(e) => {
+              if (suppressClickRef.current) {
+                e.preventDefault();
+                e.stopPropagation();
+                suppressClickRef.current = false;
+              }
+            }}
+          >
             <div style={{ width: GRID_LEFT_W + gridWidth, position: 'relative' }}>
               {/* Time header */}
               <div className="flex sticky top-0 z-20" style={{ background: 'var(--color-surface)' }}>
@@ -2177,13 +2440,22 @@ function IptvTab() {
                 );
                 const isPlaying = playing?.url === channel.url;
                 const current = channel.schedule.find((p) => p.start <= nowTick && p.stop > nowTick);
+                const chKey = channelKey(channel);
+                const cursorIdx = cursorRowByKey.get(chKey);
+                const isCursorRow =
+                  guideCursor !== null && cursorIdx !== undefined && cursorIdx === guideCursor.row;
                 return (
                   <div
-                    key={channelKey(channel)}
+                    key={chKey}
+                    ref={(el) => {
+                      if (el && cursorIdx !== undefined) rowRefs.current.set(cursorIdx, el);
+                    }}
                     className="flex"
                     style={{
                       borderTop: '1px solid var(--color-border)',
                       background: isPlaying ? 'var(--color-accent-subtle)' : rowIndex % 2 ? 'var(--color-bg-secondary)' : 'transparent',
+                      outline: isCursorRow ? '1.5px solid var(--color-accent)' : '1.5px solid transparent',
+                      outlineOffset: '-1.5px',
                     }}
                   >
                     <button
@@ -2226,6 +2498,11 @@ function IptvTab() {
                         );
                         const width = Math.max(4, right - left);
                         const isCurrent = program.start <= nowTick && program.stop > nowTick;
+                        const isCursorCell =
+                          isCursorRow &&
+                          guideCursor !== null &&
+                          program.start <= guideCursor.time &&
+                          program.stop > guideCursor.time;
                         return (
                           <button
                             key={`${program.start}-${pIndex}`}
@@ -2234,6 +2511,7 @@ function IptvTab() {
                             style={{
                               left,
                               width,
+                              boxShadow: isCursorCell ? '0 0 0 2px var(--color-accent)' : undefined,
                               background: isCurrent
                                 ? NOW_COLOR
                                 : program.stop <= nowTick
@@ -2284,6 +2562,19 @@ function IptvTab() {
                   style={{ left: GRID_LEFT_W + nowX - 1, width: 3, background: NOW_COLOR, boxShadow: `0 0 8px ${NOW_COLOR}` }}
                 />
               )}
+
+              {/* D-pad cursor time line */}
+              {guideCursor !== null && (() => {
+                const cursorX =
+                  GRID_LEFT_W + ((guideCursor.time - gridStart) / 3_600_000) * PX_PER_HOUR;
+                if (cursorX < GRID_LEFT_W || cursorX > GRID_LEFT_W + gridWidth) return null;
+                return (
+                  <div
+                    className="absolute top-0 bottom-0 pointer-events-none z-[9]"
+                    style={{ left: cursorX - 1, width: 2, background: 'var(--color-accent)', opacity: 0.55 }}
+                  />
+                );
+              })()}
             </div>
           </div>
         </div>
