@@ -21,3 +21,7 @@ src/openjarvis/server/static/
 models/*
 !models/README.md
 !models/.gitkeep
+
+# Local archive / vendored tools (not for git or cloud sync concerns)
+_archive/
+/vendor/

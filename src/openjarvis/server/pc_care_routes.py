@@ -27,7 +27,11 @@ logger = logging.getLogger(__name__)
 pc_router = APIRouter(prefix="/v1", tags=["pc-care"])
 
 HOME = Path.home()
-TEMP_DIRS = [Path(os.environ.get("TEMP", "")), Path(os.environ.get("TMP", "")), Path(r"C:\Windows\Temp")]
+TEMP_DIRS = [
+    Path(os.environ.get("TEMP", "")),
+    Path(os.environ.get("TMP", "")),
+    Path(os.environ.get("SystemRoot", os.environ.get("WINDIR", r"C:\Windows"))) / "Temp",
+]
 JUNK_EXT = {".tmp", ".temp", ".old", ".bak", ".dmp", ".chk", ".partial", ".crdownload"}
 JUNK_NAMES = {"thumbs.db", "desktop.ini"}
 SCAN_ROOTS = [
@@ -227,9 +231,11 @@ def _scan_dead_links(roots: list[Path] | None = None) -> list[dict[str, str]]:
 
 # ---------------------------------------------------------------- endpoints
 
+USERS_ROOT = HOME.parent  # e.g. C:\Users
+PROGRAMDATA_ROOT = Path(os.environ.get("ProgramData", r"C:\ProgramData"))
 DEEP_SCAN_ROOTS = [
-    Path(r"C:\Users"),
-    Path(r"C:\ProgramData"),
+    USERS_ROOT,
+    PROGRAMDATA_ROOT,
 ]
 
 
@@ -238,7 +244,7 @@ def _deep_link_dirs() -> list[Path]:
     dirs: list[Path] = []
     skip = {"public", "default", "default user", "all users"}
     try:
-        for prof in Path(r"C:\Users").iterdir():
+        for prof in USERS_ROOT.iterdir():
             if not prof.is_dir() or prof.name.lower() in skip:
                 continue
             for sub in ("Desktop", "Downloads", "Documents", "Start Menu"):
@@ -250,7 +256,7 @@ def _deep_link_dirs() -> list[Path]:
                 dirs.append(sm)
     except OSError:
         pass
-    pd = Path(r"C:\ProgramData\Microsoft\Windows\Start Menu")
+    pd = PROGRAMDATA_ROOT / "Microsoft" / "Windows" / "Start Menu"
     if pd.is_dir():
         dirs.append(pd)
     return dirs
