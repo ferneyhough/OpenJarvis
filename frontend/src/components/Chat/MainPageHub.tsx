@@ -52,6 +52,8 @@ import {
   HardDrive,
   Eraser,
   FolderOpen,
+  Cpu,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
@@ -111,7 +113,7 @@ type HubSection =
   | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps'
   | 'smart_home' | 'productivity' | 'finance' | 'news' | 'health'
   | 'travel' | 'education' | 'shopping' | 'tools' | 'privacy' | 'mods' | 'create'
-  | 'system' | 'cleaner' | 'security'
+  | 'system' | 'cleaner' | 'security' | 'files' | 'toolbox'
   // User-defined pills get dynamic string ids.
   | (string & {});
 type GameSource = 'steam' | 'playnite';
@@ -1826,11 +1828,7 @@ function SystemPanel() {
   };
   return (
     <div className="space-y-4 px-4 pb-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PcCareCard />
-        <FilesCard />
-      </div>
-      <ToolboxCard />
+      <PcCareCard />
       <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
         <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>Windows apps</h3>
         <div className="flex flex-wrap gap-2">
@@ -1847,6 +1845,22 @@ function SystemPanel() {
           Or say it: "Jarvis open notepad", "Jarvis open calculator", "Jarvis open file explorer".
         </div>
       </div>
+    </div>
+  );
+}
+
+function FilesPanel() {
+  return (
+    <div className="px-4 pb-4">
+      <FilesCard />
+    </div>
+  );
+}
+
+function ToolboxPanel() {
+  return (
+    <div className="px-4 pb-4">
+      <ToolboxCard />
     </div>
   );
 }
@@ -3022,6 +3036,12 @@ export function MainPageHub() {
         <ActionButton active={section === 'security'} onClick={() => selectSection('security')}>
           <ShieldCheck size={15} /> Security
         </ActionButton>
+        <ActionButton active={section === 'files'} onClick={() => selectSection('files')}>
+          <FolderOpen size={15} /> Files
+        </ActionButton>
+        <ActionButton active={section === 'toolbox'} onClick={() => selectSection('toolbox')}>
+          <Cpu size={15} /> Toolbox
+        </ActionButton>
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
         </ActionButton>
@@ -3063,7 +3083,19 @@ export function MainPageHub() {
           </ActionButton>
         )}
       </nav>
-      <div className={`max-h-[42vh] overflow-y-auto pb-2 ${section ? '' : 'hidden'}`}>
+      <div className={`max-h-[42vh] overflow-y-auto pb-2 relative ${section ? '' : 'hidden'}`}>
+        {section && (
+          <button
+            type="button"
+            onClick={() => setSection(null)}
+            title="Close panel"
+            aria-label="Close panel"
+            className="sticky top-1 float-right z-10 ml-auto flex h-7 w-7 items-center justify-center rounded-lg cursor-pointer"
+            style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+          >
+            <X size={14} />
+          </button>
+        )}
         {visitedSections.has('kids') && <div hidden={section !== 'kids'}><KidsPanel /><CustomAppsBlock section="kids" /></div>}
         {visitedSections.has('crypto') && <div hidden={section !== 'crypto'}><CryptoPanel /><CustomAppsBlock section="crypto" /></div>}
         {visitedSections.has('apps') && <div hidden={section !== 'apps'}><AppsPanel /><CustomAppsBlock section="apps" /></div>}
@@ -3091,6 +3123,8 @@ export function MainPageHub() {
         {visitedSections.has('system') && <div hidden={section !== 'system'}><SystemPanel /><CustomAppsBlock section="system" /></div>}
         {visitedSections.has('cleaner') && <div hidden={section !== 'cleaner'}><GroupedAppsPanel groups={cleanerGroups} note="Cleaners and uninstallers — the download arrow grabs the real installer where one exists." /><CustomAppsBlock section="cleaner" /></div>}
         {visitedSections.has('security') && <div hidden={section !== 'security'}><GroupedAppsPanel groups={securityGroups} note="Antivirus needs a real install — the download arrow fetches it; Malwarebytes free is a good second-opinion scanner." /><CustomAppsBlock section="security" /></div>}
+        {visitedSections.has('files') && <div hidden={section !== 'files'}><FilesPanel /><CustomAppsBlock section="files" /></div>}
+        {visitedSections.has('toolbox') && <div hidden={section !== 'toolbox'}><ToolboxPanel /><CustomAppsBlock section="toolbox" /></div>}
         {customSections.map((custom) =>
           visitedSections.has(custom.id) ? (
             <div key={custom.id} hidden={section !== custom.id}>

@@ -98,9 +98,13 @@ const SECTION_ALIASES: Record<string, string> = {
   security: 'security',
   antivirus: 'security',
   'antivirus software': 'security',
-  files: 'system',
-  'file explorer': 'system',
-  'my files': 'system',
+  files: 'files',
+  'file explorer': 'files',
+  'my files': 'files',
+  toolbox: 'toolbox',
+  'pc tools': 'toolbox',
+  'system tools': 'toolbox',
+  'jarvis toolbox': 'toolbox',
 };
 
 const PAGE_ALIASES: Record<string, string> = {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Tv,
+  X,
   Film,
   Clapperboard,
   FolderOpen,
@@ -2352,6 +2354,7 @@ function IptvTab() {
 // ---------------------------------------------------------------------------
 
 export function MediaPage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('guide');
 
   // Voice commands: "Jarvis open the guide / movies / shows / local / links".
@@ -2367,11 +2370,22 @@ export function MediaPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden px-6 py-10">
       <div className="max-w-6xl mx-auto w-full flex flex-col flex-1 overflow-hidden">
-        <header className="mb-5 shrink-0">
-          <h1 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Media</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-            TV guide, movie &amp; show catalog, local media library, and your own links.
-          </p>
+        <header className="mb-5 shrink-0 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Media</h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+              TV guide, movie &amp; show catalog, local media library, and your own links.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/')}
+            title="Close — back to chat"
+            aria-label="Close media"
+            className="p-2 rounded-lg cursor-pointer shrink-0"
+            style={{ color: 'var(--color-text-secondary)', background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+          >
+            <X size={16} />
+          </button>
         </header>
 
         <div className="flex gap-1 mb-4 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
