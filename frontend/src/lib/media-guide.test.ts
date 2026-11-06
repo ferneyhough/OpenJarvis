@@ -18,6 +18,8 @@ https://streams.example/sports.m3u8
         language: 'English',
         logo: '',
         url: 'https://streams.example/news.m3u8',
+        userAgent: '',
+        referrer: '',
       },
       {
         id: '',
@@ -26,6 +28,8 @@ https://streams.example/sports.m3u8
         language: '',
         logo: '',
         url: 'https://streams.example/sports.m3u8',
+        userAgent: '',
+        referrer: '',
       },
     ]);
   });

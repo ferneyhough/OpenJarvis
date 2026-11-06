@@ -5,6 +5,8 @@ export interface M3UChannel {
   language: string;
   logo: string;
   url: string;
+  userAgent: string;
+  referrer: string;
   region?: string;
 }
 
@@ -63,6 +65,8 @@ export function parseM3U(text: string): M3UChannel[] {
       language: attribute(metadata, 'tvg-language') || attribute(metadata, 'language'),
       logo: attribute(metadata, 'tvg-logo'),
       url,
+      userAgent: attribute(metadata, 'http-user-agent'),
+      referrer: attribute(metadata, 'http-referrer'),
     });
   }
   return channels;

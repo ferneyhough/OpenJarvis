@@ -992,42 +992,6 @@ function epgLookup(epg: GuideEpgResponse): (channel: M3UChannel) => GuideProgram
   };
 }
 
-const tzFormatters = new Map<string, Intl.DateTimeFormat>();
-
-function tzFormatter(tz: string): Intl.DateTimeFormat {
-  let formatter = tzFormatters.get(tz);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: tz,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZoneName: 'short',
-    });
-    tzFormatters.set(tz, formatter);
-  }
-  return formatter;
-}
-
-function formatTzTime(ts: number, tz: string): string {
-  return tzFormatter(tz).format(new Date(ts));
-}
-
-function formatTzDateTime(ts: number, tz: string): string {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz,
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZoneName: 'short',
-  }).formatToParts(new Date(ts));
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-  return `${get('weekday')} ${get('day')} ${get('month')} ${get('hour')}:${get('minute')} ${get('timeZoneName')}`;
-}
-
 function IptvTab() {
   const [initialState] = useState(loadIptvState);
   const [enabledRegions, setEnabledRegions] = useState<Set<string>>(
@@ -1042,7 +1006,6 @@ function IptvTab() {
   const [englishOnly, setEnglishOnly] = useState(true);
   const [regionFilter, setRegionFilter] = useState<string>('ALL');
   const [query, setQuery] = useState('');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [error, setError] = useState('');
   const [guideErrors, setGuideErrors] = useState<string[]>([]);
@@ -1207,15 +1170,28 @@ function IptvTab() {
 
   const channelKey = (channel: GuideChannel) => `${channel.region}:${channel.id || channel.url}`;
 
-  const toggleExpanded = (channel: GuideChannel) => {
-    const key = channelKey(channel);
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  // EPG grid: 24h window starting one hour before now, in the viewer's local time.
+  const GRID_HOURS = 24;
+  const PX_PER_HOUR = 90;
+  const GRID_LEFT_W = 190;
+  const gridStart = useMemo(() => {
+    const d = new Date(nowTick);
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() - 1);
+    return d.getTime();
+  }, [nowTick]);
+  const gridEnd = gridStart + GRID_HOURS * 3_600_000;
+  const gridWidth = GRID_HOURS * PX_PER_HOUR;
+  const nowX = ((nowTick - gridStart) / 3_600_000) * PX_PER_HOUR;
+  const hourTicks = useMemo(() => {
+    const ticks: number[] = [];
+    for (let h = 0; h <= GRID_HOURS; h += 1) ticks.push(gridStart + h * 3_600_000);
+    return ticks;
+  }, [gridStart]);
+  const fmtHour = (ts: number) =>
+    new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: false });
+  const fmtDay = (ts: number) =>
+    new Date(ts).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
 
   const playChannel = (channel: GuideChannel) => {
     const video = videoRef.current;
@@ -1226,7 +1202,13 @@ function IptvTab() {
     const url = channel.url;
     const isHls = /\.m3u8($|\?)/i.test(url) || url.includes('/playlist.m3u8');
     if (isHls && Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true });
+      const hls = new Hls({
+        enableWorker: true,
+        xhrSetup: (xhr) => {
+          if (channel.userAgent) xhr.setRequestHeader('User-Agent', channel.userAgent);
+          if (channel.referrer) xhr.setRequestHeader('Referer', channel.referrer);
+        },
+      });
       hlsRef.current = hls;
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
@@ -1406,7 +1388,13 @@ function IptvTab() {
               Stop
             </button>
           </div>
-          <video ref={videoRef} controls autoPlay className="w-full aspect-video bg-black" />
+          <video
+            ref={videoRef}
+            controls
+            autoPlay
+            className="w-full aspect-video bg-black"
+            onError={() => setPlayerError('Playback failed — this stream may be offline, geo-blocked, or DRM-protected.')}
+          />
           {playerError && (
             <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-error)' }}>{playerError}</div>
           )}
@@ -1415,123 +1403,150 @@ function IptvTab() {
 
       {channels.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="max-h-[32rem] overflow-y-auto divide-y" style={{ borderColor: 'var(--color-border)' }}>
-            {visibleChannels.map((channel) => {
-              const entries = channel.schedule;
-              const now = nowTick;
-              const current = entries.find((p) => p.start <= now && p.stop > now);
-              const next = entries.find((p) => p.start > now);
-              const upcoming = entries.filter((p) => p.start > now).slice(0, 6);
-              const isPlaying = playing?.url === channel.url;
-              const isOpen = expanded.has(channelKey(channel));
-              return (
-                <div key={channelKey(channel)}>
-                  <button
-                    onClick={() => toggleExpanded(channel)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer hover:opacity-90"
-                    style={{ background: isPlaying ? 'var(--color-accent-subtle)' : 'transparent' }}
-                    title="Click for the full 24-hour schedule"
-                  >
-                    {channel.logo ? (
-                      <img src={channel.logo} alt="" className="w-8 h-8 rounded object-cover shrink-0" loading="lazy" />
-                    ) : (
-                      <span className="w-8 h-8 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--color-bg-tertiary)' }}>
-                        <Tv size={14} style={{ color: 'var(--color-text-tertiary)' }} />
+          <div className="overflow-auto max-h-[36rem]">
+            <div style={{ width: GRID_LEFT_W + gridWidth, position: 'relative' }}>
+              {/* Time header */}
+              <div className="flex sticky top-0 z-20" style={{ background: 'var(--color-surface)' }}>
+                <div
+                  className="sticky left-0 z-10 shrink-0 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide"
+                  style={{
+                    width: GRID_LEFT_W,
+                    background: 'var(--color-surface)',
+                    borderRight: '1px solid var(--color-border)',
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                >
+                  Channel
+                </div>
+                <div className="relative shrink-0" style={{ width: gridWidth, height: 30 }}>
+                  {hourTicks.map((tick) => (
+                    <div
+                      key={tick}
+                      className="absolute top-0 bottom-0 flex flex-col justify-center border-l pl-1"
+                      style={{
+                        left: ((tick - gridStart) / 3_600_000) * PX_PER_HOUR,
+                        borderColor: 'var(--color-border)',
+                      }}
+                    >
+                      <span className="text-[10px] font-medium whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
+                        {fmtHour(tick)}
                       </span>
-                    )}
-                    <span className="flex-1 min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-sm truncate" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
-                        <span
-                          className="text-[9px] px-1 py-0.5 rounded shrink-0"
-                          style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}
-                        >
-                          {channel.regionLabel}
-                        </span>
-                      </span>
-                      <span className="text-[11px] truncate block" style={{ color: 'var(--color-text-tertiary)' }}>
-                        {channel.group}
-                        {current && (
-                          <span style={{ color: 'var(--color-accent)' }}>
-                            {' '}· Now: {current.title} ({formatTzTime(current.start, channel.tz)}–{formatTzTime(current.stop, channel.tz)})
-                          </span>
-                        )}
-                        {!current && next && (
-                          <span>
-                            {' '}· Next: {next.title} ({formatTzTime(next.start, channel.tz)})
-                          </span>
-                        )}
-                        {entries.length === 0 && <span> · no schedule data</span>}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1 shrink-0">
-                      {entries.length > 0 && (
-                        <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-                          {isOpen ? '▾' : `▸ ${upcoming.length}`}
+                      {new Date(tick).getHours() === 0 && (
+                        <span className="text-[9px] whitespace-nowrap" style={{ color: 'var(--color-text-tertiary)' }}>
+                          {fmtDay(tick)}
                         </span>
                       )}
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playChannel(channel);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.stopPropagation();
-                            playChannel(channel);
-                          }
-                        }}
-                        title="Play channel"
-                        className="p-1.5 rounded cursor-pointer"
-                        style={{ color: isPlaying ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
-                      >
-                        <Play size={13} />
-                      </span>
-                    </span>
-                  </button>
-                  {isOpen && entries.length > 0 && (
-                    <div className="px-3 pb-2.5 pl-14">
-                      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-                        {entries.map((program, index) => {
-                          const isCurrent = program.start <= now && program.stop > now;
-                          const isUpNext = !isCurrent && program.start > now && index === entries.findIndex((p) => p.start > now);
-                          return (
-                            <div
-                              key={`${program.start}-${index}`}
-                              className="flex items-baseline gap-2 px-2.5 py-1.5 text-[11px]"
-                              style={{
-                                background: isCurrent
-                                  ? 'var(--color-accent-subtle)'
-                                  : isUpNext
-                                    ? 'var(--color-bg-secondary)'
-                                    : 'transparent',
-                              }}
-                            >
-                              <span className="font-mono shrink-0 w-[7.5rem]" style={{ color: 'var(--color-accent)' }}>
-                                {formatTzDateTime(program.start, channel.tz)}
-                              </span>
-                              <span className="truncate" style={{ color: 'var(--color-text)' }}>
-                                {program.title || '—'}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="text-[10px] mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
-                        Times in {channel.regionLabel} local time ({channel.tz})
-                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              );
-            })}
-            {visibleChannels.length === 0 && (
-              <div className="px-3 py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
-                {loading ? 'Loading…' : 'No channels match the current filters.'}
               </div>
-            )}
+
+              {/* Channel rows */}
+              {visibleChannels.map((channel, rowIndex) => {
+                const entries = channel.schedule.filter(
+                  (p) => p.stop > gridStart && p.start < gridEnd,
+                );
+                const isPlaying = playing?.url === channel.url;
+                const current = channel.schedule.find((p) => p.start <= nowTick && p.stop > nowTick);
+                return (
+                  <div
+                    key={channelKey(channel)}
+                    className="flex"
+                    style={{
+                      borderTop: '1px solid var(--color-border)',
+                      background: isPlaying ? 'var(--color-accent-subtle)' : rowIndex % 2 ? 'var(--color-bg-secondary)' : 'transparent',
+                    }}
+                  >
+                    <button
+                      onClick={() => playChannel(channel)}
+                      className="sticky left-0 z-10 shrink-0 flex items-center gap-2 px-2 py-1.5 text-left cursor-pointer hover:opacity-90"
+                      style={{
+                        width: GRID_LEFT_W,
+                        background: isPlaying ? 'var(--color-accent-subtle)' : rowIndex % 2 ? 'var(--color-bg-secondary)' : 'var(--color-surface)',
+                        borderRight: '1px solid var(--color-border)',
+                      }}
+                      title={`Play ${channel.name}`}
+                    >
+                      {channel.logo ? (
+                        <img src={channel.logo} alt="" className="w-7 h-7 rounded object-cover shrink-0" loading="lazy" />
+                      ) : (
+                        <span className="w-7 h-7 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--color-bg-tertiary)' }}>
+                          <Tv size={13} style={{ color: 'var(--color-text-tertiary)' }} />
+                        </span>
+                      )}
+                      <span className="flex-1 min-w-0">
+                        <span className="text-xs truncate block" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
+                        <span className="text-[9px] truncate block" style={{ color: 'var(--color-text-tertiary)' }}>
+                          {channel.regionLabel}
+                          {current ? ` · ${current.title}` : ''}
+                        </span>
+                      </span>
+                      <Play size={11} style={{ color: isPlaying ? 'var(--color-accent)' : 'var(--color-text-tertiary)', flexShrink: 0 }} />
+                    </button>
+                    <div className="relative shrink-0" style={{ width: gridWidth, height: 46 }}>
+                      {entries.map((program, pIndex) => {
+                        const left = Math.max(0, ((program.start - gridStart) / 3_600_000) * PX_PER_HOUR);
+                        const right = Math.min(
+                          gridWidth,
+                          ((program.stop - gridStart) / 3_600_000) * PX_PER_HOUR,
+                        );
+                        const width = Math.max(4, right - left);
+                        const isCurrent = program.start <= nowTick && program.stop > nowTick;
+                        return (
+                          <button
+                            key={`${program.start}-${pIndex}`}
+                            onClick={() => playChannel(channel)}
+                            className="absolute top-1 bottom-1 rounded px-1.5 text-left overflow-hidden cursor-pointer"
+                            style={{
+                              left,
+                              width,
+                              background: isCurrent
+                                ? 'var(--color-accent)'
+                                : pIndex % 2
+                                  ? 'var(--color-bg-tertiary)'
+                                  : 'var(--color-bg-secondary)',
+                              border: '1px solid var(--color-border)',
+                            }}
+                            title={`${channel.name} — ${program.title || '—'}\n${new Date(program.start).toLocaleString()} – ${new Date(program.stop).toLocaleString()}`}
+                          >
+                            <span
+                              className="block text-[10px] truncate leading-tight"
+                              style={{ color: isCurrent ? '#fff' : 'var(--color-text)' }}
+                            >
+                              {program.title || '—'}
+                            </span>
+                            <span
+                              className="block text-[9px] truncate leading-tight"
+                              style={{ color: isCurrent ? 'rgba(255,255,255,0.75)' : 'var(--color-text-tertiary)' }}
+                            >
+                              {fmtHour(program.start)}–{fmtHour(program.stop)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      {entries.length === 0 && (
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                          no schedule data
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {visibleChannels.length === 0 && (
+                <div className="px-3 py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+                  {loading ? 'Loading…' : 'No channels match the current filters.'}
+                </div>
+              )}
+
+              {/* Now indicator line */}
+              {nowX >= 0 && nowX <= gridWidth && (
+                <div
+                  className="absolute top-0 bottom-0 pointer-events-none z-10"
+                  style={{ left: GRID_LEFT_W + nowX, width: 2, background: 'var(--color-error)' }}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
