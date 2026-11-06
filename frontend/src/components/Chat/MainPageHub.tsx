@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import {
   ArrowUpRight,
   Baby,
+  Bitcoin,
   BrainCircuit,
+  LineChart,
+  Wallet,
   Code2,
   Download,
   Disc,
@@ -47,7 +50,7 @@ import {
   type GameLauncherId,
 } from '../../lib/game-launchers';
 
-type HubSection = 'kids' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
+type HubSection = 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media' | 'record' | 'remote' | 'stores' | 'ai' | 'developer';
 type GameSource = 'steam' | 'playnite';
 
 interface HubService {
@@ -679,6 +682,96 @@ function KidsPanel() {
       <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
         Messenger Kids runs inside the Messenger mobile/desktop apps and needs a parent&apos;s Facebook
         account — the tile opens Messenger. Cartoons, anime and kids channels live in Media → IPTV → Kids.
+      </p>
+    </div>
+  );
+}
+
+interface CryptoGroup {
+  label: string;
+  apps: HubService[];
+}
+
+const cryptoGroups: CryptoGroup[] = [
+  {
+    label: 'Exchanges — buy, sell & trade',
+    apps: [
+      { id: 'coinbase', name: 'Coinbase', url: 'https://www.coinbase.com/', color: '#0052ff', description: 'Major US exchange — buy, sell, stake and earn crypto.', icon: Bitcoin },
+      { id: 'kraken', name: 'Kraken', url: 'https://www.kraken.com/', color: '#5741d9', description: 'Exchange with low fees, futures and staking.', icon: Bitcoin },
+      { id: 'crypto-com', name: 'Crypto.com', url: 'https://crypto.com/', color: '#002b4c', description: 'Exchange plus DeFi wallet and card.', icon: Bitcoin },
+      { id: 'gemini', name: 'Gemini', url: 'https://www.gemini.com/', color: '#00dcfa', description: 'Regulated US exchange with insurance on digital assets.', icon: Bitcoin },
+      { id: 'kucoin', name: 'KuCoin', url: 'https://www.kucoin.com/', color: '#24ae8f', description: 'Exchange with the widest altcoin selection.', icon: Bitcoin },
+      { id: 'bitstamp', name: 'Bitstamp', url: 'https://www.bitstamp.net/', color: '#1a1a1a', description: 'One of the oldest exchanges — simple buy/sell.', icon: Bitcoin },
+    ],
+  },
+  {
+    label: 'AI trading bots',
+    apps: [
+      { id: 'pionex', name: 'Pionex', url: 'https://www.pionex.com/', color: '#1a7f5a', description: 'Exchange with built-in free AI trading bots.', icon: BrainCircuit },
+      { id: '3commas', name: '3Commas', url: 'https://3commas.io/', color: '#2f80ed', description: 'Automated crypto trading bots and DCA.', icon: BrainCircuit },
+      { id: 'cryptohopper', name: 'Cryptohopper', url: 'https://www.cryptohopper.com/', color: '#4f8ff7', description: 'AI-powered strategy bots for 100+ exchanges.', icon: BrainCircuit },
+      { id: 'coinrule', name: 'Coinrule', url: 'https://coinrule.com/', color: '#7c5cff', description: 'No-code rule builder — "if this then that" trading.', icon: BrainCircuit },
+      { id: 'bitsgap', name: 'Bitsgap', url: 'https://bitsgap.com/', color: '#00d4a6', description: 'Trading bots, signals and portfolio tools.', icon: BrainCircuit },
+    ],
+  },
+  {
+    label: 'Market graphs & data',
+    apps: [
+      { id: 'coingecko', name: 'CoinGecko', url: 'https://www.coingecko.com/', color: '#16a085', description: 'Prices, charts and market data for every crypto.', icon: LineChart },
+      { id: 'coinmarketcap', name: 'CoinMarketCap', url: 'https://coinmarketcap.com/', color: '#3861fb', description: 'Market cap rankings and charts.', icon: LineChart },
+      { id: 'tradingview', name: 'TradingView', url: 'https://www.tradingview.com/', color: '#2962ff', description: 'Professional charts and technical analysis.', icon: LineChart },
+      { id: 'coinstats', name: 'CoinStats', url: 'https://coinstats.app/', color: '#f7931a', description: 'Portfolio tracker with live charts.', icon: LineChart },
+    ],
+  },
+  {
+    label: 'Wallets',
+    apps: [
+      { id: 'coinbase-wallet', name: 'Coinbase Wallet', url: 'https://www.coinbase.com/wallet', color: '#0052ff', description: 'Self-custody wallet — separate from the exchange account.', icon: Wallet },
+      { id: 'exodus', name: 'Exodus', url: 'https://www.exodus.com/', color: '#6c5ce7', description: 'Desktop/mobile wallet with built-in exchange.', icon: Wallet },
+      { id: 'electrum', name: 'Electrum', url: 'https://electrum.org/', color: '#519be5', description: 'Lightweight Bitcoin wallet — open source.', icon: Wallet },
+      { id: 'metamask', name: 'MetaMask', url: 'https://metamask.io/', color: '#f6851b', description: 'The standard Web3/Ethereum wallet.', icon: Wallet },
+      { id: 'trust-wallet', name: 'Trust Wallet', url: 'https://trustwallet.com/', color: '#3375bb', description: 'Mobile wallet supporting 10M+ assets.', icon: Wallet },
+      { id: 'ledger-live', name: 'Ledger Live', url: 'https://www.ledger.com/', color: '#000000', description: 'Hardware wallet companion app.', icon: Wallet },
+      { id: 'tangem', name: 'Tangem', url: 'https://tangem.com/', color: '#1a1a1a', description: 'Smartcard hardware wallet — no seed phrase.', icon: Wallet },
+    ],
+  },
+];
+
+function CryptoPanel() {
+  return (
+    <div className="space-y-4 px-4 pb-4">
+      {cryptoGroups.map((group) => (
+        <div key={group.label}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-tertiary)' }}>
+            {group.label}
+          </h3>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={group.label}>
+            {group.apps.map((app) => {
+              const Icon = app.icon;
+              return (
+                <button
+                  key={app.id}
+                  type="button"
+                  onClick={() => void openExternal(app.url)}
+                  title={app.description}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors"
+                  style={{
+                    color: app.color,
+                    background: `${app.color}18`,
+                    border: `1px solid ${app.color}55`,
+                  }}
+                >
+                  <Icon size={14} />
+                  {app.name}
+                  <ExternalLink size={11} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+        These open in your browser — exchanges require account signup and KYC. Not financial advice.
       </p>
     </div>
   );
@@ -1446,6 +1539,9 @@ export function MainPageHub() {
         <ActionButton active={section === 'kids'} onClick={() => selectSection('kids')}>
           <Baby size={15} /> Kids
         </ActionButton>
+        <ActionButton active={section === 'crypto'} onClick={() => selectSection('crypto')}>
+          <Bitcoin size={15} /> Crypto
+        </ActionButton>
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
         </ActionButton>
@@ -1481,6 +1577,7 @@ export function MainPageHub() {
       </nav>
       <div className={`max-h-[42vh] overflow-y-auto pb-2 ${section ? '' : 'hidden'}`}>
         {visitedSections.has('kids') && <div hidden={section !== 'kids'}><KidsPanel /></div>}
+        {visitedSections.has('crypto') && <div hidden={section !== 'crypto'}><CryptoPanel /></div>}
         {visitedSections.has('browsers') && <div hidden={section !== 'browsers'}><BrowsersPanel /></div>}
         {visitedSections.has('games') && <div hidden={section !== 'games'}><GamesPanel /></div>}
         {visitedSections.has('social') && <div hidden={section !== 'social'}><SocialPanel /></div>}
