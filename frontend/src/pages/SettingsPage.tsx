@@ -25,6 +25,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { useAppStore, type ThemeMode } from '../lib/store';
+import { toast } from 'sonner';
 import { useTts } from '../hooks/useTts';
 import {
   checkHealth,
@@ -40,6 +41,9 @@ import {
   deleteToolCredential,
   isTauri,
   pullModel,
+  deleteModel,
+  fetchMediaModelStatus,
+  downloadMediaModel,
   type InferenceSource,
   type MemoryStats,
 } from '../lib/api';
@@ -182,24 +186,221 @@ async function updateLocalModels(): Promise<string> {
   return `Refreshed ${names.length} model${names.length === 1 ? '' : 's'}.`;
 }
 
+interface OllamaModelInfo {
+  name: string;
+  size: number;
+}
+
+const MODEL_CATALOG: Array<{ name: string; blurb: string; tag: string }> = [
+  // Chat / assistant
+  { name: 'qwen3.5:4b', blurb: 'Default chat model — fast, tools + vision', tag: 'chat' },
+  { name: 'gemma3:4b', blurb: 'Alternative chat model with vision', tag: 'chat' },
+  { name: 'qwen2.5:14b', blurb: 'Bigger general model — better reasoning, slower', tag: 'chat' },
+  { name: 'llama3.1:8b', blurb: 'General-purpose all-rounder', tag: 'chat' },
+  { name: 'phi4:14b', blurb: 'Strong reasoning in a mid-size package', tag: 'chat' },
+  // Coding / game modding
+  { name: 'qwen2.5-coder:7b', blurb: 'Best local coding model — write, debug, mod games', tag: 'coding' },
+  { name: 'starcoder2:7b', blurb: 'Code completion and generation', tag: 'coding' },
+  { name: 'deepseek-coder:6.7b', blurb: 'Lightweight coder — fills, refactors, reviews', tag: 'coding' },
+  { name: 'codellama:7b', blurb: 'Meta\'s code-specialized model', tag: 'coding' },
+  // Reasoning
+  { name: 'deepseek-r1:8b', blurb: 'Reasoning model — step-by-step thinking', tag: 'reasoning' },
+  // Vision (images/screenshots)
+  { name: 'moondream:latest', blurb: 'Tiny vision model (~1.7 GB) — describe images', tag: 'vision' },
+  { name: 'llava:7b', blurb: 'Vision + chat — analyze images and screenshots', tag: 'vision' },
+  // Embeddings / memory
+  { name: 'nomic-embed-text:latest', blurb: 'Embeddings for memory/search', tag: 'embed' },
+];
+
 function OllamaModelList() {
-  const [models, setModels] = useState<Array<{ name: string; size: number }>>([]);
-  useEffect(() => {
-    fetch('http://localhost:11434/api/tags')
-      .then(r => r.json())
-      .then(data => setModels((data.models || []).map((m: any) => ({ name: m.name, size: m.size }))))
-      .catch(() => setModels([]));
+  const [models, setModels] = useState<OllamaModelInfo[]>([]);
+  const [busy, setBusy] = useState('');
+  const [installedNames, setInstalledNames] = useState<Set<string>>(new Set());
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('http://localhost:11434/api/tags');
+      if (!res.ok) throw new Error('no ollama');
+      const data = await res.json();
+      const list: OllamaModelInfo[] = (data.models || []).map((m: any) => ({ name: m.name, size: m.size }));
+      setModels(list);
+      setInstalledNames(new Set(list.map((m) => m.name)));
+    } catch {
+      setModels([]);
+      setInstalledNames(new Set());
+    }
   }, []);
-  if (models.length === 0) return <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>No models loaded</span>;
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const sizeOf = (name: string) => models.find((m) => m.name === name)?.size ?? 0;
+
+  const download = async (name: string) => {
+    setBusy(`pull:${name}`);
+    try {
+      await pullModel(name);
+      toast.success(`${name} downloaded.`);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const remove = async (name: string) => {
+    setBusy(`rm:${name}`);
+    try {
+      await deleteModel(name);
+      toast.success(`${name} deleted.`);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // Show every catalog model plus any installed model not in the catalog.
+  const catalogNames = new Set(MODEL_CATALOG.map((m) => m.name));
+  const extra = models.filter((m) => !catalogNames.has(m.name));
+  const rows = [
+    ...MODEL_CATALOG.map((m) => ({ name: m.name, blurb: m.blurb, tag: m.tag })),
+    ...extra.map((m) => ({ name: m.name, blurb: 'Installed model', tag: 'other' })),
+  ];
+
+  if (models.length === 0 && rows.length === 0) {
+    return <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>Ollama not reachable — start it to manage models.</span>;
+  }
+
   return (
-    <div className="flex flex-wrap gap-1">
-      {models.map(m => (
-        <span key={m.name} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px]"
-          style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text)' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
-          {m.name} ({(m.size / 1e9).toFixed(1)} GB)
-        </span>
-      ))}
+    <div className="flex flex-col gap-1.5 w-full">
+      {rows.map((m) => {
+        const installed = installedNames.has(m.name);
+        const sizeGB = sizeOf(m.name) / 1e9;
+        const isBusy = busy === `pull:${m.name}` || busy === `rm:${m.name}`;
+        return (
+          <div key={m.name} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+            style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)' }}>
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+              background: installed ? 'var(--color-success)' : 'var(--color-text-tertiary)',
+            }} />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>{m.name}</div>
+              <div className="text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                {m.blurb}{installed ? ` · ${(sizeGB).toFixed(1)} GB` : ''}
+              </div>
+            </div>
+            <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0"
+              style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-tertiary)' }}>{m.tag}</span>
+            {installed ? (
+              <button
+                onClick={() => void remove(m.name)}
+                disabled={isBusy || busy !== ''}
+                className="text-[10px] px-2 py-1 rounded cursor-pointer disabled:opacity-50 flex-shrink-0"
+                style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-error, #f87171)', border: '1px solid var(--color-border)' }}
+              >
+                {busy === `rm:${m.name}` ? '…' : 'Delete'}
+              </button>
+            ) : (
+              <button
+                onClick={() => void download(m.name)}
+                disabled={isBusy || busy !== ''}
+                className="text-[10px] px-2 py-1 rounded cursor-pointer disabled:opacity-50 flex-shrink-0"
+                style={{ background: 'var(--color-accent-subtle, var(--color-bg-secondary))', color: 'var(--color-accent)', border: '1px solid var(--color-border)' }}
+              >
+                {busy === `pull:${m.name}` ? 'Downloading…' : 'Download'}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MediaModelsRow() {
+  const [status, setStatus] = useState<Record<'image' | 'video', { ready: boolean; status: string; error: string }>>(
+    { image: { ready: false, status: 'idle', error: '' }, video: { ready: false, status: 'idle', error: '' } },
+  );
+  const [busy, setBusy] = useState('');
+
+  const refresh = useCallback(async () => {
+    try {
+      setStatus(await fetchMediaModelStatus());
+    } catch {
+      /* offline or endpoint missing — leave placeholders */
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const download = async (kind: 'image' | 'video') => {
+    setBusy(kind);
+    try {
+      await downloadMediaModel(kind);
+      toast.success(`${kind === 'image' ? 'Image' : 'Video'} generation model download started.`);
+      // Poll until ready (downloads are large — up to several minutes).
+      const poll = setInterval(async () => {
+        try {
+          const s = (await fetchMediaModelStatus())[kind];
+          setStatus((prev) => ({ ...prev, [kind]: s }));
+          if (s.ready || s.status === 'error') {
+            clearInterval(poll);
+            setBusy('');
+            if (s.ready) toast.success(`${kind === 'image' ? 'Image' : 'Video'} model ready.`);
+            else toast.error(s.error || 'Model download failed.');
+          }
+        } catch { /* keep polling */ }
+      }, 5000);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+      setBusy('');
+    }
+  };
+
+  const items: Array<{ kind: 'image' | 'video'; name: string; blurb: string; size: string }> = [
+    { kind: 'image', name: 'Image generation', blurb: 'Local text-to-image for the Record/Media tools', size: '~2 GB' },
+    { kind: 'video', name: 'Video generation', blurb: 'Local text-to-video clips', size: '~3 GB' },
+  ];
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      {items.map((item) => {
+        const s = status[item.kind];
+        const ready = s?.ready ?? false;
+        const downloading = s?.status === 'downloading' || busy === item.kind;
+        return (
+          <div key={item.kind} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+            style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)' }}>
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+              background: ready ? 'var(--color-success)' : downloading ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+            }} />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{item.name} <span className="font-normal" style={{ color: 'var(--color-text-tertiary)' }}>({item.size})</span></div>
+              <div className="text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                {item.blurb}{ready ? ' · ready' : downloading ? ' · downloading…' : ''}{s?.error ? ` · ${s.error}` : ''}
+              </div>
+            </div>
+            <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0"
+              style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-tertiary)' }}>media</span>
+            {ready ? (
+              <span className="text-[10px] px-2 py-1 rounded flex-shrink-0" style={{ color: 'var(--color-success)' }}>Ready</span>
+            ) : (
+              <button
+                onClick={() => void download(item.kind)}
+                disabled={downloading || busy !== ''}
+                className="text-[10px] px-2 py-1 rounded cursor-pointer disabled:opacity-50 flex-shrink-0"
+                style={{ background: 'var(--color-accent-subtle, var(--color-bg-secondary))', color: 'var(--color-accent)', border: '1px solid var(--color-border)' }}
+              >
+                {downloading ? '…' : 'Download'}
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1237,11 +1438,14 @@ export function SettingsPage() {
 
           {/* Models */}
           <Section title="Models">
-            <SettingRow label="Local models (Ollama)" description="Models available for local inference">
+            <SettingRow label="Local models (Ollama)" description="Chat, coding, vision, reasoning and embedding models — all run offline">
               <OllamaModelList />
             </SettingRow>
+            <SettingRow label="Media generation models" description="Image & video generation for the Record/Media tools">
+              <MediaModelsRow />
+            </SettingRow>
             <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
-              Run <code className="px-1 py-0.5 rounded text-[11px]" style={{ background: 'var(--color-bg-tertiary)' }}>ollama pull &lt;model-name&gt;</code> in your terminal to add more models
+              Green dot = installed. Hit <b>Download</b> to fetch a model into Ollama, or <b>Delete</b> to free disk space. Models run fully offline once downloaded.
             </div>
             <SettingRow label="Cloud providers" description="Green dot means API key is configured">
               <div className="flex flex-wrap gap-3">
