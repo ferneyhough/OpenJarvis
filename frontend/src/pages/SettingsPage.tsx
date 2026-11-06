@@ -227,6 +227,14 @@ const MODEL_CATALOG: Array<{ name: string; blurb: string; tag: string }> = [
   { name: 'nomic-embed-text:latest', blurb: 'Embeddings for memory/search', tag: 'embed' },
 ];
 
+const MODEL_PRESETS: Array<{ label: string; pill: string; models: string[] }> = [
+  { label: 'Kids pack', pill: 'Kids', models: ['gemma3:1b', 'llama3.2:3b'] },
+  { label: 'Chat pack', pill: 'Chat/AI', models: ['qwen3.5:4b', 'gemma3:4b'] },
+  { label: 'Coding & modding', pill: 'Games/Developer/Mods', models: ['qwen2.5-coder:7b', 'starcoder2:7b', 'deepseek-coder:6.7b'] },
+  { label: 'Reasoning', pill: 'Crypto/planning', models: ['deepseek-r1:8b'] },
+  { label: 'Vision', pill: 'Record/Media', models: ['moondream:latest', 'llava:7b'] },
+];
+
 function OllamaModelList() {
   const [models, setModels] = useState<OllamaModelInfo[]>([]);
   const [busy, setBusy] = useState('');
@@ -288,8 +296,48 @@ function OllamaModelList() {
     return <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>Ollama not reachable — start it to manage models.</span>;
   }
 
+  const installPreset = async (preset: (typeof MODEL_PRESETS)[number]) => {
+    const missing = preset.models.filter((m) => !installedNames.has(m));
+    if (missing.length === 0) {
+      toast.info(`${preset.label} is already installed.`);
+      return;
+    }
+    setBusy(`preset:${preset.label}`);
+    try {
+      for (const name of missing) {
+        toast.loading(`${preset.label}: downloading ${name}…`);
+        await pullModel(name);
+      }
+      toast.success(`${preset.label} ready — ${missing.length} model(s) installed.`);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy('');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-1.5 w-full">
+      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+        <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>Packs:</span>
+        {MODEL_PRESETS.map((p) => {
+          const missing = p.models.filter((m) => !installedNames.has(m)).length;
+          const isBusy = busy === `preset:${p.label}`;
+          return (
+            <button
+              key={p.label}
+              onClick={() => void installPreset(p)}
+              disabled={busy !== '' || missing === 0}
+              title={`For the ${p.pill} pill — installs ${p.models.join(', ')}`}
+              className="text-[10px] px-2 py-1 rounded cursor-pointer disabled:opacity-50"
+              style={{ background: 'var(--color-accent-subtle, var(--color-bg-secondary))', color: 'var(--color-accent)', border: '1px solid var(--color-border)' }}
+            >
+              {isBusy ? 'Installing…' : missing === 0 ? `${p.label} ✓` : `${p.label} (${missing})`}
+            </button>
+          );
+        })}
+      </div>
       {rows.map((m) => {
         const installed = installedNames.has(m.name);
         const sizeGB = sizeOf(m.name) / 1e9;
