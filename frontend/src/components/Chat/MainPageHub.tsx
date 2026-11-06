@@ -743,6 +743,7 @@ const cryptoGroups: CryptoGroup[] = [
       { id: 'braiins', name: 'Braiins Pool', url: 'https://braiins.com/pool', color: '#a855f7', description: 'Bitcoin-only pool with FPPS+ payouts.', icon: Bitcoin },
       { id: 'foundry', name: 'Foundry USA', url: 'https://foundrydigital.com/', color: '#64748b', description: 'US-based pool — reputable, institutional grade.', icon: Bitcoin },
       { id: 'poolin', name: 'Poolin', url: 'https://www.poolin.com/', color: '#ef4444', description: 'Large multi-coin pool with low fees.', icon: Bitcoin },
+      { id: 'ctpool', name: 'CTPool', url: 'https://ctpool.net/en/', color: '#06b6d4', description: 'Kaspa/CTC mining pool with solo and pooled options.', icon: Bitcoin },
     ],
   },
   {
