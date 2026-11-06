@@ -1738,7 +1738,7 @@ function IptvTab() {
     setPlayNotice(`Checking ${channel.name}…`);
     // Fetch-on-demand: probe the stream first so dead feeds report instantly
     // instead of opening a black player.
-    void fetchGuideProbe(channel.url)
+    void fetchGuideProbe(channel.url, channel.userAgent, channel.referrer)
       .then((probe) => {
         setPlayNotice('');
         if (probe.ok) {
@@ -1746,8 +1746,11 @@ function IptvTab() {
           setPlaying(channel);
           destroyPlayer();
         } else {
+          const geo = probe.status === 403 || probe.status === 451;
           setPlayNotice(
-            `${channel.name}: stream unreachable (HTTP ${probe.status || 'timeout'}) — try another channel.`,
+            geo
+              ? `${channel.name}: blocked (HTTP ${probe.status}) — likely geo-restricted to another region.`
+              : `${channel.name}: stream unreachable (HTTP ${probe.status || 'timeout'}) — try another channel.`,
           );
         }
       })
@@ -1766,16 +1769,15 @@ function IptvTab() {
     const channel = playing;
     if (!video || !channel || !channel.playable) return;
     setPlayerError('');
-    const url = channel.url;
-    const isHls = /\.m3u8($|\?)/i.test(url) || url.includes('/playlist.m3u8');
+    // Streams play through the local proxy so playlist-required headers are
+    // applied server-side and header-restricted feeds actually work.
+    const streamParams = new URLSearchParams({ url: channel.url });
+    if (channel.userAgent) streamParams.set('ua', channel.userAgent);
+    if (channel.referrer) streamParams.set('ref', channel.referrer);
+    const url = `${getBase()}/v1/guide/stream?${streamParams}`;
+    const isHls = /\.m3u8($|\?)/i.test(channel.url) || channel.url.includes('/playlist.m3u8');
     if (isHls && Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        xhrSetup: (xhr) => {
-          if (channel.userAgent) xhr.setRequestHeader('User-Agent', channel.userAgent);
-          if (channel.referrer) xhr.setRequestHeader('Referer', channel.referrer);
-        },
-      });
+      const hls = new Hls({ enableWorker: true });
       hlsRef.current = hls;
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {

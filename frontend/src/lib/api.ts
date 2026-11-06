@@ -1697,8 +1697,10 @@ export interface GuideProbeResult {
   error?: string;
 }
 
-export async function fetchGuideProbe(url: string): Promise<GuideProbeResult> {
+export async function fetchGuideProbe(url: string, ua = '', ref = ''): Promise<GuideProbeResult> {
   const params = new URLSearchParams({ url });
+  if (ua) params.set('ua', ua);
+  if (ref) params.set('ref', ref);
   const res = await apiFetch(`/v1/guide/probe?${params}`);
   if (!res.ok) return { ok: false, status: res.status, content_type: '' };
   return res.json();

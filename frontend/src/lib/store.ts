@@ -377,7 +377,7 @@ export const useAppStore = create<AppState>((set, get) => {
     settings: loadSettings(),
 
     commandPaletteOpen: false,
-    sidebarOpen: true,
+    sidebarOpen: false,
     systemPanelOpen: true,
 
     optInEnabled: localStorage.getItem(OPTIN_KEY) === 'true',

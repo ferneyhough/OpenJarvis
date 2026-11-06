@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -284,6 +284,9 @@ def _local_media_dirs() -> list[Path]:
         )
     )
     dirs.append(media_dir)
+    # In-app download folders (VOD torrents, etc.) are playable local media.
+    dirs.append(Path.home() / ".openjarvis" / "downloads")
+    dirs.append(Path.home() / ".openjarvis" / "torrents")
     dirs.append(Path.home() / "Videos")
     # De-dupe while preserving order.
     seen: set[str] = set()
@@ -514,7 +517,7 @@ def guide_prefetch() -> dict:
 
 
 @guide_router.get("/probe")
-def guide_probe(url: str) -> dict:
+def guide_probe(url: str, ua: str = "", ref: str = "") -> dict:
     """Quick reachability check for a stream URL (HEAD, GET fallback).
 
     Used before playback so dead streams report an error instead of a black
@@ -523,7 +526,9 @@ def guide_probe(url: str) -> dict:
     _require_online()
     parsed = _check_fetch_url(url)
     target = urllib.parse.urlunparse(parsed)
-    headers = {"User-Agent": "OpenJarvis/1.0", "Accept": "*/*"}
+    headers = {"User-Agent": ua or "OpenJarvis/1.0", "Accept": "*/*"}
+    if ref:
+        headers["Referer"] = ref
     # Streams frequently use self-signed or oddly-chained certs — a probe only
     # checks reachability, so certificate verification is not required here.
     import ssl
@@ -555,6 +560,107 @@ def guide_probe(url: str) -> dict:
         return {"ok": False, "status": exc.code, "content_type": ""}
     except Exception as exc:
         return {"ok": False, "status": 0, "content_type": "", "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Stream proxy — fetches channel streams server-side with the UA/Referer the
+# playlist requires. This makes header-restricted ("geo") streams playable;
+# true geo-IP blocks still fail and are caught by /probe.
+# ---------------------------------------------------------------------------
+
+_STREAM_MAX_BYTES = 8 * 1024 * 1024  # playlists are small; segments stream through
+
+
+def _proxy_stream_url(target: str, ua: str, ref: str) -> str:
+    params = urllib.parse.urlencode({"url": target, "ua": ua, "ref": ref})
+    return f"/v1/guide/stream?{params}"
+
+
+def _abs_url(uri: str, base: str) -> str:
+    return urllib.parse.urljoin(base, uri)
+
+
+def _rewrite_m3u8(text: str, base: str, ua: str, ref: str) -> str:
+    out: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            out.append(line)
+            continue
+        if stripped.startswith("#"):
+            # EXT-X-KEY / EXT-X-MAP carry URI="..." attributes to rewrite too.
+            if 'URI="' in stripped:
+                stripped = re.sub(
+                    r'URI="([^"]+)"',
+                    lambda m: f'URI="{_proxy_stream_url(_abs_url(m.group(1), base), ua, ref)}"',
+                    stripped,
+                )
+            out.append(stripped)
+            continue
+        out.append(_proxy_stream_url(_abs_url(stripped, base), ua, ref))
+    return "\n".join(out) + "\n"
+
+
+@guide_router.get("/stream")
+def guide_stream(request: Request, url: str, ua: str = "", ref: str = "") -> Response:
+    _require_online()
+    parsed = _check_fetch_url(url)
+    target = urllib.parse.urlunparse(parsed)
+    headers = {
+        "User-Agent": ua or "OpenJarvis/1.0",
+        "Accept": "*/*",
+    }
+    if ref:
+        headers["Referer"] = ref
+    range_header = request.headers.get("range")
+    if range_header:
+        headers["Range"] = range_header
+    try:
+        req = urllib.request.Request(target, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=30)
+    except urllib.error.HTTPError as exc:
+        return Response(status_code=exc.code, content=b"", media_type="text/plain")
+    except Exception as exc:
+        return Response(
+            status_code=502, content=f"stream fetch failed: {exc}".encode(), media_type="text/plain"
+        )
+
+    content_type = resp.headers.get("Content-Type", "") or "application/octet-stream"
+    is_playlist = "mpegurl" in content_type.lower() or target.lower().split("?")[0].endswith(
+        (".m3u8", ".m3u")
+    )
+    if is_playlist:
+        raw = resp.read(_STREAM_MAX_BYTES + 1)
+        resp.close()
+        if len(raw) > _STREAM_MAX_BYTES:
+            return Response(status_code=413, content=b"playlist too large")
+        text = raw.decode("utf-8-sig", errors="replace")
+        if "#EXTM3U" in text:
+            text = _rewrite_m3u8(text, target, ua, ref)
+        return Response(content=text, media_type="application/vnd.apple.mpegurl")
+
+    # Segment / key / direct stream: pipe bytes through, honouring Range.
+    def _iter():
+        try:
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            resp.close()
+
+    passthrough = {
+        k: v
+        for k, v in {
+            "Content-Type": content_type,
+            "Content-Length": resp.headers.get("Content-Length"),
+            "Content-Range": resp.headers.get("Content-Range"),
+            "Accept-Ranges": resp.headers.get("Accept-Ranges", "bytes"),
+        }.items()
+        if v
+    }
+    return StreamingResponse(_iter(), status_code=resp.status, headers=passthrough)
 
 
 # ---------------------------------------------------------------------------

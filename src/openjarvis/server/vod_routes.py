@@ -4,7 +4,7 @@ Streams are resolved through public Stremio addons (Torrentio, Comet,
 MediaFusion) which return either direct HTTP(S) URLs or torrent info-hashes.
 Torrent streams are downloaded progressively with libtorrent and served over
 HTTP so they can be watched while downloading; files persist under
-``~/.openjarvis/torrents`` and double as the download library.
+``~/.openjarvis/downloads`` and double as the download library.
 """
 
 from __future__ import annotations
@@ -211,7 +211,8 @@ except Exception:  # pragma: no cover - depends on optional native dep
 
 class _TorrentManager:
     def __init__(self) -> None:
-        self.save_path = Path.home() / ".openjarvis" / "torrents"
+        # Downloads live in the app's own folder and show up under Media → Local.
+        self.save_path = Path.home() / ".openjarvis" / "downloads"
         self.save_path.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._items: dict[str, dict[str, Any]] = {}
