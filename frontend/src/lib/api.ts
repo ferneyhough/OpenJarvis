@@ -1690,6 +1690,20 @@ export async function fetchGuideDocument(url: string, kind: 'playlist' | 'guide'
   return String(data?.text ?? '');
 }
 
+export interface GuideProbeResult {
+  ok: boolean;
+  status: number;
+  content_type: string;
+  error?: string;
+}
+
+export async function fetchGuideProbe(url: string): Promise<GuideProbeResult> {
+  const params = new URLSearchParams({ url });
+  const res = await apiFetch(`/v1/guide/probe?${params}`);
+  if (!res.ok) return { ok: false, status: res.status, content_type: '' };
+  return res.json();
+}
+
 export interface GuideEpgProgram {
   title: string;
   start: number;

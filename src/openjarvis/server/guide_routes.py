@@ -506,6 +506,57 @@ def guide_fetch_document(url: str, kind: str = "playlist") -> dict:
     return {"text": text, "bytes": size, "content_type": content_type}
 
 
+@guide_router.post("/prefetch")
+def guide_prefetch() -> dict:
+    """Manually trigger the daily EPG warm-up (off by default at boot)."""
+    prefetch_epg_sources()
+    return {"started": True}
+
+
+@guide_router.get("/probe")
+def guide_probe(url: str) -> dict:
+    """Quick reachability check for a stream URL (HEAD, GET fallback).
+
+    Used before playback so dead streams report an error instead of a black
+    player. Times out fast — this must never block the UI for long.
+    """
+    _require_online()
+    parsed = _check_fetch_url(url)
+    target = urllib.parse.urlunparse(parsed)
+    headers = {"User-Agent": "OpenJarvis/1.0", "Accept": "*/*"}
+    # Streams frequently use self-signed or oddly-chained certs — a probe only
+    # checks reachability, so certificate verification is not required here.
+    import ssl
+
+    ctx = ssl._create_unverified_context()
+    try:
+        req = urllib.request.Request(target, headers=headers, method="HEAD")
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            return {
+                "ok": True,
+                "status": resp.status,
+                "content_type": resp.headers.get("Content-Type", ""),
+            }
+    except Exception:
+        pass
+    try:
+        req = urllib.request.Request(
+            target, headers={**headers, "Range": "bytes=0-0"}
+        )
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            return {
+                "ok": resp.status in (200, 206),
+                "status": resp.status,
+                "content_type": resp.headers.get("Content-Type", ""),
+            }
+    except urllib.error.HTTPError as exc:
+        # A 4xx/5xx still proves the host is reachable; only network-level
+        # failures mean the stream is dead.
+        return {"ok": False, "status": exc.code, "content_type": ""}
+    except Exception as exc:
+        return {"ok": False, "status": 0, "content_type": "", "error": str(exc)}
+
+
 # ---------------------------------------------------------------------------
 # Windowed XMLTV EPG (server-side parse keeps payloads small)
 # ---------------------------------------------------------------------------

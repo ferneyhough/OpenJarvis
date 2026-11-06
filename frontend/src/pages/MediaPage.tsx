@@ -34,6 +34,7 @@ import {
   type GuideLink,
   fetchGuideDocument,
   fetchGuideEpg,
+  fetchGuideProbe,
   fetchIvueGuide,
   fetchVodStreams,
   vodTorrentAdd,
@@ -1204,6 +1205,21 @@ interface GuideChannel extends M3UChannel {
 
 const IPTV_STATE_KEY = 'openjarvis.iptv.merged';
 
+// Anything that can't load within ~a minute is treated as dead and dropped.
+const FETCH_DEADLINE_MS = 60_000;
+
+function withDeadline<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} timed out after ${FETCH_DEADLINE_MS / 1000}s`)),
+        FETCH_DEADLINE_MS,
+      ),
+    ),
+  ]);
+}
+
 // Religious channels are excluded from the guide entirely.
 const RELIGIOUS_RE = new RegExp(
   '\\b(' +
@@ -1470,11 +1486,17 @@ function IptvTab() {
         try {
           // Channels appear as soon as the playlist lands; schedules fill in
           // when that region's EPG finishes parsing.
-          const playlistText = await fetchGuideDocument(region.playlist, 'playlist');
+          const playlistText = await withDeadline(
+            fetchGuideDocument(region.playlist, 'playlist'),
+            `${region.label} playlist`,
+          );
           const parsed = parseM3U(playlistText);
           attach(parsed, region.key, region.label, region.tz, null);
           publish();
-          const epg = await fetchGuideEpg(region.epg, 24).catch(() => null);
+          const epg = await withDeadline(
+            fetchGuideEpg(region.epg, 24).catch(() => null),
+            `${region.label} schedule`,
+          ).catch(() => null);
           if (epg) {
             const lookup = epgLookup(epg);
             for (const entry of merged) {
@@ -1494,7 +1516,7 @@ function IptvTab() {
 
     if (ivueRegions.length > 0) {
       try {
-        const data = await fetchIvueGuide();
+        const data = await withDeadline(fetchIvueGuide(), 'iVue guide');
         for (const region of ivueRegions) {
           for (const channel of data.channels) {
             if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
@@ -1523,13 +1545,19 @@ function IptvTab() {
 
     if (customUrl) {
       try {
-        const playlistText = await fetchGuideDocument(customUrl, 'playlist');
+        const playlistText = await withDeadline(
+          fetchGuideDocument(customUrl, 'playlist'),
+          'Custom playlist',
+        );
         const parsed = parseM3U(playlistText);
         let lookup: ((channel: M3UChannel) => GuideProgram[]) | null = null;
         const guideUrl = customGuide.trim();
         if (guideUrl) {
           try {
-            const guideText = await fetchGuideDocument(guideUrl, 'guide');
+            const guideText = await withDeadline(
+              fetchGuideDocument(guideUrl, 'guide'),
+              'Custom guide',
+            );
             const programs = parseXMLTV(guideText);
             if (programs.size > 0) {
               lookup = (channel) => programs.get(channel.id) ?? [];
@@ -1686,15 +1714,39 @@ function IptvTab() {
   const fmtDay = (ts: number) =>
     new Date(ts).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
 
+  const [probing, setProbing] = useState<string | null>(null);
+
   const playChannel = (channel: GuideChannel) => {
     setPlayNotice('');
     if (!channel.playable) {
       setPlayNotice(`${channel.name} is guide-only — Mad Titan/plugin channels have no stream OpenJarvis can play.`);
       return;
     }
-    setPlayerError('');
-    setPlaying(channel);
-    destroyPlayer();
+    if (probing === channel.url) return;
+    setProbing(channel.url);
+    setPlayNotice(`Checking ${channel.name}…`);
+    // Fetch-on-demand: probe the stream first so dead feeds report instantly
+    // instead of opening a black player.
+    void fetchGuideProbe(channel.url)
+      .then((probe) => {
+        setPlayNotice('');
+        if (probe.ok) {
+          setPlayerError('');
+          setPlaying(channel);
+          destroyPlayer();
+        } else {
+          setPlayNotice(
+            `${channel.name}: stream unreachable (HTTP ${probe.status || 'timeout'}) — try another channel.`,
+          );
+        }
+      })
+      .catch(() => {
+        setPlayNotice('');
+        setPlayerError('');
+        setPlaying(channel);
+        destroyPlayer();
+      })
+      .finally(() => setProbing(null));
   };
 
   // Attach the stream once the <video> element exists (it mounts with `playing`).

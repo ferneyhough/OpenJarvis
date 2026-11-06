@@ -26,7 +26,7 @@ from openjarvis.server.connectors_router import create_connectors_router
 from openjarvis.server.dashboard import dashboard_router
 from openjarvis.server.digest_routes import create_digest_router
 from openjarvis.server.game_routes import games_router
-from openjarvis.server.guide_routes import guide_router, prefetch_epg_sources
+from openjarvis.server.guide_routes import guide_router
 from openjarvis.server.ivue_routes import ivue_router
 from openjarvis.server.vod_routes import vod_router
 from openjarvis.server.media_routes import media_router
@@ -256,7 +256,8 @@ def create_app(
 
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
-        prefetch_epg_sources()
+        # EPG prefetch is opt-in via /v1/guide/prefetch — boot stays a light
+        # scan; heavy guide data loads lazily when the UI asks for it.
         try:
             yield
         finally:
