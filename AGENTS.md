@@ -2,9 +2,9 @@
 
 ## Offline 3D rendering
 
-A portable Blender 4.5.15 LTS lives at
-`vendor/blender-4.5.15-windows-x64/blender.exe` (repo-relative, gitignored —
-no install needed). Render headless with:
+A portable Blender 4.5.15 LTS lives outside the repo (not OneDrive-synced) at
+`C:\Users\Administrator\JarvisArchive\blender-4.5.15-windows-x64\blender.exe`
+(no install needed). Render headless with:
 
 ```
 blender.exe -b --python <script.py>
