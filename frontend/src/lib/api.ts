@@ -655,6 +655,10 @@ export async function getOfflineMode(): Promise<boolean> {
   }
 }
 
+export async function shutdownApp(): Promise<void> {
+  await apiFetch(`/v1/app/shutdown`, { method: 'POST' });
+}
+
 export async function setOfflineMode(enabled: boolean): Promise<boolean> {
   const res = await apiFetch(`/v1/offline-mode`, {
     method: 'POST',

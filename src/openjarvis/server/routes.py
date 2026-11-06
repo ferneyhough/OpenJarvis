@@ -1460,6 +1460,27 @@ async def server_info(request: Request):
     }
 
 
+@router.post("/v1/app/shutdown")
+async def app_shutdown(request: Request):
+    """Shut down the OpenJarvis server completely (localhost only).
+
+    Used by the desktop window's close handler and the in-app Quit button so
+    closing the UI also stops the backend instead of leaving it running.
+    """
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Local requests only")
+
+    import os as _os
+    import threading as _threading
+
+    def _exit() -> None:
+        _os._exit(0)
+
+    _threading.Timer(0.4, _exit).start()
+    return {"status": "shutting_down"}
+
+
 @router.get("/health")
 async def health(request: Request):
     """Health check endpoint."""

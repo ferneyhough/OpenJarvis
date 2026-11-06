@@ -18,12 +18,13 @@ import {
   WifiOff,
   Layers,
   FlaskConical,
+  Power,
   X,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { SystemPanel } from '../Chat/SystemPanel';
 import { useAppStore } from '../../lib/store';
-import { fetchModels, setOfflineMode } from '../../lib/api';
+import { fetchModels, setOfflineMode, shutdownApp } from '../../lib/api';
 
 export function Sidebar() {
   const navigate = useNavigate();
@@ -342,6 +343,20 @@ export function Sidebar() {
                 </div>
               );
             })}
+            <button
+              onClick={() => {
+                setSidebarOpen(false);
+                void shutdownApp().catch(() => {});
+              }}
+              className="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left cursor-pointer"
+              style={{ color: 'var(--color-error, #f87171)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              title="Quit OpenJarvis completely — stops the backend server too (same as Alt+F4 on the desktop window)"
+            >
+              <Power size={16} />
+              Quit Jarvis
+            </button>
           </nav>
         </div>
       </aside>

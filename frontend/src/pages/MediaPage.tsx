@@ -19,6 +19,8 @@ import {
   Music,
   Zap,
   Gamepad2,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import {
   fetchTvGuide,
@@ -1447,6 +1449,13 @@ function IptvTab() {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
   const [guideCursor, setGuideCursor] = useState<{ row: number; time: number } | null>(null);
+  const [loadProgress, setLoadProgress] = useState<{
+    done: number;
+    total: number;
+    label: string;
+    elapsed: number;
+  } | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
@@ -1469,6 +1478,25 @@ function IptvTab() {
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 60_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  // Track fullscreen state for the toggle button icon.
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    try {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen?.().catch(() => {});
+      } else {
+        void document.documentElement.requestFullscreen?.().catch(() => {});
+      }
+    } catch {
+      /* fullscreen unavailable */
+    }
   }, []);
 
   const destroyPlayer = useCallback(() => {
@@ -1533,6 +1561,31 @@ function IptvTab() {
     const streamRegions = regions.filter((r) => !r.ivue);
     const ivueRegions = regions.filter((r) => r.ivue);
 
+    // Per-source progress: each playlist fetch and each EPG fetch counts as a
+    // task so the UI can show "3/12 sources · 14s · ~45s left".
+    const taskLabels: string[] = [];
+    for (const r of streamRegions) {
+      taskLabels.push(`${r.label} playlist`, `${r.label} schedule`);
+    }
+    if (ivueRegions.length > 0) taskLabels.push('iVue guide');
+    if (customUrl) {
+      taskLabels.push('Custom playlist');
+      if (customGuide.trim()) taskLabels.push('Custom guide');
+    }
+    const totalTasks = Math.max(1, taskLabels.length);
+    const progressStart = Date.now();
+    let tasksDone = 0;
+    const tickProgress = (label: string) => {
+      tasksDone += 1;
+      setLoadProgress({
+        done: tasksDone,
+        total: totalTasks,
+        label,
+        elapsed: Date.now() - progressStart,
+      });
+    };
+    setLoadProgress({ done: 0, total: totalTasks, label: 'Starting…', elapsed: 0 });
+
     await Promise.all(
       streamRegions.map(async (region) => {
         try {
@@ -1542,6 +1595,7 @@ function IptvTab() {
             fetchGuideDocument(region.playlist, 'playlist'),
             `${region.label} playlist`,
           );
+          tickProgress(`${region.label} playlist`);
           const parsed = parseM3U(playlistText);
           attach(parsed, region.key, region.label, region.tz, null);
           publish();
@@ -1549,6 +1603,7 @@ function IptvTab() {
             fetchGuideEpg(region.epg, guideDays * 24).catch(() => null),
             `${region.label} schedule`,
           ).catch(() => null);
+          tickProgress(`${region.label} schedule`);
           if (epg) {
             const lookup = epgLookup(epg);
             for (const entry of merged) {
@@ -1559,6 +1614,7 @@ function IptvTab() {
             errors.push(`${region.label}: playlist loaded, TV schedule unavailable`);
           }
         } catch (regionError) {
+          tickProgress(`${region.label} (failed)`);
           errors.push(
             `${region.label}: ${regionError instanceof Error ? regionError.message : String(regionError)}`,
           );
@@ -1569,6 +1625,7 @@ function IptvTab() {
     if (ivueRegions.length > 0) {
       try {
         const data = await withDeadline(fetchIvueGuide(), 'iVue guide');
+        tickProgress('iVue guide');
         for (const region of ivueRegions) {
           for (const channel of data.channels) {
             if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
@@ -1589,6 +1646,7 @@ function IptvTab() {
         }
         publish();
       } catch (ivueError) {
+        tickProgress('iVue guide (failed)');
         errors.push(
           `iVue Guide: ${ivueError instanceof Error ? ivueError.message : String(ivueError)}`,
         );
@@ -1601,6 +1659,7 @@ function IptvTab() {
           fetchGuideDocument(customUrl, 'playlist'),
           'Custom playlist',
         );
+        tickProgress('Custom playlist');
         const parsed = parseM3U(playlistText);
         let lookup: ((channel: M3UChannel) => GuideProgram[]) | null = null;
         const guideUrl = customGuide.trim();
@@ -1610,6 +1669,7 @@ function IptvTab() {
               fetchGuideDocument(guideUrl, 'guide'),
               'Custom guide',
             );
+            tickProgress('Custom guide');
             const programs = parseXMLTV(guideText);
             if (programs.size > 0) {
               lookup = (channel) => programs.get(channel.id) ?? [];
@@ -1617,6 +1677,7 @@ function IptvTab() {
               errors.push('Custom guide: XMLTV file contains no usable programme entries');
             }
           } catch (guideError) {
+            tickProgress('Custom guide (failed)');
             errors.push(
               `Custom guide: ${guideError instanceof Error ? guideError.message : String(guideError)}`,
             );
@@ -1626,6 +1687,7 @@ function IptvTab() {
         attach(parsed, 'CUSTOM', 'Custom', localTz, lookup);
         publish();
       } catch (customError) {
+        tickProgress('Custom playlist (failed)');
         errors.push(
           `Custom playlist: ${customError instanceof Error ? customError.message : String(customError)}`,
         );
@@ -1634,6 +1696,7 @@ function IptvTab() {
 
     setGuideErrors(errors);
     setLoading(false);
+    setLoadProgress(null);
   }, [enabledRegions, customPlaylist, customGuide, destroyPlayer, guideDays]);
 
   useEffect(() => {
@@ -1898,7 +1961,10 @@ function IptvTab() {
       )
         return;
       if (detail) {
-        if (e.key === 'Escape') setDetail(null);
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setDetail(null);
+        }
         return;
       }
       switch (e.key) {
@@ -1932,12 +1998,18 @@ function IptvTab() {
           openCursorProgram();
           break;
         }
+        case 'f':
+        case 'F': {
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moveGuideCursor, guideCursorChannel, openCursorProgram, detail, channelRows]);
+  }, [moveGuideCursor, guideCursorChannel, openCursorProgram, detail, channelRows, toggleFullscreen]);
 
   // Gamepad: standard mapping — D-pad/stick moves, A plays, X info, B closes.
   // Held directions auto-repeat so you can "pull" through the grid.
@@ -2006,7 +2078,10 @@ function IptvTab() {
   useEffect(() => {
     if (!detail) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDetail(null);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setDetail(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -2187,6 +2262,14 @@ function IptvTab() {
         >
           ● Now
         </button>
+        <button
+          onClick={toggleFullscreen}
+          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer"
+          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+          title={isFullscreen ? 'Exit fullscreen (Esc or F)' : 'Fullscreen guide (F)'}
+        >
+          {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        </button>
         <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
           Guide range
           <select
@@ -2278,11 +2361,37 @@ function IptvTab() {
           {message}
         </div>
       ))}
-      {loading && (
-        <div className="flex items-center gap-2 text-xs py-2" style={{ color: 'var(--color-text-tertiary)' }}>
-          <Loader2 size={12} className="animate-spin" /> Loading regional playlists and TV schedules…
-        </div>
-      )}
+      {loading && loadProgress && (() => {
+        const pct = Math.min(100, Math.round((loadProgress.done / loadProgress.total) * 100));
+        const elapsedS = Math.floor(loadProgress.elapsed / 1000);
+        const etaS =
+          loadProgress.done > 0
+            ? Math.max(0, Math.round((loadProgress.elapsed / loadProgress.done) * (loadProgress.total - loadProgress.done) / 1000))
+            : null;
+        return (
+          <div className="rounded-xl px-4 py-3" style={panelStyle}>
+            <div className="flex items-center gap-2 text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+              <Loader2 size={13} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
+              <span className="font-medium" style={{ color: 'var(--color-text)' }}>
+                Loading guide sources…
+              </span>
+              <span className="ml-auto font-mono" style={{ color: 'var(--color-text-tertiary)' }}>
+                {loadProgress.done}/{loadProgress.total} · {elapsedS}s
+                {etaS !== null ? ` · ~${etaS}s left` : ''}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-bg-tertiary)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${pct}%`, background: 'var(--color-accent)' }}
+              />
+            </div>
+            <div className="text-[11px] mt-1.5 truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+              {loadProgress.label} — channels already loaded stay visible while the rest finish.
+            </div>
+          </div>
+        );
+      })()}
 
       {playing && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>

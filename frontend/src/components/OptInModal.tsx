@@ -111,7 +111,10 @@ export function OptInModal({ onClose }: OptInModalProps) {
           boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
         }}
         onKeyDown={(event) => {
-          if (event.key === 'Escape' && !saving) onClose();
+          if (event.key === 'Escape' && !saving) {
+            event.preventDefault();
+            onClose();
+          }
           if (event.key !== 'Tab') return;
           const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
             'button:not([disabled]), input:not([disabled]), a[href]',

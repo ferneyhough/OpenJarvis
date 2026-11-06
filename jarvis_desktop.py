@@ -77,9 +77,24 @@ def _refresh_stale_cache(window) -> None:
     )
 
 
+def _shutdown_server(_window) -> None:
+    """Window closed (Alt+F4, X button): stop the backend too so the whole
+    program exits instead of leaving an orphaned server on :8000."""
+    try:
+        import urllib.request
+
+        req = urllib.request.Request(
+            "http://127.0.0.1:8000/v1/app/shutdown", method="POST"
+        )
+        urllib.request.urlopen(req, timeout=2)
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
     _start_server()
     window = webview.create_window("OpenJarvis", URL, width=1280, height=840)
     window.events.loaded += lambda: _allow_media_permissions(window)
     window.events.loaded += lambda: _refresh_stale_cache(window)
+    window.events.closed += _shutdown_server
     webview.start()

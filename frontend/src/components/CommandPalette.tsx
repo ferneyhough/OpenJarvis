@@ -255,6 +255,7 @@ export function CommandPalette() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
+      e.preventDefault();
       setCommandPaletteOpen(false);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();

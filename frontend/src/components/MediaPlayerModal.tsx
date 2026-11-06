@@ -96,6 +96,18 @@ export function MediaPlayerModal({
     };
   }, [target]);
 
+  useEffect(() => {
+    if (!target) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [target, onClose]);
+
   if (!target) return null;
   const resolved = resolveSrc(target.src);
 

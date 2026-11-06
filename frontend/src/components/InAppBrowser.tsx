@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppWindow, ExternalLink, Globe, Loader2, RotateCw, X } from 'lucide-react';
 import { useInAppBrowser, closeInAppBrowser } from '../lib/in-app-browser';
 import { isTauri, launchApp, openBrowserWindow } from '../lib/api';
@@ -14,6 +14,18 @@ export function InAppBrowser() {
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (!url) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeInAppBrowser();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [url]);
 
   if (!url) return null;
 

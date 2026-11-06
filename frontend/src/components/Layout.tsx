@@ -29,6 +29,26 @@ export function Layout() {
   const location = useLocation();
   const showClose = location.pathname !== '/' && location.pathname !== '/media';
 
+  // Esc = universal close: exits any non-chat page (same as the X button),
+  // and on chat closes the open panel/drawer. Modals claim Esc first by
+  // calling preventDefault — the deferred check sees that.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setTimeout(() => {
+        if (e.defaultPrevented) return;
+        if (window.location.pathname !== '/') {
+          navigate('/');
+        } else {
+          window.dispatchEvent(new CustomEvent('jarvis:close-section'));
+          useAppStore.getState().setSidebarOpen(false);
+        }
+      }, 0);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navigate]);
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden relative" style={{ paddingTop: '3px' }}>
       <div className="hud-backdrop" aria-hidden="true" />

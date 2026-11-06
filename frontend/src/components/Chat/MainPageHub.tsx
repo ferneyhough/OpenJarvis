@@ -3188,7 +3188,18 @@ export function MainPageHub() {
         <ActionButton active={sidebarOpen} onClick={toggleSidebar} title="Open the side menu">
           <PanelLeft size={15} /> Menu
         </ActionButton>
-        <ActionButton active={false} onClick={() => navigate('/media')} title="Open TV, movie and show guides">
+        <ActionButton
+          active={false}
+          onClick={() => {
+            try {
+              void document.documentElement.requestFullscreen?.().catch(() => {});
+            } catch {
+              /* fullscreen unavailable (e.g. desktop webview) */
+            }
+            navigate('/media');
+          }}
+          title="Open TV, movie and show guides fullscreen"
+        >
           <Tv size={15} /> Guides
         </ActionButton>
         <ActionButton active={section === 'kids'} onClick={() => selectSection('kids')}>
