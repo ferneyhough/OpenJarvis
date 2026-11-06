@@ -1568,7 +1568,7 @@ function FilesCard() {
 type ToolboxTool = 'info' | 'drives' | 'processes' | 'startup' | 'registry' | 'duplicates' | 'ports' | 'shred' | 'power';
 
 function ToolboxCard() {
-  const [tool, setTool] = useState<ToolboxTool>('info');
+  const [tool, setTool] = useState<ToolboxTool | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [info, setInfo] = useState<Record<string, unknown> | null>(null);
@@ -3090,6 +3090,10 @@ export function MainPageHub() {
         {visitedSections.has('toolbox') && (
           <div hidden={section !== 'toolbox'}>
             <ToolboxPanel />
+            <GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." />
+            <GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." />
+            <GroupedAppsPanel groups={cleanerGroups} note="Cleaners, uninstallers (Geek Uninstaller, BCUninstaller, Revo) and registry/startup tools — the download arrow grabs the real installer where one exists." />
+            <GroupedAppsPanel groups={securityGroups} note="Antivirus needs a real install — the download arrow fetches it; Malwarebytes free is a good second-opinion scanner." />
             <CustomAppsBlock section="system" />
             <CustomAppsBlock section="files" />
             <CustomAppsBlock section="toolbox" />
