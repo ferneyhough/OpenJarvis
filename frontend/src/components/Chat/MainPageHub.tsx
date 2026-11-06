@@ -735,6 +735,17 @@ const cryptoGroups: CryptoGroup[] = [
     ],
   },
   {
+    label: 'Mining pools',
+    apps: [
+      { id: 'f2pool', name: 'F2Pool', url: 'https://www.f2pool.com/', color: '#f97316', description: 'Largest BTC mining pool — PPS+ payouts.', icon: Bitcoin },
+      { id: 'antpool', name: 'Antpool', url: 'https://www.antpool.com/', color: '#3b82f6', description: 'Major pool for BTC and many altcoins.', icon: Bitcoin },
+      { id: 'viabtc', name: 'ViaBTC', url: 'https://viabtc.com/', color: '#22c55e', description: 'Pool plus cloud mining and exchange.', icon: Bitcoin },
+      { id: 'braiins', name: 'Braiins Pool', url: 'https://braiins.com/pool', color: '#a855f7', description: 'Bitcoin-only pool with FPPS+ payouts.', icon: Bitcoin },
+      { id: 'foundry', name: 'Foundry USA', url: 'https://foundrydigital.com/', color: '#64748b', description: 'US-based pool — reputable, institutional grade.', icon: Bitcoin },
+      { id: 'poolin', name: 'Poolin', url: 'https://www.poolin.com/', color: '#ef4444', description: 'Large multi-coin pool with low fees.', icon: Bitcoin },
+    ],
+  },
+  {
     label: 'Faucets — small crypto rewards',
     apps: [
       { id: 'earnbitmoon', name: 'Earnbitmoon', url: 'https://earnbitmoon.club/', color: '#f59e0b', description: 'Faucet claims plus offerwalls and PTC tasks.', icon: Bitcoin },
