@@ -15,6 +15,11 @@ export async function refreshHubCustom(): Promise<void> {
   listeners.forEach((listener) => listener());
 }
 
+/** Non-reactive snapshot of the custom hub cache (for voice commands etc.). */
+export function getHubCustom(): HubCustomData {
+  return cache;
+}
+
 /** Reactive access to user-defined hub pills/apps (server-side store). */
 export function useHubCustom(): HubCustomData {
   const [, force] = useReducer((x: number) => x + 1, 0);

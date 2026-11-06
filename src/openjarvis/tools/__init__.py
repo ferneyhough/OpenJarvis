@@ -108,6 +108,16 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.tools.offline_wiki  # noqa: F401
+except ImportError:
+    pass
+
+try:
+    import openjarvis.tools.pc_care  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.tools.file_write  # noqa: F401
 except ImportError:
     pass

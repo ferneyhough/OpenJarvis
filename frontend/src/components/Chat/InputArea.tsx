@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { Send, Square, Paperclip, Search, Mic, MicOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore, generateId } from '../../lib/store';
@@ -46,6 +47,12 @@ import { FileExplorer } from './FileExplorer';
 import { generateMedia, convertMedia, openFreeMediaSite, openAllowedLink } from '../../lib/api';
 import { MUSIC_APPS, isShortReturnCommand, parseMusicVoiceCommand } from '../../lib/music-commands';
 import { runMusicAction } from '../../lib/music-actions';
+import { parseVoiceNavCommand, type VoiceNavAction } from '../../lib/voice-nav';
+import { allHubVoiceEntries } from './MainPageHub';
+import { getHubCustom } from '../../lib/hub-custom';
+import { openHubApp } from '../../lib/hub-open';
+import { closeInAppBrowser } from '../../lib/in-app-browser';
+import { launchSystemApp } from '../../lib/api';
 import type {
   ChatMessage,
   MessageTelemetry,
@@ -114,6 +121,7 @@ function useResearchCorpusSync(enabled: boolean): {
 }
 
 export function InputArea() {
+  const navigate = useNavigate();
   const [input, setInput] = useState('');
   const [micPerm, setMicPerm] = useState<string>('unknown');
   useEffect(() => {
@@ -930,6 +938,81 @@ export function InputArea() {
   }, []);
   const pendingVoiceMessagesRef = useRef<string[]>([]);
   const launchedHubWindowRef = useRef<Window | null>(null);
+
+  const runVoiceNav = useCallback((action: VoiceNavAction) => {
+    const dispatch = (name: string, detail?: unknown) =>
+      window.dispatchEvent(new CustomEvent(name, { detail }));
+    const goHome = () => {
+      if (window.location.pathname !== '/') navigate('/');
+    };
+    switch (action.type) {
+      case 'navigate':
+        navigate(action.path);
+        toast.success('Navigated.');
+        break;
+      case 'open-section':
+        goHome();
+        // Wait for MainPageHub to mount before dispatching.
+        setTimeout(() => dispatch('jarvis:open-section', { section: action.section }), 150);
+        toast.success(`Opening ${action.section.replace(/_/g, ' ')}.`);
+        break;
+      case 'close-section':
+        dispatch('jarvis:close-section');
+        toast.success('Panel closed.');
+        break;
+      case 'toggle-sidebar':
+        goHome();
+        useAppStore.getState().toggleSidebar();
+        break;
+      case 'media-tab':
+        if (window.location.pathname !== '/media') navigate('/media');
+        setTimeout(() => dispatch('jarvis:media-tab', { tab: action.tab }), 150);
+        break;
+      case 'catalog-search':
+        if (window.location.pathname !== '/media') navigate('/media');
+        setTimeout(() => {
+          dispatch('jarvis:media-tab', { tab: action.kind === 'movie' ? 'movies' : 'shows' });
+          setTimeout(() => dispatch('jarvis:catalog-search', { kind: action.kind, query: action.query }), 150);
+        }, 150);
+        toast.success(`Searching for "${action.query}".`);
+        break;
+      case 'guide-play':
+        if (window.location.pathname !== '/media') navigate('/media');
+        setTimeout(() => {
+          dispatch('jarvis:media-tab', { tab: 'guide' });
+          setTimeout(() => dispatch('jarvis:guide-play', { name: action.name }), 150);
+        }, 150);
+        toast.success(`Looking for channel "${action.name}".`);
+        break;
+      case 'open-app':
+        void openHubApp(action.url, action.name);
+        break;
+      case 'close-target':
+        if (action.target === 'browser') {
+          closeInAppBrowser();
+          toast.success('Browser closed.');
+        } else if (action.target === 'player') {
+          runMusicAction({ type: 'close-player' });
+        } else {
+          toast.info(`Can't close "${action.target}" by voice — say "Return to Jarvis" for apps Jarvis opened.`);
+        }
+        break;
+      case 'pc-action':
+        goHome();
+        setTimeout(() => {
+          dispatch('jarvis:open-section', { section: 'system' });
+          setTimeout(() => dispatch('jarvis:pc-action', { action: action.action }), 200);
+        }, 150);
+        toast.success('Running PC care…');
+        break;
+      case 'system-launch':
+        void launchSystemApp(action.app)
+          .then(() => toast.success(`${action.app} launched.`))
+          .catch((e) => toast.error(`Could not launch ${action.app}: ${e instanceof Error ? e.message : String(e)}`));
+        break;
+    }
+  }, [navigate]);
+
   const handleVoiceCommand = useCallback((text: string) => {
     const music = parseMusicVoiceCommand(text);
     if (music && music.type !== 'open-app') {
@@ -1068,13 +1151,21 @@ export function InputArea() {
       return;
     }
 
+    // General navigation: pills, pages, any hub app, guide channels, media search.
+    const custom = getHubCustom();
+    const nav = parseVoiceNavCommand(text, allHubVoiceEntries(), custom.apps, custom.sections);
+    if (nav) {
+      runVoiceNav(nav);
+      return;
+    }
+
     if (useAppStore.getState().streamState.isStreaming) {
       pendingVoiceMessagesRef.current.push(text);
       toast.info('Voice request queued until the current reply finishes.');
       return;
     }
     void sendMessage(text);
-  }, [sendMessage]);
+  }, [sendMessage, runVoiceNav]);
   const handsFree = useHandsFree({
     autoResume: handsFreeEnabled,
     onCommand: handleVoiceCommand,

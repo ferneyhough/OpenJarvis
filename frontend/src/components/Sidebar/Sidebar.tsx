@@ -7,7 +7,6 @@ import {
   Settings,
   Search,
   PanelLeftClose,
-  PanelLeft,
   Cpu,
   Rocket,
   Bot,
@@ -85,31 +84,27 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Collapse button when sidebar is closed */}
-      {!sidebarOpen && (
-        <button
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
           onClick={toggleSidebar}
-          className="fixed top-3 left-3 z-30 p-2 rounded-lg transition-colors cursor-pointer"
-          style={{ color: 'var(--color-text-secondary)', background: 'var(--color-bg-secondary)' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
-        >
-          <PanelLeft size={18} />
-        </button>
+          aria-hidden="true"
+        />
       )}
-
       <aside
         className={`
-          flex flex-col h-full shrink-0 transition-all duration-200 ease-in-out overflow-hidden
-          fixed md:relative z-30
-          ${sidebarOpen ? 'w-[260px]' : 'w-0'}
+          fixed inset-y-0 left-0 z-40 flex flex-col w-[260px] shrink-0 overflow-hidden
+          transition-transform duration-200 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
         style={{
           background: 'var(--color-sidebar)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          borderRight: sidebarOpen ? '1px solid var(--color-border)' : 'none',
+          borderRight: '1px solid var(--color-border)',
         }}
+        aria-hidden={!sidebarOpen}
       >
         <div className="flex flex-col h-full w-[260px]">
           {/* Header */}

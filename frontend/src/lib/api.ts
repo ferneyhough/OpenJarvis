@@ -2031,3 +2031,221 @@ export async function openBrowserWindow(url: string, title = ''): Promise<void> 
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('open_browser_window', { url, title });
 }
+
+// ---- Offline Wikipedia (ZIM) ----
+
+export interface WikiStatus {
+  available: boolean;
+  dir: string;
+  active: string | null;
+  files: { name: string; size: number; size_mb: number }[];
+}
+
+export async function fetchWikiStatus(): Promise<WikiStatus> {
+  const res = await apiFetch('/v1/wiki/status');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function activateWikiFile(name: string): Promise<void> {
+  const res = await apiFetch('/v1/wiki/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function deleteWikiFile(name: string): Promise<void> {
+  const res = await apiFetch(`/v1/wiki/file/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function downloadWikiFile(url: string): Promise<{ name: string; size: number; already: boolean }> {
+  const res = await apiFetch('/v1/wiki/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ---- PC care & files ----
+
+export interface PcScanResult {
+  duration_s: number;
+  disk: { total: number; used: number; free: number; free_gb: number };
+  temp: { count: number; bytes: number; sample: { path: string; size: number; name: string }[] };
+  empty_dirs: { count: number; sample: { path: string }[] };
+  dead_links: { count: number; sample: { path: string; target: string }[] };
+}
+
+export async function fetchPcScan(): Promise<PcScanResult> {
+  const res = await apiFetch('/v1/pc/scan');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function runPcClean(opts: { temp?: boolean; dead_links?: boolean; empty_dirs?: boolean }): Promise<{ freed_bytes: number; removed_files: number; removed_dirs: number; errors: number }> {
+  const res = await apiFetch('/v1/pc/clean', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export interface DefragStatus {
+  running: boolean;
+  started: number | null;
+  finished: number | null;
+  output: string;
+  returncode: number | null;
+}
+
+export async function startDefrag(): Promise<{ started: boolean; reason?: string }> {
+  const res = await apiFetch('/v1/pc/defrag/start', { method: 'POST' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchDefragStatus(): Promise<DefragStatus> {
+  const res = await apiFetch('/v1/pc/defrag/status');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export interface FileBrowseResult {
+  path: string;
+  parent: string | null;
+  dirs: { name: string; path: string }[];
+  files: { name: string; path: string; size: number }[];
+}
+
+export async function browseFiles(path?: string): Promise<FileBrowseResult> {
+  const res = await apiFetch(`/v1/files/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fileAction(path: string, action: 'open' | 'reveal' | 'delete'): Promise<void> {
+  const res = await apiFetch('/v1/files/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, action }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+}
+
+export async function launchSystemApp(app: string): Promise<void> {
+  const res = await apiFetch('/v1/pc/launch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+}
+
+// ---- Jarvis Toolbox ----
+
+export async function fetchPcInfo(): Promise<Record<string, unknown>> {
+  const res = await apiFetch('/v1/pc/info');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchPcDrives(): Promise<{ drives: { drive: string; total: number; used: number; free: number; free_gb: number }[] }> {
+  const res = await apiFetch('/v1/pc/drives');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export interface PcProcess { pid: number; name: string; mem_mb: number; user: string | null }
+export async function fetchPcProcesses(): Promise<{ processes: PcProcess[]; total: number }> {
+  const res = await apiFetch('/v1/pc/processes');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function killPcProcess(pid: number): Promise<void> {
+  const res = await apiFetch('/v1/pc/process/kill', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+}
+
+export interface StartupItem { hive: string; name: string; command: string; enabled: string }
+export async function fetchStartupItems(): Promise<{ items: StartupItem[] }> {
+  const res = await apiFetch('/v1/pc/startup');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function toggleStartupItem(item: StartupItem): Promise<void> {
+  const res = await apiFetch('/v1/pc/startup/toggle', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: item.name, hive: item.hive, enable: item.enabled !== 'true' }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+}
+
+export async function fetchRegistryOrphans(): Promise<{ total_programs: number; orphans: { name: string; location: string; key: string }[]; count: number }> {
+  const res = await apiFetch('/v1/pc/registry/orphans');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function findDuplicates(path: string): Promise<{ groups: { size: number; hash: string; files: string[] }[]; group_count: number; wasted_bytes: number }> {
+  const res = await apiFetch(`/v1/pc/duplicates?path=${encodeURIComponent(path)}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchListeningPorts(): Promise<{ ports: { port: number; addr: string; pid: number | null; process: string }[]; count: number }> {
+  const res = await apiFetch('/v1/pc/ports');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function shredFile(path: string, passes = 3): Promise<void> {
+  const res = await apiFetch('/v1/pc/shred', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, passes }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+}
+
+export async function pcPower(action: 'lock' | 'sleep' | 'shutdown' | 'restart' | 'cancel-shutdown', confirm = false): Promise<void> {
+  const res = await apiFetch('/v1/pc/power', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, confirm }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+}

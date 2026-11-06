@@ -48,10 +48,43 @@ import {
   Zap,
   Palette,
   Images,
+  PanelLeft,
+  HardDrive,
+  Eraser,
+  FolderOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
-import { isTauri, launchApp, fetchGuideDocument, launchGame, mcServer } from '../../lib/api';
+import {
+  isTauri,
+  launchApp,
+  fetchGuideDocument,
+  launchGame,
+  mcServer,
+  fetchPcScan,
+  runPcClean,
+  startDefrag,
+  fetchDefragStatus,
+  browseFiles,
+  fileAction,
+  launchSystemApp,
+  fetchPcInfo,
+  fetchPcDrives,
+  fetchPcProcesses,
+  killPcProcess,
+  fetchStartupItems,
+  toggleStartupItem,
+  fetchRegistryOrphans,
+  findDuplicates,
+  fetchListeningPorts,
+  shredFile,
+  pcPower,
+  type PcScanResult,
+  type FileBrowseResult,
+  type DefragStatus,
+  type StartupItem,
+  type PcProcess,
+} from '../../lib/api';
 import { getPlayniteLibrary, launchPlayniteGame, type PlayniteGame } from '../../lib/playnite';
 import { getSteamLibrary, launchSteamGame, type SteamLibrary } from '../../lib/steam';
 import { MediaPlayerModal, type MediaPlayerTarget } from '../MediaPlayerModal';
@@ -78,6 +111,7 @@ type HubSection =
   | 'record' | 'remote' | 'stores' | 'ai' | 'developer' | 'apps'
   | 'smart_home' | 'productivity' | 'finance' | 'news' | 'health'
   | 'travel' | 'education' | 'shopping' | 'tools' | 'privacy' | 'mods' | 'create'
+  | 'system' | 'cleaner' | 'security'
   // User-defined pills get dynamic string ids.
   | (string & {});
 type GameSource = 'steam' | 'playnite';
@@ -1222,6 +1256,601 @@ const createGroups: HubGroup[] = [
   },
 ];
 
+const cleanerGroups: HubGroup[] = [
+  {
+    label: 'Disk & junk cleaners',
+    apps: [
+      { id: 'ccleaner', name: 'CCleaner', url: 'https://www.ccleaner.com/', color: '#f05a28', description: 'Popular junk-file, registry and browser cleaner.', icon: Eraser },
+      { id: 'iobit-asc', name: 'IObit Advanced SystemCare', url: 'https://www.iobit.com/en/advanced-systemcare.php', color: '#2f80ed', description: 'All-in-one optimizer: junk, registry, startup, privacy sweep.', icon: Eraser },
+      { id: 'bleachbit', name: 'BleachBit', url: 'https://www.bleachbit.org/', color: '#8bc34a', description: 'Free open-source cleaner — deep system and browser wipe.', icon: Eraser },
+      { id: 'glary-utilities', name: 'Glary Utilities', url: 'https://www.glarysoft.com/', color: '#00a8e1', description: 'Registry, disk and privacy cleaner suite.', icon: Eraser },
+      { id: 'wise-care', name: 'Wise Care 365', url: 'https://www.wisecleaner.com/wise-care-365.html', color: '#4caf50', description: 'Cleaner + optimizer with health checks.', icon: Eraser },
+      { id: 'slimcleaner', name: 'SlimCleaner', url: 'https://slimcleaner.com/', color: '#7c3aed', description: 'Fast junk and privacy cleaner.', icon: Eraser },
+      { id: 'system-mechanic', name: 'IObit Uninstaller', url: 'https://www.iobit.com/en/iobit-uninstaller.php', color: '#f97316', description: 'Remove programs completely — leftovers included.', icon: Eraser },
+    ],
+  },
+  {
+    label: 'Uninstallers & leftover removal',
+    apps: [
+      { id: 'geek-uninstaller', name: 'Geek Uninstaller', url: 'https://geekuninstaller.com/', color: '#546e7a', description: 'Lightweight portable uninstaller — no install needed.', icon: Eraser },
+      { id: 'bcuninstaller', name: 'BCUninstaller', url: 'https://www.bcuninstaller.com/', color: '#e53935', description: 'Bulk uninstaller — remove many programs at once.', icon: Eraser },
+      { id: 'revo-uninstaller', name: 'Revo Uninstaller', url: 'https://www.revouninstaller.com/', color: '#00897b', description: 'Deep-clean uninstaller with leftover scanning.', icon: Eraser },
+      { id: 'your-uninstaller', name: 'Your Uninstaller', url: 'https://www.crystaloffice.com/products/your-uninstaller/', color: '#5c6bc0', description: 'Free uninstaller that hunts orphan registry entries.', icon: Eraser },
+    ],
+  },
+  {
+    label: 'Registry & startup tools',
+    apps: [
+      { id: 'autoruns', name: 'Autoruns', url: 'https://learn.microsoft.com/en-us/sysinternals/downloads/autoruns', color: '#00b4d8', description: 'Sysinternals — see everything that auto-starts on boot.', icon: Eraser },
+      { id: 'process-explorer', name: 'Process Explorer', url: 'https://learn.microsoft.com/en-us/sysinternals/downloads/process-explorer', color: '#00b4d8', description: 'Sysinternals process manager — deeper than Task Manager.', icon: Eraser },
+      { id: 'wise-registry', name: 'Wise Registry Cleaner', url: 'https://www.wisecleaner.com/wise-registry-cleaner.html', color: '#4caf50', description: 'Registry scan and repair tool.', icon: Eraser },
+    ],
+  },
+  {
+    label: 'Duplicate & space finders',
+    apps: [
+      { id: 'dupe-guru', name: 'dupeGuru', url: 'https://dupeguru.voltaicideas.net/', color: '#f9a825', description: 'Free open-source duplicate file finder.', icon: Eraser },
+      { id: 'windirstat', name: 'WinDirStat', url: 'https://windirstat.net/', color: '#ff7043', description: 'Visual disk-usage treemap — find what eats space.', icon: Eraser },
+      { id: 'treesize', name: 'TreeSize Free', url: 'https://www.jam-software.com/treesizefree', color: '#42a5f5', description: 'Folder-size explorer to hunt space hogs.', icon: Eraser },
+      { id: 'duplicate-photo', name: 'Awesome Duplicate Photo Finder', url: 'https://www.duplicatephotofinder.com/', color: '#ab47bc', description: 'Finds duplicate and similar photos.', icon: Eraser },
+    ],
+  },
+];
+
+const securityGroups: HubGroup[] = [
+  {
+    label: 'Antivirus',
+    apps: [
+      { id: 'bitdefender', name: 'Bitdefender', url: 'https://www.bitdefender.com/', color: '#0071ce', description: 'Top-rated antivirus with malware and ransomware protection.', icon: ShieldCheck },
+      { id: 'norton', name: 'Norton', url: 'https://us.norton.com/', color: '#ffc400', description: 'Antivirus + VPN + password manager suite.', icon: ShieldCheck },
+      { id: 'mcafee', name: 'McAfee', url: 'https://www.mcafee.com/', color: '#d32323', description: 'Antivirus with identity protection add-ons.', icon: ShieldCheck },
+      { id: 'kaspersky', name: 'Kaspersky', url: 'https://www.kaspersky.com/', color: '#00a65a', description: 'Antivirus, VPN and password manager.', icon: ShieldCheck },
+      { id: 'avast', name: 'Avast', url: 'https://www.avast.com/', color: '#ff7800', description: 'Free antivirus with optional paid features.', icon: ShieldCheck },
+      { id: 'avg', name: 'AVG', url: 'https://www.avg.com/', color: '#00b140', description: 'Free antivirus — same engine as Avast.', icon: ShieldCheck },
+      { id: 'eset', name: 'ESET', url: 'https://www.eset.com/', color: '#0066b3', description: 'Lightweight, low-resource antivirus.', icon: ShieldCheck },
+      { id: 'sophos-home', name: 'Sophos Home', url: 'https://home.sophos.com/', color: '#00a0dc', description: 'Free business-grade protection for home PCs.', icon: ShieldCheck },
+      { id: 'trend-micro', name: 'Trend Micro', url: 'https://www.trendmicro.com/', color: '#e4002b', description: 'Antivirus plus web threat protection.', icon: ShieldCheck },
+      { id: 'defender', name: 'Windows Defender', url: 'https://support.microsoft.com/en-us/windows/security', color: '#0078d4', description: 'Built-in protection — keep it updated, add Malwarebytes on top.', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Malware scanners & removal',
+    apps: [
+      { id: 'malwarebytes', name: 'Malwarebytes', url: 'https://www.malwarebytes.com/', color: '#6c5ce7', description: 'On-demand malware scanner — free version available.', icon: ShieldCheck },
+      { id: 'hitmanpro', name: 'HitmanPro', url: 'https://www.hitmanpro.com/', color: '#2d9cdb', description: 'Second-opinion cloud scanner for stubborn malware.', icon: ShieldCheck },
+      { id: 'zemana', name: 'Zemana AntiMalware', url: 'https://www.zemana.com/', color: '#f44336', description: 'Free on-demand antimalware scanner.', icon: ShieldCheck },
+      { id: 'kaspersky-vrt', name: 'Kaspersky Virus Removal Tool', url: 'https://www.kaspersky.com/downloads/virus-removal-tool', color: '#00a65a', description: 'Free standalone virus remover — no install.', icon: ShieldCheck },
+      { id: 'eSET-online', name: 'ESET Online Scanner', url: 'https://www.eset.com/online-scanner/', color: '#0066b3', description: 'Free browser-based second-opinion scan.', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Identity & breach monitoring',
+    apps: [
+      { id: 'haveibeenpwned', name: 'Have I Been Pwned', url: 'https://haveibeenpwned.com/', color: '#1a1a1a', description: 'Check if your email appeared in data breaches.', icon: ShieldCheck },
+      { id: 'firefox-monitor', name: 'Firefox Monitor', url: 'https://monitor.mozilla.org/', color: '#ff7139', description: 'Free breach alerts for your email.', icon: ShieldCheck },
+      { id: 'bitwarden-security', name: 'Bitwarden', url: 'https://bitwarden.com/', color: '#175DDC', description: 'Open-source password manager — free tier.', icon: ShieldCheck },
+    ],
+  },
+];
+
+function PcCareCard() {
+  const [scan, setScan] = useState<PcScanResult | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState('');
+  const [defrag, setDefrag] = useState<DefragStatus | null>(null);
+
+  const refreshDefrag = useCallback(() => {
+    fetchDefragStatus().then(setDefrag).catch(() => {});
+  }, []);
+
+  useEffect(() => { refreshDefrag(); }, [refreshDefrag]);
+  useEffect(() => {
+    if (!defrag?.running) return;
+    const t = window.setInterval(refreshDefrag, 5000);
+    return () => window.clearInterval(t);
+  }, [defrag?.running, refreshDefrag]);
+
+  const doScan = useCallback(async () => {
+    setBusy('scan'); setMsg('Scanning…');
+    try {
+      setScan(await fetchPcScan());
+      setMsg('');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Scan failed');
+    } finally {
+      setBusy(null);
+    }
+  }, []);
+
+  const doClean = useCallback(async (opts: { temp?: boolean; dead_links?: boolean; empty_dirs?: boolean }, label: string) => {
+    setBusy(label); setMsg(`Cleaning ${label}…`);
+    try {
+      const r = await runPcClean(opts);
+      setMsg(`Freed ${(r.freed_bytes / 1e6).toFixed(1)} MB — ${r.removed_files} files, ${r.removed_dirs} folders${r.errors ? `, ${r.errors} skipped` : ''}.`);
+      void doScan();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Clean failed');
+    } finally {
+      setBusy(null);
+    }
+  }, [doScan]);
+
+  const doDefrag = useCallback(async () => {
+    setBusy('defrag'); setMsg('Starting disk optimization…');
+    try {
+      await startDefrag();
+      setMsg('Optimization running in the background — this can take a while on HDDs.');
+      refreshDefrag();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Failed to start');
+    } finally {
+      setBusy(null);
+    }
+  }, [refreshDefrag]);
+
+  // Voice: "Jarvis clean my pc", "scan for junk", "defrag", "find empty folders".
+  useEffect(() => {
+    const onAction = (e: Event) => {
+      const action = (e as CustomEvent<{ action?: string }>).detail?.action;
+      if (action === 'scan') void doScan();
+      else if (action === 'clean-temp') void doClean({ temp: true }, 'temp files');
+      else if (action === 'clean-links') void doClean({ dead_links: true }, 'dead shortcuts');
+      else if (action === 'clean-folders') void doClean({ empty_dirs: true }, 'empty folders');
+      else if (action === 'clean-all') void doClean({ temp: true, dead_links: true, empty_dirs: true }, 'everything');
+      else if (action === 'defrag') void doDefrag();
+    };
+    window.addEventListener('jarvis:pc-action', onAction);
+    return () => window.removeEventListener('jarvis:pc-action', onAction);
+  }, [doScan, doClean, doDefrag]);
+
+  const btn = 'text-xs px-2.5 py-1.5 rounded-lg cursor-pointer disabled:opacity-50';
+  const btnStyle = { background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' } as const;
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <HardDrive size={16} style={{ color: 'var(--color-accent)' }} />
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>PC Care</h3>
+        <span className="flex-1" />
+        <button onClick={() => void doScan()} disabled={busy !== null} className={btn} style={btnStyle}>
+          {busy === 'scan' ? 'Scanning…' : 'Scan PC'}
+        </button>
+      </div>
+
+      {scan && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-xs">
+          <div className="rounded-lg p-2" style={btnStyle}>
+            <div style={{ color: 'var(--color-text-tertiary)' }}>Disk free</div>
+            <div className="font-semibold" style={{ color: 'var(--color-text)' }}>{scan.disk.free_gb} GB</div>
+          </div>
+          <div className="rounded-lg p-2" style={btnStyle}>
+            <div style={{ color: 'var(--color-text-tertiary)' }}>Temp junk</div>
+            <div className="font-semibold" style={{ color: 'var(--color-text)' }}>{(scan.temp.bytes / 1e6).toFixed(0)} MB · {scan.temp.count} files</div>
+          </div>
+          <div className="rounded-lg p-2" style={btnStyle}>
+            <div style={{ color: 'var(--color-text-tertiary)' }}>Empty folders</div>
+            <div className="font-semibold" style={{ color: 'var(--color-text)' }}>{scan.empty_dirs.count}</div>
+          </div>
+          <div className="rounded-lg p-2" style={btnStyle}>
+            <div style={{ color: 'var(--color-text-tertiary)' }}>Dead shortcuts</div>
+            <div className="font-semibold" style={{ color: 'var(--color-text)' }}>{scan.dead_links.count}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 mb-2">
+        <button onClick={() => void doClean({ temp: true }, 'temp files')} disabled={busy !== null} className={btn} style={btnStyle}>Clean temp files</button>
+        <button onClick={() => void doClean({ dead_links: true }, 'dead shortcuts')} disabled={busy !== null} className={btn} style={btnStyle}>Remove dead links</button>
+        <button onClick={() => void doClean({ empty_dirs: true }, 'empty folders')} disabled={busy !== null} className={btn} style={btnStyle}>Remove empty folders</button>
+        <button onClick={() => void doClean({ temp: true, dead_links: true, empty_dirs: true }, 'everything')} disabled={busy !== null} className={btn}
+          style={{ ...btnStyle, borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}>Clean all</button>
+        <button onClick={() => void doDefrag()} disabled={busy !== null || defrag?.running} className={btn} style={btnStyle}>
+          {defrag?.running ? 'Optimizing…' : 'Optimize disk'}
+        </button>
+      </div>
+
+      {defrag?.running && <div className="text-xs mb-2" style={{ color: 'var(--color-accent)' }}>Disk optimization running…</div>}
+      {defrag && !defrag.running && defrag.finished && (
+        <div className="text-xs mb-2" style={{ color: 'var(--color-text-tertiary)' }}>
+          Last optimization finished{defrag.returncode === 0 ? ' successfully' : ` (code ${defrag.returncode})`}.
+        </div>
+      )}
+      {msg && <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{msg}</div>}
+      <div className="text-[11px] mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+        Cleaning only touches temp files, dead shortcuts and empty folders inside your profile — never your documents or downloads.
+        Say "Jarvis scan my PC" or "Jarvis clean my PC" to run it by voice.
+      </div>
+    </div>
+  );
+}
+
+function FilesCard() {
+  const [data, setData] = useState<FileBrowseResult | null>(null);
+  const [pathInput, setPathInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(async (p?: string) => {
+    setBusy(true); setMsg('');
+    try {
+      const d = await browseFiles(p);
+      setData(d);
+      setPathInput(d.path);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Browse failed');
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const act = async (path: string, action: 'open' | 'reveal' | 'delete') => {
+    setMsg('');
+    try {
+      await fileAction(path, action);
+      if (action === 'delete') void load(data?.path);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Action failed');
+    }
+  };
+
+  const rowBtn = 'text-[11px] px-1.5 py-0.5 rounded cursor-pointer';
+  const rowBtnStyle = { color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' } as const;
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+      <div className="flex items-center gap-2 mb-2">
+        <FolderOpen size={16} style={{ color: 'var(--color-accent)' }} />
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>File Explorer</h3>
+      </div>
+      <div className="flex items-center gap-2 mb-2">
+        <button onClick={() => data?.parent && void load(data.parent)} disabled={!data?.parent || busy}
+          className="text-xs px-2 py-1 rounded cursor-pointer disabled:opacity-40"
+          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>Up</button>
+        <input
+          value={pathInput}
+          onChange={(e) => setPathInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void load(pathInput)}
+          placeholder="C:\ path…"
+          className="flex-1 text-xs px-2 py-1 rounded outline-none"
+          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+        />
+        <button onClick={() => void load(pathInput)} disabled={busy}
+          className="text-xs px-2 py-1 rounded cursor-pointer disabled:opacity-50"
+          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>Go</button>
+      </div>
+      {msg && <div className="text-xs mb-2" style={{ color: 'var(--color-danger, #ef4444)' }}>{msg}</div>}
+      <div className="max-h-64 overflow-y-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
+        {!data && <div className="text-xs p-3" style={{ color: 'var(--color-text-tertiary)' }}>Loading…</div>}
+        {data && (
+          <table className="w-full text-xs">
+            <tbody>
+              {data.dirs.map((d) => (
+                <tr key={d.path} className="cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
+                  onClick={() => void load(d.path)}>
+                  <td className="px-2 py-1" style={{ color: 'var(--color-accent)' }}>📁 {d.name}</td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    <button className={rowBtn} style={rowBtnStyle} onClick={(e) => { e.stopPropagation(); void act(d.path, 'open'); }}>Open</button>
+                    <button className={rowBtn} style={rowBtnStyle} onClick={(e) => { e.stopPropagation(); void act(d.path, 'reveal'); }}>Reveal</button>
+                  </td>
+                </tr>
+              ))}
+              {data.files.map((f) => (
+                <tr key={f.path}>
+                  <td className="px-2 py-1" style={{ color: 'var(--color-text)' }}>📄 {f.name}
+                    <span className="ml-2" style={{ color: 'var(--color-text-tertiary)' }}>{(f.size / 1e6).toFixed(1)} MB</span>
+                  </td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    <button className={rowBtn} style={rowBtnStyle} onClick={() => void act(f.path, 'open')}>Open</button>
+                    <button className={rowBtn} style={rowBtnStyle} onClick={() => void act(f.path, 'reveal')}>Reveal</button>
+                    <button className={rowBtn} style={{ ...rowBtnStyle, color: 'var(--color-danger, #ef4444)' }}
+                      onClick={() => { if (window.confirm(`Delete ${f.name}?`)) void act(f.path, 'delete'); }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {data.dirs.length === 0 && data.files.length === 0 && (
+                <tr><td className="px-2 py-3 text-center" style={{ color: 'var(--color-text-tertiary)' }}>Empty folder</td></tr>
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <div className="text-[11px] mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+        Browse any folder on this PC. Open launches the file/folder, Reveal shows it in Explorer, Delete removes files (folders only if empty).
+      </div>
+    </div>
+  );
+}
+
+type ToolboxTool = 'info' | 'drives' | 'processes' | 'startup' | 'registry' | 'duplicates' | 'ports' | 'shred' | 'power';
+
+function ToolboxCard() {
+  const [tool, setTool] = useState<ToolboxTool>('info');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [info, setInfo] = useState<Record<string, unknown> | null>(null);
+  const [drives, setDrives] = useState<{ drive: string; total: number; used: number; free: number; free_gb: number }[]>([]);
+  const [procs, setProcs] = useState<PcProcess[]>([]);
+  const [startup, setStartup] = useState<StartupItem[]>([]);
+  const [orphans, setOrphans] = useState<{ name: string; location: string; key: string }[]>([]);
+  const [dupPath, setDupPath] = useState('C:\\Users');
+  const [dups, setDups] = useState<{ groups: { size: number; files: string[] }[]; group_count: number; wasted_bytes: number } | null>(null);
+  const [ports, setPorts] = useState<{ port: number; addr: string; pid: number | null; process: string }[]>([]);
+  const [shredPath, setShredPath] = useState('');
+
+  const TOOLS: { id: ToolboxTool; label: string }[] = [
+    { id: 'info', label: 'System Info' },
+    { id: 'drives', label: 'Drives' },
+    { id: 'processes', label: 'Processes' },
+    { id: 'startup', label: 'Startup Manager' },
+    { id: 'registry', label: 'Registry Orphans' },
+    { id: 'duplicates', label: 'Duplicate Finder' },
+    { id: 'ports', label: 'Open Ports' },
+    { id: 'shred', label: 'File Shredder' },
+    { id: 'power', label: 'Power' },
+  ];
+
+  const gb = (b: number) => `${(b / 1e9).toFixed(1)} GB`;
+  const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setMsg('');
+    try { await fn(); } catch (e) { setMsg(e instanceof Error ? e.message : 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+  const loadTool = (t: ToolboxTool) => {
+    setTool(t); setMsg('');
+    if (t === 'info') void run(async () => setInfo(await fetchPcInfo()));
+    if (t === 'drives') void run(async () => setDrives((await fetchPcDrives()).drives));
+    if (t === 'processes') void run(async () => setProcs((await fetchPcProcesses()).processes));
+    if (t === 'startup') void run(async () => setStartup((await fetchStartupItems()).items));
+    if (t === 'registry') void run(async () => setOrphans((await fetchRegistryOrphans()).orphans));
+    if (t === 'ports') void run(async () => setPorts((await fetchListeningPorts()).ports));
+  };
+
+  const smallBtn = 'text-[11px] px-2 py-1 rounded cursor-pointer disabled:opacity-50';
+  const smallBtnStyle = { background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' } as const;
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <Wrench size={16} style={{ color: 'var(--color-accent)' }} />
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Jarvis Toolbox</h3>
+        <span className="flex-1" />
+        {TOOLS.map((t) => (
+          <button key={t.id} onClick={() => loadTool(t.id)}
+            className="text-xs px-2.5 py-1.5 rounded-lg cursor-pointer"
+            style={{
+              background: tool === t.id ? 'var(--color-accent-subtle)' : 'var(--color-bg-secondary)',
+              color: tool === t.id ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+              border: `1px solid ${tool === t.id ? 'var(--color-accent)' : 'var(--color-border)'}`,
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {msg && <div className="text-xs mb-2" style={{ color: 'var(--color-danger, #ef4444)' }}>{msg}</div>}
+      {busy && <div className="text-xs mb-2" style={{ color: 'var(--color-text-tertiary)' }}>Working…</div>}
+
+      {tool === 'info' && info && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          {Object.entries(info).map(([k, v]) => (
+            <div key={k} className="rounded-lg p-2" style={smallBtnStyle}>
+              <div style={{ color: 'var(--color-text-tertiary)' }}>{k.replace(/_/g, ' ')}</div>
+              <div className="font-semibold break-all" style={{ color: 'var(--color-text)' }}>
+                {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tool === 'drives' && (
+        <div className="space-y-1 text-xs">
+          {drives.map((d) => (
+            <div key={d.drive} className="flex items-center gap-3">
+              <span className="w-10 font-semibold" style={{ color: 'var(--color-text)' }}>{d.drive}</span>
+              <div className="flex-1 h-2 rounded" style={{ background: 'var(--color-border)' }}>
+                <div className="h-2 rounded" style={{ width: `${Math.min(100, (d.used / d.total) * 100)}%`, background: 'var(--color-accent)' }} />
+              </div>
+              <span style={{ color: 'var(--color-text-tertiary)' }}>{gb(d.free)} free of {gb(d.total)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tool === 'processes' && (
+        <div className="max-h-56 overflow-y-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
+          <table className="w-full text-xs">
+            <thead><tr style={{ color: 'var(--color-text-tertiary)' }}>
+              <th className="text-left px-2 py-1">PID</th><th className="text-left px-2 py-1">Name</th>
+              <th className="text-right px-2 py-1">Memory</th><th className="px-2 py-1"></th>
+            </tr></thead>
+            <tbody>
+              {procs.map((p) => (
+                <tr key={p.pid} style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <td className="px-2 py-1" style={{ color: 'var(--color-text-tertiary)' }}>{p.pid}</td>
+                  <td className="px-2 py-1" style={{ color: 'var(--color-text)' }}>{p.name}</td>
+                  <td className="px-2 py-1 text-right" style={{ color: 'var(--color-text)' }}>{p.mem_mb} MB</td>
+                  <td className="px-2 py-1 text-right">
+                    <button className={smallBtn} style={{ ...smallBtnStyle, color: 'var(--color-danger, #ef4444)' }}
+                      onClick={() => { if (window.confirm(`Kill ${p.name} (${p.pid})?`)) void run(async () => { await killPcProcess(p.pid); setProcs((await fetchPcProcesses()).processes); }); }}>
+                      Kill
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tool === 'startup' && (
+        <div className="max-h-56 overflow-y-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
+          <table className="w-full text-xs">
+            <tbody>
+              {startup.map((s) => (
+                <tr key={`${s.hive}|${s.name}`} style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <td className="px-2 py-1" style={{ color: 'var(--color-text)' }}>{s.name}
+                    <div className="truncate max-w-md" style={{ color: 'var(--color-text-tertiary)' }}>{s.command}</div>
+                  </td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    <span className="mr-2 text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>{s.hive}</span>
+                    <button className={smallBtn} style={smallBtnStyle}
+                      onClick={() => void run(async () => { await toggleStartupItem(s); setStartup((await fetchStartupItems()).items); })}>
+                      {s.enabled === 'true' ? 'Disable' : 'Enable'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tool === 'registry' && (
+        <div className="text-xs">
+          <div className="mb-2" style={{ color: 'var(--color-text-secondary)' }}>{orphans.length} orphaned uninstall entries found.</div>
+          <div className="max-h-48 overflow-y-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
+            {orphans.map((o) => (
+              <div key={o.key} className="px-2 py-1" style={{ borderTop: '1px solid var(--color-border)', color: 'var(--color-text)' }}>
+                {o.name} <span style={{ color: 'var(--color-text-tertiary)' }}>— {o.location}</span>
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+            Review-only — removing registry entries is done via an uninstaller (Cleaner pill), not here.
+          </div>
+        </div>
+      )}
+
+      {tool === 'duplicates' && (
+        <div className="text-xs space-y-2">
+          <div className="flex gap-2">
+            <input value={dupPath} onChange={(e) => setDupPath(e.target.value)}
+              className="flex-1 px-2 py-1 rounded outline-none" style={smallBtnStyle} placeholder="Folder to scan…" />
+            <button className={smallBtn} style={smallBtnStyle} disabled={busy}
+              onClick={() => void run(async () => setDups(await findDuplicates(dupPath)))}>Scan</button>
+          </div>
+          {dups && (
+            <div>
+              <div className="mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                {dups.group_count} duplicate groups — up to {gb(dups.wasted_bytes)} reclaimable.
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
+                {dups.groups.map((g, i) => (
+                  <div key={i} className="px-2 py-1" style={{ borderTop: '1px solid var(--color-border)' }}>
+                    <span style={{ color: 'var(--color-accent)' }}>{mb(g.size)}</span>
+                    {g.files.map((f) => (
+                      <div key={f} className="truncate" style={{ color: 'var(--color-text-tertiary)' }}>{f}</div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tool === 'ports' && (
+        <div className="max-h-56 overflow-y-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
+          <table className="w-full text-xs">
+            <tbody>
+              {ports.map((p) => (
+                <tr key={`${p.port}-${p.pid}`} style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <td className="px-2 py-1" style={{ color: 'var(--color-text)' }}>{p.process}</td>
+                  <td className="px-2 py-1" style={{ color: 'var(--color-text-tertiary)' }}>{p.addr}:{p.port} · PID {p.pid}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tool === 'shred' && (
+        <div className="text-xs space-y-2">
+          <div className="flex gap-2">
+            <input value={shredPath} onChange={(e) => setShredPath(e.target.value)}
+              className="flex-1 px-2 py-1 rounded outline-none" style={smallBtnStyle} placeholder="Full path to file…" />
+            <button className={smallBtn} style={{ ...smallBtnStyle, color: 'var(--color-danger, #ef4444)' }} disabled={busy || !shredPath}
+              onClick={() => {
+                if (window.confirm(`Permanently shred ${shredPath}? This cannot be undone.`)) {
+                  void run(async () => { await shredFile(shredPath); setMsg('File shredded.'); setShredPath(''); });
+                }
+              }}>Shred</button>
+          </div>
+          <div style={{ color: 'var(--color-text-tertiary)' }}>Overwrites the file 3× before deleting — for sensitive files only.</div>
+        </div>
+      )}
+
+      {tool === 'power' && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <button className={smallBtn} style={smallBtnStyle} onClick={() => void run(() => pcPower('lock').then(() => setMsg('Locked.')))}>Lock</button>
+          <button className={smallBtn} style={smallBtnStyle} onClick={() => void run(() => pcPower('sleep').then(() => setMsg('Sleeping…')))}>Sleep</button>
+          <button className={smallBtn} style={smallBtnStyle}
+            onClick={() => void run(() => pcPower('cancel-shutdown').then(() => setMsg('Shutdown cancelled.')))}>Cancel shutdown</button>
+          <button className={smallBtn} style={{ ...smallBtnStyle, color: 'var(--color-danger, #ef4444)' }}
+            onClick={() => { if (window.confirm('Restart this PC in 60 seconds?')) void run(() => pcPower('restart', true).then(() => setMsg('Restart scheduled.'))); }}>Restart</button>
+          <button className={smallBtn} style={{ ...smallBtnStyle, color: 'var(--color-danger, #ef4444)' }}
+            onClick={() => { if (window.confirm('Shut down this PC in 60 seconds?')) void run(() => pcPower('shutdown', true).then(() => setMsg('Shutdown scheduled.'))); }}>Shut down</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SystemPanel() {
+  const apps = [
+    { name: 'File Explorer', app: 'explorer', desc: 'Windows file manager' },
+    { name: 'Notepad', app: 'notepad', desc: 'Plain-text editor' },
+    { name: 'Calculator', app: 'calculator', desc: 'Windows calculator' },
+    { name: 'Paint', app: 'paint', desc: 'Image editor' },
+    { name: 'Command Prompt', app: 'command prompt', desc: 'cmd.exe' },
+    { name: 'PowerShell', app: 'powershell', desc: 'PowerShell console' },
+    { name: 'Task Manager', app: 'task manager', desc: 'Processes & performance' },
+    { name: 'Windows Settings', app: 'settings', desc: 'System settings app' },
+  ];
+  const [msg, setMsg] = useState('');
+  const launch = async (app: string, name: string) => {
+    setMsg('');
+    try {
+      await launchSystemApp(app);
+      toast.success(`${name} launched.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Launch failed');
+      toast.error(`Could not launch ${name}`);
+    }
+  };
+  return (
+    <div className="space-y-4 px-4 pb-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PcCareCard />
+        <FilesCard />
+      </div>
+      <ToolboxCard />
+      <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+        <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>Windows apps</h3>
+        <div className="flex flex-wrap gap-2">
+          {apps.map((a) => (
+            <button key={a.app} onClick={() => void launch(a.app, a.name)} title={a.desc}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm"
+              style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
+              {a.name}
+            </button>
+          ))}
+        </div>
+        {msg && <div className="text-xs mt-2" style={{ color: 'var(--color-danger, #ef4444)' }}>{msg}</div>}
+        <div className="text-[11px] mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+          Or say it: "Jarvis open notepad", "Jarvis open calculator", "Jarvis open file explorer".
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GroupedAppsPanel({ groups, note }: { groups: HubGroup[]; note?: string }) {
   return (
     <div className="space-y-4 px-4 pb-4">
@@ -2241,11 +2870,66 @@ function CustomPillPanel({ sectionId, label }: { sectionId: string; label: strin
   );
 }
 
+export interface HubVoiceEntry {
+  name: string;
+  url: string;
+  section: string;
+}
+
+/** Every launchable app tile across all hub sections — used by voice commands. */
+export function allHubVoiceEntries(): HubVoiceEntry[] {
+  const grouped = (
+    groups: Array<{ apps: HubService[] }>,
+    section: string,
+  ): HubVoiceEntry[] => groups.flatMap((g) => g.apps.map((a) => ({ name: a.name, url: a.url, section })));
+  const flat = (apps: HubService[], section: string): HubVoiceEntry[] =>
+    apps.map((a) => ({ name: a.name, url: a.url, section }));
+  const entries: HubVoiceEntry[] = [
+    ...flat(kidsApps, 'kids'),
+    ...grouped(cryptoGroups, 'crypto'),
+    ...grouped(appsGroups, 'apps'),
+    ...grouped(modsGroups, 'mods'),
+    ...grouped(createGroups, 'create'),
+    ...grouped(smartHomeGroups, 'smart_home'),
+    ...grouped(productivityGroups, 'productivity'),
+    ...grouped(financeGroups, 'finance'),
+    ...grouped(newsGroups, 'news'),
+    ...grouped(healthGroups, 'health'),
+    ...grouped(travelGroups, 'travel'),
+    ...grouped(educationGroups, 'education'),
+    ...grouped(shoppingGroups, 'shopping'),
+    ...grouped(toolsGroups, 'tools'),
+    ...grouped(privacyGroups, 'privacy'),
+    ...grouped(cleanerGroups, 'cleaner'),
+    ...grouped(securityGroups, 'security'),
+    ...flat(musicServiceApps(MUSIC_APPS), 'music'),
+    ...flat(browserApps, 'browsers'),
+    ...flat(socialApps, 'social'),
+    ...flat(mediaApps, 'media'),
+    ...flat(streamingDestinations, 'record'),
+    ...flat(streamingTools, 'record'),
+    ...flat(remoteApps, 'remote'),
+    ...flat(storeApps, 'stores'),
+    ...aiTools.map((a) => ({ name: a.name, url: a.url, section: 'ai' })),
+    ...aiApps.map((a) => ({ name: a.name, url: a.url, section: 'ai' })),
+  ];
+  // Dedupe by name+url, preferring the first (most specific) section.
+  const seen = new Set<string>();
+  return entries.filter((e) => {
+    const key = `${e.name.toLowerCase()}|${e.url}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function MainPageHub() {
   const navigate = useNavigate();
   const [section, setSection] = useState<HubSection | null>(null);
   const [visitedSections, setVisitedSections] = useState<Set<HubSection>>(() => new Set());
   const developerModeEnabled = useAppStore((state) => state.settings.developerModeEnabled);
+  const sidebarOpen = useAppStore((state) => state.sidebarOpen);
+  const toggleSidebar = useAppStore((state) => state.toggleSidebar);
   const { sections: customSections } = useHubCustom();
   useEffect(() => {
     if (!developerModeEnabled && section === 'developer') setSection(null);
@@ -2255,9 +2939,32 @@ export function MainPageHub() {
     setVisitedSections((current) => new Set(current).add(next));
   };
 
+  // Voice commands: "Jarvis open mods", "close panel", "menu".
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = (e as CustomEvent<{ section?: string }>).detail?.section;
+      if (!id) return;
+      setSection(id as HubSection);
+      setVisitedSections((current) => new Set(current).add(id as HubSection));
+    };
+    const onClose = () => setSection(null);
+    const onToggleMenu = () => toggleSidebar();
+    window.addEventListener('jarvis:open-section', onOpen);
+    window.addEventListener('jarvis:close-section', onClose);
+    window.addEventListener('jarvis:toggle-sidebar', onToggleMenu);
+    return () => {
+      window.removeEventListener('jarvis:open-section', onOpen);
+      window.removeEventListener('jarvis:close-section', onClose);
+      window.removeEventListener('jarvis:toggle-sidebar', onToggleMenu);
+    };
+  }, [toggleSidebar]);
+
   return (
     <section className="shrink-0 border-b px-4 pt-2" style={{ borderColor: 'var(--color-border)' }} aria-label="Games, social, media, remote access, stores, and AI">
       <nav className="flex flex-wrap items-center gap-2 pb-2" aria-label="Main page sections">
+        <ActionButton active={sidebarOpen} onClick={toggleSidebar} title="Open the side menu">
+          <PanelLeft size={15} /> Menu
+        </ActionButton>
         <ActionButton active={false} onClick={() => navigate('/media')} title="Open TV, movie and show guides">
           <Tv size={15} /> Guides
         </ActionButton>
@@ -2305,6 +3012,15 @@ export function MainPageHub() {
         </ActionButton>
         <ActionButton active={section === 'privacy'} onClick={() => selectSection('privacy')}>
           <ShieldCheck size={15} /> Privacy
+        </ActionButton>
+        <ActionButton active={section === 'system'} onClick={() => selectSection('system')}>
+          <HardDrive size={15} /> System
+        </ActionButton>
+        <ActionButton active={section === 'cleaner'} onClick={() => selectSection('cleaner')}>
+          <Eraser size={15} /> Cleaner
+        </ActionButton>
+        <ActionButton active={section === 'security'} onClick={() => selectSection('security')}>
+          <ShieldCheck size={15} /> Security
         </ActionButton>
         <ActionButton active={section === 'music'} onClick={() => selectSection('music')}>
           <Music2 size={15} /> Music
@@ -2372,6 +3088,9 @@ export function MainPageHub() {
         {visitedSections.has('shopping') && <div hidden={section !== 'shopping'}><GroupedAppsPanel groups={shoppingGroups} note="Retailers open in your browser — deals sites aggregate community-verified offers." /><CustomAppsBlock section="shopping" /></div>}
         {visitedSections.has('tools') && <div hidden={section !== 'tools'}><GroupedAppsPanel groups={toolsGroups} note="The download arrow fetches the real installer — files land in ~/.openjarvis/installers first." /><CustomAppsBlock section="tools" /></div>}
         {visitedSections.has('privacy') && <div hidden={section !== 'privacy'}><GroupedAppsPanel groups={privacyGroups} note="VPNs and password managers require your own accounts — use official sites only for sign-up." /><CustomAppsBlock section="privacy" /></div>}
+        {visitedSections.has('system') && <div hidden={section !== 'system'}><SystemPanel /><CustomAppsBlock section="system" /></div>}
+        {visitedSections.has('cleaner') && <div hidden={section !== 'cleaner'}><GroupedAppsPanel groups={cleanerGroups} note="Cleaners and uninstallers — the download arrow grabs the real installer where one exists." /><CustomAppsBlock section="cleaner" /></div>}
+        {visitedSections.has('security') && <div hidden={section !== 'security'}><GroupedAppsPanel groups={securityGroups} note="Antivirus needs a real install — the download arrow fetches it; Malwarebytes free is a good second-opinion scanner." /><CustomAppsBlock section="security" /></div>}
         {customSections.map((custom) =>
           visitedSections.has(custom.id) ? (
             <div key={custom.id} hidden={section !== custom.id}>

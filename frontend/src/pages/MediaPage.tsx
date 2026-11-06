@@ -303,20 +303,35 @@ function CatalogTab({ type }: { type: 'movie' | 'series' }) {
     void loadCatalog();
   }, [loadCatalog]);
 
-  const runSearch = async () => {
-    if (query.trim().length < 2) return;
+  const runSearch = useCallback(async (override?: string) => {
+    const term = (override ?? query).trim();
+    if (term.length < 2) return;
     setLoading(true);
     setError('');
     setRows([]);
     try {
-      const data = await searchGuide(query.trim(), type);
+      const data = await searchGuide(term, type);
       setItems(data.items);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed');
     } finally {
       setLoading(false);
     }
-  };
+  }, [query, type]);
+
+  // Voice commands: "Jarvis watch/find/play <title>".
+  useEffect(() => {
+    const onSearch = (e: Event) => {
+      const d = (e as CustomEvent<{ kind?: string; query?: string }>).detail;
+      if (!d?.query) return;
+      const want = type === 'movie' ? 'movie' : 'series';
+      if (d.kind && d.kind !== want) return;
+      setQuery(d.query);
+      void runSearch(d.query);
+    };
+    window.addEventListener('jarvis:catalog-search', onSearch);
+    return () => window.removeEventListener('jarvis:catalog-search', onSearch);
+  }, [runSearch, type]);
 
   const openDetail = async (item: GuideItem) => {
     if (!item.imdb_id) return;
@@ -1792,6 +1807,51 @@ function IptvTab() {
       .finally(() => setProbing(null));
   };
 
+  // Voice commands: "Jarvis play channel <name>" / "tune to <name>".
+  const pendingVoiceChannel = useRef<string | null>(null);
+  useEffect(() => {
+    const findMatch = (name: string) => {
+      const n = name.toLowerCase();
+      return channels.find((c) => c.name.toLowerCase().includes(n))
+        ?? channels.find((c) => n.includes(c.name.toLowerCase()));
+    };
+    const onPlay = (e: Event) => {
+      const name = (e as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      if (!name) return;
+      setQuery(name);
+      const match = findMatch(name);
+      if (match) {
+        pendingVoiceChannel.current = null;
+        playChannel(match);
+      } else {
+        pendingVoiceChannel.current = name;
+        setPlayNotice(`Looking for "${name}" — loading channels…`);
+        if (!loaded) void loadChannels();
+      }
+    };
+    window.addEventListener('jarvis:guide-play', onPlay);
+    return () => window.removeEventListener('jarvis:guide-play', onPlay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channels, loaded]);
+
+  // Once channels finish loading, play the pending voice-requested channel.
+  useEffect(() => {
+    const pending = pendingVoiceChannel.current;
+    if (!pending || channels.length === 0) return;
+    const n = pending.toLowerCase();
+    const match = channels.find((c) => c.name.toLowerCase().includes(n))
+      ?? channels.find((c) => n.includes(c.name.toLowerCase()));
+    if (match) {
+      pendingVoiceChannel.current = null;
+      setPlayNotice('');
+      playChannel(match);
+    } else if (loaded) {
+      pendingVoiceChannel.current = null;
+      setPlayNotice(`No channel matching "${pending}" found — check the spelling or region.`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channels, loaded]);
+
   // Attach the stream once the <video> element exists (it mounts with `playing`).
   useEffect(() => {
     const video = videoRef.current;
@@ -2293,6 +2353,16 @@ function IptvTab() {
 
 export function MediaPage() {
   const [tab, setTab] = useState<Tab>('guide');
+
+  // Voice commands: "Jarvis open the guide / movies / shows / local / links".
+  useEffect(() => {
+    const onTab = (e: Event) => {
+      const next = (e as CustomEvent<{ tab?: Tab }>).detail?.tab;
+      if (next) setTab(next);
+    };
+    window.addEventListener('jarvis:media-tab', onTab);
+    return () => window.removeEventListener('jarvis:media-tab', onTab);
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden px-6 py-10">

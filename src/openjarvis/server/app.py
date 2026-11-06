@@ -28,6 +28,8 @@ from openjarvis.server.digest_routes import create_digest_router
 from openjarvis.server.game_routes import games_router
 from openjarvis.server.guide_routes import guide_router
 from openjarvis.server.hub_routes import hub_router
+from openjarvis.server.wiki_routes import wiki_router
+from openjarvis.server.pc_care_routes import pc_router
 from openjarvis.server.installer_routes import installer_router
 from openjarvis.server.ivue_routes import ivue_router
 from openjarvis.server.vod_routes import vod_router
@@ -508,6 +510,8 @@ def create_app(
     app.include_router(guide_router)
     app.include_router(installer_router)
     app.include_router(hub_router)
+    app.include_router(wiki_router)
+    app.include_router(pc_router)
     app.include_router(ivue_router)
     app.include_router(vod_router)
     app.include_router(games_router)
