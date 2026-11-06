@@ -112,6 +112,7 @@ import {
   openGameLauncher,
   type GameLauncherId,
 } from '../../lib/game-launchers';
+import { PromptLabPanel } from './PromptLabPanel';
 
 type HubSection =
   | 'kids' | 'crypto' | 'games' | 'social' | 'music' | 'browsers' | 'media'
@@ -3293,6 +3294,7 @@ export function MainPageHub() {
         {visitedSections.has('stores') && <div hidden={section !== 'stores'}><StoresPanel /><CustomAppsBlock section="stores" /></div>}
         {visitedSections.has('ai') && <div hidden={section !== 'ai'}><AIPlatformPanel /><CustomAppsBlock section="ai" /></div>}
         {visitedSections.has('os') && <div hidden={section !== 'os'}><OSPanel /><CustomAppsBlock section="os" /></div>}
+        {visitedSections.has('prompt_lab') && <div hidden={section !== 'prompt_lab'}><PromptLabPanel /></div>}
         {visitedSections.has('mods') && <div hidden={section !== 'mods'}><GroupedAppsPanel groups={modsGroups} note="Mod managers keep mods isolated from your game files — Nexus downloads need a free Nexus account; Modrinth and CurseForge are open." /><CustomAppsBlock section="mods" /></div>}
         {visitedSections.has('create') && <div hidden={section !== 'create'}><GroupedAppsPanel groups={createGroups} note="Photo, design, video and audio editors — the download arrow grabs the real installer; browser editors like Photopea and Canva open instantly." /><CustomAppsBlock section="create" /></div>}
         {visitedSections.has('smart_home') && <div hidden={section !== 'smart_home'}><GroupedAppsPanel groups={smartHomeGroups} note="These open the companion apps/sites — pair devices in each app. Home Assistant can run fully local on a Raspberry Pi or this PC." /><CustomAppsBlock section="smart_home" /></div>}

@@ -17,6 +17,7 @@ import {
   Database,
   WifiOff,
   Layers,
+  FlaskConical,
   X,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
@@ -97,6 +98,7 @@ export function Sidebar() {
   const panelItems = [
     { section: 'toolbox', icon: Cpu, label: 'Toolbox' },
     { section: 'os', icon: Layers, label: 'Operating Systems' },
+    { section: 'prompt_lab', icon: FlaskConical, label: 'Prompt Lab' },
   ];
 
   const openHubPanel = (section: string) => {

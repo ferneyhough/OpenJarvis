@@ -114,6 +114,10 @@ const SECTION_ALIASES: Record<string, string> = {
   'os pill': 'os',
   'download windows': 'os',
   'windows download': 'os',
+  'prompt lab': 'prompt_lab',
+  'prompt playground': 'prompt_lab',
+  'jailbreak': 'prompt_lab',
+  'ai jailbreak': 'prompt_lab',
 };
 
 const PAGE_ALIASES: Record<string, string> = {
