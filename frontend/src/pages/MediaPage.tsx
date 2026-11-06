@@ -1384,6 +1384,8 @@ function IptvTab() {
   const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const gridScrollRef = useRef<HTMLDivElement>(null);
+  const scrolledToNow = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(
@@ -1430,6 +1432,12 @@ function IptvTab() {
     const errors: string[] = [];
     const merged: GuideChannel[] = [];
     const seen = new Set<string>();
+    // Publish channels progressively — the grid fills in per region instead of
+    // waiting for the slowest playlist+EPG pair (keeps first paint under ~10s).
+    const publish = () => {
+      setChannels([...merged]);
+      setLoaded(true);
+    };
 
     const attach = (
       parsed: M3UChannel[],
@@ -1460,14 +1468,20 @@ function IptvTab() {
     await Promise.all(
       streamRegions.map(async (region) => {
         try {
-          const [playlistText, epg] = await Promise.all([
-            fetchGuideDocument(region.playlist, 'playlist'),
-            fetchGuideEpg(region.epg, 24).catch(() => null),
-          ]);
+          // Channels appear as soon as the playlist lands; schedules fill in
+          // when that region's EPG finishes parsing.
+          const playlistText = await fetchGuideDocument(region.playlist, 'playlist');
           const parsed = parseM3U(playlistText);
-          const lookup = epg ? epgLookup(epg) : null;
-          attach(parsed, region.key, region.label, region.tz, lookup);
-          if (!epg) {
+          attach(parsed, region.key, region.label, region.tz, null);
+          publish();
+          const epg = await fetchGuideEpg(region.epg, 24).catch(() => null);
+          if (epg) {
+            const lookup = epgLookup(epg);
+            for (const entry of merged) {
+              if (entry.region === region.key) entry.schedule = lookup(entry);
+            }
+            publish();
+          } else {
             errors.push(`${region.label}: playlist loaded, TV schedule unavailable`);
           }
         } catch (regionError) {
@@ -1499,6 +1513,7 @@ function IptvTab() {
             });
           }
         }
+        publish();
       } catch (ivueError) {
         errors.push(
           `iVue Guide: ${ivueError instanceof Error ? ivueError.message : String(ivueError)}`,
@@ -1529,6 +1544,7 @@ function IptvTab() {
         }
         const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         attach(parsed, 'CUSTOM', 'Custom', localTz, lookup);
+        publish();
       } catch (customError) {
         errors.push(
           `Custom playlist: ${customError instanceof Error ? customError.message : String(customError)}`,
@@ -1537,8 +1553,6 @@ function IptvTab() {
     }
 
     setGuideErrors(errors);
-    setChannels(merged);
-    setLoaded(true);
     setLoading(false);
   }, [enabledRegions, customPlaylist, customGuide, destroyPlayer]);
 
@@ -1644,6 +1658,24 @@ function IptvTab() {
   const gridEnd = gridStart + GRID_HOURS * 3_600_000;
   const gridWidth = GRID_HOURS * PX_PER_HOUR;
   const nowX = ((nowTick - gridStart) / 3_600_000) * PX_PER_HOUR;
+
+  // Centre the grid on the "now" line once channels first render.
+  useEffect(() => {
+    if (scrolledToNow.current || channels.length === 0) return;
+    const el = gridScrollRef.current;
+    if (!el) return;
+    scrolledToNow.current = true;
+    requestAnimationFrame(() => {
+      el.scrollLeft = Math.max(0, GRID_LEFT_W + nowX - 280);
+    });
+  }, [channels.length, nowX]);
+
+  const scrollToNow = () => {
+    gridScrollRef.current?.scrollTo({
+      left: Math.max(0, GRID_LEFT_W + nowX - 280),
+      behavior: 'smooth',
+    });
+  };
   const hourTicks = useMemo(() => {
     const ticks: number[] = [];
     for (let h = 0; h <= GRID_HOURS; h += 1) ticks.push(gridStart + h * 3_600_000);
@@ -1782,6 +1814,14 @@ function IptvTab() {
           ))}
         </div>
         <button
+          onClick={scrollToNow}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+          style={{ background: 'var(--color-bg-secondary)', color: NOW_COLOR, border: `1px solid ${NOW_COLOR}55` }}
+          title="Jump the timeline back to the current time"
+        >
+          ● Now
+        </button>
+        <button
           onClick={() => void loadChannels()}
           disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
@@ -1890,7 +1930,7 @@ function IptvTab() {
 
       {channels.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="overflow-auto max-h-[36rem]">
+          <div ref={gridScrollRef} className="overflow-auto" style={{ height: 'min(74vh, 56rem)', minHeight: '26rem' }}>
             <div style={{ width: GRID_LEFT_W + gridWidth, position: 'relative' }}>
               {/* Time header */}
               <div className="flex sticky top-0 z-20" style={{ background: 'var(--color-surface)' }}>
