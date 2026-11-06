@@ -15,6 +15,7 @@ enabled; local media and links keep working.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import ipaddress
 import json
 import logging
@@ -758,8 +759,54 @@ def _fetch_epg_bytes(url: str) -> bytes:
 # Parsed-XMLTV document cache: url -> (monotonic_ts, channels, programmes).
 # Programmes are kept for [now-24h, now+72h] so any windowed request inside
 # that span is answered without re-downloading or re-parsing the guide file.
+# Persisted to disk so server restarts don't trigger a multi-minute cold load.
 _epg_doc_cache: dict[str, tuple[float, dict, dict]] = {}
 _EPG_DOC_TTL = 6 * 3600
+_EPG_DISK_DIR = (
+    Path(os.environ.get("OPENJARVIS_CONFIG_DIR", str(Path.home() / ".openjarvis")))
+    / "epg_cache"
+)
+
+
+def _epg_disk_path(url: str) -> Path:
+    return _EPG_DISK_DIR / (hashlib.sha1(url.encode()).hexdigest() + ".json")
+
+
+def _epg_cache_load() -> None:
+    """Load persisted parsed guides into memory (called once at import)."""
+    try:
+        for f in _EPG_DISK_DIR.glob("*.json"):
+            try:
+                doc = json.loads(f.read_text(encoding="utf-8"))
+                fetched = float(doc.get("fetched_at", 0))
+                age = time.time() - fetched
+                if age < _EPG_DOC_TTL:
+                    _epg_doc_cache[doc["url"]] = (
+                        time.monotonic() - age, doc["channels"], doc["programmes"]
+                    )
+            except Exception:
+                continue
+    except OSError:
+        pass
+
+
+def _epg_cache_save(url: str, channels: dict, programmes: dict) -> None:
+    try:
+        _EPG_DISK_DIR.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "url": url,
+            "fetched_at": time.time(),
+            "channels": channels,
+            "programmes": programmes,
+        }
+        tmp = _epg_disk_path(url).with_suffix(".tmp")
+        tmp.write_text(json.dumps(doc), encoding="utf-8")
+        tmp.replace(_epg_disk_path(url))
+    except OSError:
+        pass
+
+
+_epg_cache_load()
 
 
 def _epg_document(url: str) -> tuple[dict, dict]:
@@ -808,6 +855,7 @@ def _epg_document(url: str) -> tuple[dict, dict]:
         entries.sort(key=lambda p: p["start"])
 
     _epg_doc_cache[url] = (time.monotonic(), channels, programmes)
+    _epg_cache_save(url, channels, programmes)
     return channels, programmes
 
 
@@ -887,18 +935,30 @@ def prefetch_epg_sources() -> None:
         today = _dt.date.today().isoformat()
         try:
             marker = _json.loads(_PREFETCH_MARKER.read_text())
-            if marker.get("date") == today:
+            # Skip only if we already warmed today AND have cached docs —
+            # an empty cache (fresh install / cleared files) must re-warm.
+            if marker.get("date") == today and _epg_doc_cache:
                 return
         except Exception:
             pass
         time.sleep(20)  # let the server finish booting first
-        for hours in (1, 6, 12, 24):
-            for url in EPG_SOURCES:
-                try:
-                    guide_epg(url, hours)
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("EPG prefetch failed %s @%sh: %s", url, hours, exc)
-            time.sleep(30)  # breathe between window passes
+        # Fetch all sources in parallel — sequential multi-MB XML downloads
+        # were the main cold-start delay.
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _warm(hours: float) -> None:
+            with ThreadPoolExecutor(max_workers=len(EPG_SOURCES)) as pool:
+                list(pool.map(lambda u: _safe_epg(u, hours), EPG_SOURCES))
+
+        def _safe_epg(url: str, hours: float) -> None:
+            try:
+                guide_epg(url, hours)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("EPG prefetch failed %s @%sh: %s", url, hours, exc)
+
+        for hours in (1, 24):
+            _warm(hours)
+            time.sleep(10)
         try:
             _PREFETCH_MARKER.parent.mkdir(parents=True, exist_ok=True)
             _PREFETCH_MARKER.write_text(_json.dumps({"date": today}))

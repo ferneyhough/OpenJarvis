@@ -31,8 +31,10 @@ folder back to its original location (`Downloads`, `C:\BuildCache`,
   `titan.m3u8`) with windowed XMLTV EPG via `/v1/guide/epg`.
 - `/v1/guide/ivue` scrapes iVue TV Guide sources (~2 min cold; cache it).
 - VOD: `/v1/vod/*` Stremio addons + libtorrent progressive playback.
-- EPG docs are parsed once into `_epg_doc_cache` (6h TTL). No fetch on boot —
-  `POST /v1/guide/prefetch` warms 1h→6h→12h→24h windows manually.
+- EPG docs are parsed once into `_epg_doc_cache` (6h TTL) and persisted to
+  `~/.openjarvis/epg_cache/*.json` so restarts stay fast. A background thread
+  prefetches all `EPG_SOURCES` in parallel at boot (1h→24h windows, once/day;
+  `POST /v1/guide/prefetch` forces a re-warm).
 - Games (incl. Minecraft server) live on the chat-page Kids pill, not Media.
 - Installers: `/v1/installer/resolve|download|run` turns a product/GitHub page
   link into a downloaded installer under `~/.openjarvis/installers` (wired to
