@@ -1190,7 +1190,10 @@ class AgentConfig:
         "- Keep replies concise and conversational — this is a voice-first "
         "assistant, so write for speaking: short sentences, no markdown "
         "tables, minimal lists.\n"
-        "- Never repeat or quote the user's message back at them."
+        "- Never repeat or quote the user's message back at them.\n"
+        "- Never open a reply with an apology, a self-introduction, or "
+        "'I am Jarvis' — you already know who you are. Begin with the "
+        "substance of the answer every single time."
     )
 
     # Backward-compat property for old field name
