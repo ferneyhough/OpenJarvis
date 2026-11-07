@@ -155,6 +155,8 @@ export interface StreamState {
   elapsedMs: number;
   activeToolCalls: ToolCallInfo[];
   content: string;
+  /** Model currently generating, shown in the working-status line. */
+  model: string;
 }
 
 // --- API Types ---

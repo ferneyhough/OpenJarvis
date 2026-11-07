@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { InputArea } from './InputArea';
-import { StreamingDots } from './StreamingDots';
+import { WorkingStatus } from './WorkingStatus';
 import { useAppStore } from '../../lib/store';
 import { shouldAutoplayFinishedReply, useTtsStore } from '../../lib/tts';
 import { stripThinkTags } from '../../lib/message-text';
@@ -134,18 +134,20 @@ export function ChatArea() {
                 />
               );
             })}
-            {(() => {
-              if (!isCurrentChatStreaming || streamState.content !== '') return null;
+            {isCurrentChatStreaming &&
               // For research messages the ResearchTimeline handles its own
-              // pre-content loading state — suppress the generic dots.
-              const last = messages[messages.length - 1];
-              if (last?.role === 'assistant' && last.isResearch) return null;
-              return (
+              // pre-content loading state — suppress the generic status.
+              !(messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.isResearch) && (
                 <div className="flex justify-start mb-4">
-                  <StreamingDots phase={streamState.phase} />
+                  <WorkingStatus
+                    phase={streamState.phase}
+                    model={streamState.model}
+                    elapsedMs={streamState.elapsedMs}
+                    hasContent={streamState.content !== ''}
+                    toolCount={streamState.activeToolCalls.length}
+                  />
                 </div>
-              );
-            })()}
+              )}
           </div>
         )}
       </div>

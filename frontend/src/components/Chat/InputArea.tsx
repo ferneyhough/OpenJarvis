@@ -733,10 +733,11 @@ export function InputArea() {
     setStreamState({
       conversationId: convId,
       isStreaming: true,
-      phase: deepResearch ? 'Researching...' : 'Generating...',
+      phase: deepResearch ? 'Researching...' : 'Thinking…',
       elapsedMs: 0,
       activeToolCalls: [],
       content: '',
+      model: requestModel,
     });
 
     // Speak each finished sentence as it streams in instead of waiting for
@@ -989,9 +990,15 @@ export function InputArea() {
             routedEngine = engineFromCompletionChunk(data) ?? routedEngine;
             if (delta?.content) {
               if (!ttftMs) ttftMs = Date.now() - startTime;
+              const wasEmpty = accumulatedContent === '';
               accumulatedContent += delta.content;
               speaker?.push(delta.content);
-              setStreamState({ content: accumulatedContent, phase: '' });
+              // First token flips the status from thinking to writing; the
+              // phase then stays put so the working line never goes blank.
+              setStreamState({
+                content: accumulatedContent,
+                ...(wasEmpty ? { phase: 'Writing…' } : {}),
+              });
 
               const now = Date.now();
               if (now - lastFlush >= 80) {
