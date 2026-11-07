@@ -194,8 +194,8 @@ if __name__ == "__main__":
     window.events.loaded += lambda: _allow_media_permissions(window)
     window.events.loaded += lambda: _refresh_stale_cache(window)
 
-    def _on_main_closed(_window) -> None:
-        _shutdown_server(_window)
+    def _on_main_closed(*_a, **_k) -> None:
+        _shutdown_server(None)
         try:
             popup.destroy()
         except Exception:

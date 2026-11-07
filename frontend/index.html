@@ -8,8 +8,38 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="icon" href="/favicon.ico" />
   <title>OpenJarvis</title>
+  <style>
+    /* Ambient video theme: paints before React boots, stays as a dim
+       backdrop wherever the UI is transparent. */
+    #boot-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+      background: #05080f;
+    }
+    #boot-bg video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.28;
+    }
+    #boot-bg::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 8, 15, 0.78);
+    }
+    #root { position: relative; z-index: 1; }
+  </style>
 </head>
 <body>
+  <div id="boot-bg" aria-hidden="true">
+    <video src="/avatar/intro.mp4" autoplay muted loop playsinline></video>
+  </div>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
