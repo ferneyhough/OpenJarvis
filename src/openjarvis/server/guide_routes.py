@@ -468,6 +468,24 @@ def _check_fetch_url(url: str) -> urllib.parse.ParseResult:
     return parsed
 
 
+# Regional M3U playlists mirrored from the frontend REGION_PRESETS — kept in
+# sync so boot warm-up covers exactly what the Guides tab will request.
+PLAYLIST_SOURCES: list[str] = [
+    "https://iptv-org.github.io/iptv/countries/us.m3u",
+    "https://iptv-org.github.io/iptv/countries/ca.m3u",
+    "https://iptv-org.github.io/iptv/countries/uk.m3u",
+    "https://iptv-org.github.io/iptv/countries/ie.m3u",
+    "https://iptv-org.github.io/iptv/countries/au.m3u",
+    "https://iptv-org.github.io/iptv/countries/nz.m3u",
+    "https://magnetic.website/jet/playlists/titan.m3u8",
+]
+
+# Short-TTL cache for fetched documents so the boot warm-up (and repeat guide
+# opens within the TTL) don't re-download multi-hundred-KB playlists.
+_doc_cache: dict[str, tuple[float, dict]] = {}
+_DOC_CACHE_TTL = 1800.0
+
+
 @guide_router.get("/fetch")
 def guide_fetch_document(url: str, kind: str = "playlist") -> dict:
     """Fetch a remote M3U playlist or XMLTV guide as text (server-side, no CORS)."""
@@ -476,6 +494,10 @@ def guide_fetch_document(url: str, kind: str = "playlist") -> dict:
         raise HTTPException(status_code=400, detail="kind must be playlist or guide")
     parsed = _check_fetch_url(url)
     target = urllib.parse.urlunparse(parsed)
+    cache_key = f"{kind}:{target}"
+    hit = _doc_cache.get(cache_key)
+    if hit is not None and time.monotonic() - hit[0] < _DOC_CACHE_TTL:
+        return hit[1]
     req = urllib.request.Request(
         target, headers={"User-Agent": "OpenJarvis/1.0", "Accept": "*/*"}
     )
@@ -507,7 +529,9 @@ def guide_fetch_document(url: str, kind: str = "playlist") -> dict:
     except UnicodeDecodeError:
         raise HTTPException(status_code=502, detail="source is not valid UTF-8 text")
     content_type = resp.headers.get("Content-Type", "")
-    return {"text": text, "bytes": size, "content_type": content_type}
+    result = {"text": text, "bytes": size, "content_type": content_type}
+    _doc_cache[cache_key] = (time.monotonic(), result)
+    return result
 
 
 @guide_router.post("/prefetch")
@@ -515,6 +539,61 @@ def guide_prefetch() -> dict:
     """Manually trigger the daily EPG warm-up (off by default at boot)."""
     prefetch_epg_sources()
     return {"started": True}
+
+
+# ---------------------------------------------------------------------------
+# Boot warm-up — fetch every playlist + EPG source BEFORE the app is allowed
+# to serve, so Guides opens instantly instead of streaming cold downloads.
+# ---------------------------------------------------------------------------
+
+_WARM_TIMEOUT = 240.0  # hard cap so a dead source can't hang app launch forever
+
+
+def warm_guides_blocking() -> dict:
+    """Synchronously warm playlist + EPG caches. Called during server startup.
+
+    Returns a small status dict for logging. Individual source failures are
+    swallowed — a missing region degrades gracefully, it never blocks launch
+    past ``_WARM_TIMEOUT``.
+    """
+    from concurrent.futures import ThreadPoolExecutor, wait as futures_wait
+
+    from openjarvis.core.config import load_config
+
+    if getattr(load_config(), "offline_mode", False):
+        return {"skipped": "offline_mode"}
+
+    def _warm_playlist(url: str) -> None:
+        try:
+            guide_fetch_document(url, "playlist")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("guide warm playlist failed %s: %s", url, exc)
+
+    def _warm_epg(url: str) -> None:
+        try:
+            guide_epg(url, 24.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("guide warm EPG failed %s: %s", url, exc)
+
+    started = time.monotonic()
+    tasks = []
+    with ThreadPoolExecutor(max_workers=14) as pool:
+        for url in PLAYLIST_SOURCES:
+            tasks.append(pool.submit(_warm_playlist, url))
+        for url in EPG_SOURCES:
+            tasks.append(pool.submit(_warm_epg, url))
+        done, not_done = futures_wait(tasks, timeout=_WARM_TIMEOUT)
+        for fut in not_done:
+            fut.cancel()
+
+    elapsed = time.monotonic() - started
+    logger.info(
+        "guide warm-up finished in %.1fs (%d/%d sources)",
+        elapsed,
+        len(done),
+        len(tasks),
+    )
+    return {"seconds": round(elapsed, 1), "sources": len(done), "total": len(tasks)}
 
 
 @guide_router.get("/probe")

@@ -26,7 +26,7 @@ from openjarvis.server.connectors_router import create_connectors_router
 from openjarvis.server.dashboard import dashboard_router
 from openjarvis.server.digest_routes import create_digest_router
 from openjarvis.server.game_routes import games_router
-from openjarvis.server.guide_routes import guide_router
+from openjarvis.server.guide_routes import guide_router, warm_guides_blocking
 from openjarvis.server.hub_routes import hub_router
 from openjarvis.server.pc_care_routes import pc_router
 from openjarvis.server.installer_routes import installer_router
@@ -260,8 +260,17 @@ def create_app(
 
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
-        # EPG prefetch is opt-in via /v1/guide/prefetch — boot stays a light
-        # scan; heavy guide data loads lazily when the UI asks for it.
+        # Warm guide playlists + EPG BEFORE the server accepts connections so
+        # the app never opens onto an empty/loading Guides tab. Cached docs
+        # make this near-instant on warm boots; a hard 240s cap inside
+        # warm_guides_blocking keeps dead sources from hanging launch. Skips
+        # entirely in offline mode.
+        import asyncio
+
+        try:
+            await asyncio.to_thread(warm_guides_blocking)
+        except Exception:
+            pass  # guide warm-up must never prevent the server from starting
         try:
             yield
         finally:
