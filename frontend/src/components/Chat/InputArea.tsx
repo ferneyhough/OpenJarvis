@@ -654,28 +654,43 @@ export function InputArea() {
 
     const routed = resolveAgent(useAppStore.getState().settings.chatMode, content);
 
-    // Task routes get the biggest same-engine model available (smarter answers
-    // for work that takes a while anyway); plain questions stay on the fast
-    // default so chat still feels instant.
+    // Tiered brain: trivial short questions stay on the fast default model;
+    // everything else — real questions, tasks, research — gets the smartest
+    // local model available so answers are closer to a frontier assistant.
     const paramSize = (id: string) => {
       const m = /:(\d+(?:\.\d+)?)b/i.exec(id);
       return m ? parseFloat(m[1]) : 0;
     };
+    // Preference tie-break when two models share a size — newer/better
+    // families first.
+    const modelPreference = (id: string) => {
+      const lower = id.toLowerCase();
+      if (lower.includes('qwen3.5')) return 40;
+      if (lower.includes('qwen3')) return 30;
+      if (lower.includes('qwen')) return 20;
+      if (lower.includes('gemma')) return 10;
+      return 0;
+    };
+    const TRIVIAL_ASK_WORDS = 8;
+    const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+    const isTrivialAsk =
+      routed.id === 'ask' && wordCount <= TRIVIAL_ASK_WORDS && !deepResearch;
     const requestModel = (() => {
-      if (routed.id === 'ask' || deepResearch) return selectedModel;
+      if (isTrivialAsk) return selectedModel;
       const appState = useAppStore.getState();
       const owner = appState.models.find((m) => m.id === selectedModel)?.owned_by;
-      const selectedSize = paramSize(selectedModel);
-      const bigger = appState.models
-        .filter(
-          (m) =>
-            m.id !== selectedModel &&
-            !isEmbedOnlyModel(m.id) &&
-            paramSize(m.id) > selectedSize &&
-            (!owner || m.owned_by === owner),
-        )
-        .sort((a, b) => paramSize(b.id) - paramSize(a.id));
-      return bigger[0]?.id ?? selectedModel;
+      const candidates = appState.models.filter(
+        (m) =>
+          !isEmbedOnlyModel(m.id) &&
+          paramSize(m.id) > 0 &&
+          (!owner || m.owned_by === owner),
+      );
+      const score = (id: string) => paramSize(id) * 100 + modelPreference(id);
+      const best = candidates.sort((a, b) => score(b.id) - score(a.id))[0];
+      // Only override the user's pick when the best candidate actually
+      // beats it — never downgrade a deliberately chosen bigger model.
+      if (best && score(best.id) > score(selectedModel)) return best.id;
+      return selectedModel;
     })();
 
     const assistantMsg: ChatMessage = {
