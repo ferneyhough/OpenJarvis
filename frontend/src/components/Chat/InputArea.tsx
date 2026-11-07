@@ -1073,10 +1073,6 @@ export function InputArea() {
   }, [navigate]);
 
   const handleVoiceCommand = useCallback((text: string) => {
-    // Ignore transcripts while Jarvis is speaking — otherwise the microphone
-    // hears his own TTS output and queues it back as commands forever.
-    const ttsState = useTtsStore.getState().state;
-    if (ttsState === 'loading' || ttsState === 'speaking') return;
     const music = parseMusicVoiceCommand(text);
     if (music && music.type !== 'open-app') {
       runMusicAction(music);
@@ -1222,7 +1218,13 @@ export function InputArea() {
       return;
     }
 
-    if (useAppStore.getState().streamState.isStreaming) {
+    // Chat-bound commands wait for the current reply AND its speech to
+    // finish — deterministic commands above (music, nav, launchers) already
+    // ran instantly. Latest command wins; nothing is dropped or backlogged.
+    const ttsBusy =
+      useTtsStore.getState().state === 'loading' ||
+      useTtsStore.getState().state === 'speaking';
+    if (ttsBusy || useAppStore.getState().streamState.isStreaming) {
       pendingVoiceRef.current = text;
       toast.info("Still on it — I'll handle that right after this reply.");
       return;
@@ -1234,12 +1236,15 @@ export function InputArea() {
     onCommand: handleVoiceCommand,
   });
 
+  const ttsBusyState = useTtsStore((s) => s.state);
+  const ttsBusy = ttsBusyState === 'loading' || ttsBusyState === 'speaking';
+
   useEffect(() => {
-    if (streamState.isStreaming || !pendingVoiceRef.current) return;
+    if (streamState.isStreaming || ttsBusy || !pendingVoiceRef.current) return;
     const next = pendingVoiceRef.current;
     pendingVoiceRef.current = null;
     void sendMessage(next);
-  }, [streamState.isStreaming, sendMessage]);
+  }, [streamState.isStreaming, ttsBusy, sendMessage]);
 
   const startHandsFree = useCallback(async () => {
     const started = await handsFree.start();

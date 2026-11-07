@@ -53,7 +53,11 @@ export class LocalWhisperRecognition {
 
   private async open(): Promise<void> {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // AEC keeps Jarvis's own TTS output out of the microphone so his
+      // voice isn't transcribed back as a command.
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
     } catch (err) {
       const name = err instanceof DOMException ? err.name : '';
       this.fail(name === 'NotFoundError' ? 'audio-capture' : 'not-allowed');
