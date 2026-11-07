@@ -27,11 +27,11 @@ folder back to its original location (`Downloads`, `C:\BuildCache`,
 
 ## Media guide
 
-- IPTV tab merges regional playlists (iptv-org US/CA/UK/IE/AU/NZ + Mad Titan
-  `titan.m3u8`) with windowed XMLTV EPG via `/v1/guide/epg`.
-- `/v1/guide/ivue` scrapes iVue TV Guide sources. Stale-while-revalidate: expired cache
-  is served instantly with `"stale": true` while a single-flight background rebuild runs;
-  last payload persists to `~/.openjarvis/epg_cache/ivue_guide.json`.
+- IPTV guide uses only iptv-org regional playlists (US/CA/GB/IE/AU/NZ + custom
+  M3U) merged with windowed XMLTV EPG via `/v1/guide/epg`. Mad Titan and iVue
+  were removed from the active UI path (their streams/data weren't useful);
+  `/v1/guide/ivue` remains as a backend route with stale-while-revalidate +
+  disk cache at `~/.openjarvis/epg_cache/ivue_guide.json` if it's ever needed.
 - VOD: `/v1/vod/*` Stremio addons + libtorrent progressive playback.
 - EPG docs are parsed once into `_epg_doc_cache` (6h TTL) and persisted to
   `~/.openjarvis/epg_cache/*.json` so restarts stay fast. A background thread
@@ -45,6 +45,27 @@ folder back to its original location (`Downloads`, `C:\BuildCache`,
   key, then add the hosted MCP server in `~/.openjarvis/config.toml`:
   `servers = '[{"name":"xcrawl","url":"https://mcp.xcrawl.com/mcp","token":"YOUR_KEY"}]'`
   under `[tools.mcp]`. Or run `npx -y xcrawl-mcp` with `XCRAWL_API_KEY` set.
+
+## Voice & latency
+
+- TTS: Kokoro (`bm_george`, speed 1.1) via `POST /v1/speech/synthesize`;
+  health at `/v1/speech/tts/health`. `frontend/src/lib/tts.ts` has a shared
+  playback slot, sentence-chunked streaming speech (`createStreamSpeaker`),
+  and a `speechCache` — canned ack phrases are pre-synthesized on app load
+  via `prefetchSpeech` so they replay instantly.
+- Chat fast path: the frontend resolves a chat-agent mode (`ask`/`agent`/…)
+  and sends it as `agent_mode` on `/v1/chat/completions`. `"ask"` bypasses
+  the orchestrator's tool loop entirely (single-pass direct stream) — keep
+  this for plain Q&A; task modes still go through the agent.
+- Ollama payloads send `keep_alive: "30m"` and the server lifespan warms the
+  default chat model + TTS pipeline in a background thread at boot, so
+  first-message cold loads (~30s model, ~7s voice) don't hit users.
+- Default model is `qwen3:1.7b` (fast on CPU); `qwen3.5:4b`/`gemma3:4b` also
+  installed. `offline_mode = true` in `~/.openjarvis/config.toml`.
+- Mic/camera/screen consent: `POST /v1/speech/open-mic-settings` writes
+  Windows ConsentStore registry `Allow` entries for the running exe and
+  opens the Settings pages; hands-free auto-calls it once on permission
+  denial.
 
 ## Frontend
 
