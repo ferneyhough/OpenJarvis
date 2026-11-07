@@ -602,7 +602,10 @@ export function InputArea() {
       baseSettings.voiceOutputEnabled && baseSettings.voiceAutoplay
         ? createStreamSpeaker(assistantMsg.id, baseSettings.voiceId)
         : null;
-    speaker?.sayNow(pickAckPhrase());
+    const ack = pickAckPhrase();
+    speaker?.sayNow(ack);
+    // Show the ack in the chat too — voice output shouldn't be audio-only.
+    if (speaker) setStreamState({ phase: ack });
     useAppStore.getState().addLogEntry({
       timestamp: Date.now(),
       level: 'info',
