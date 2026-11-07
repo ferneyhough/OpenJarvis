@@ -129,6 +129,13 @@ export function applyAppearance({ theme, colorTheme, backgroundOpacity = 80 }: A
   const root = document.documentElement;
   const picked = COLOR_THEMES.find((t) => t.id === colorTheme);
   const image = getCustomBackground();
+  // The bundled theme video (#boot-bg in index.html) counts as a background
+  // too: panels go translucent exactly as they do for a custom background
+  // image, so the video shows through the whole UI instead of hiding behind
+  // solid panels. A custom image, if the user sets one, wins over the video.
+  const bootBg = document.getElementById('boot-bg');
+  if (bootBg) bootBg.style.display = image ? 'none' : '';
+  const hasBg = !!image || !!bootBg;
 
   root.classList.remove('dark', 'light');
   const mode = picked ? picked.mode : theme;
@@ -137,14 +144,14 @@ export function applyAppearance({ theme, colorTheme, backgroundOpacity = 80 }: A
 
   for (const name of THEME_VARS) root.style.removeProperty(name);
 
-  const panel = image ? Math.max(0, Math.min(100, backgroundOpacity)) : 100;
+  const panel = hasBg ? Math.max(0, Math.min(100, backgroundOpacity)) : 100;
   if (picked) {
     const set = (name: string, value: string) => root.style.setProperty(name, value);
-    set('--color-bg', image ? mix(picked.bg, panel) : picked.bg);
-    set('--color-bg-secondary', image ? mix(picked.bg2, panel) : picked.bg2);
+    set('--color-bg', hasBg ? mix(picked.bg, panel) : picked.bg);
+    set('--color-bg-secondary', hasBg ? mix(picked.bg2, panel) : picked.bg2);
     set('--color-bg-tertiary', picked.bg3);
-    set('--color-surface', image ? mix(picked.surface, panel) : picked.surface);
-    set('--color-sidebar', mix(picked.bg2, image ? panel : 85));
+    set('--color-surface', hasBg ? mix(picked.surface, panel) : picked.surface);
+    set('--color-sidebar', mix(picked.bg2, hasBg ? panel : 85));
     set('--color-border', mix(picked.text, 14));
     set('--color-border-subtle', mix(picked.text, 7));
     set('--color-text', picked.text);
@@ -162,7 +169,7 @@ export function applyAppearance({ theme, colorTheme, backgroundOpacity = 80 }: A
     set('--color-user-bubble-text', picked.text);
     set('--color-on-accent', picked.bg);
     set('--color-disabled-bg', picked.bg3);
-  } else if (image) {
+  } else if (hasBg) {
     const base = root.classList.contains('dark') ? '#0a0a0b' : '#f9f9f9';
     const second = root.classList.contains('dark') ? '#121214' : '#ffffff';
     root.style.setProperty('--color-bg', mix(base, panel));

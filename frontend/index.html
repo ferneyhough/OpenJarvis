@@ -9,8 +9,8 @@
   <link rel="icon" href="/favicon.ico" />
   <title>OpenJarvis</title>
   <style>
-    /* Ambient video theme: paints before React boots, stays as a dim
-       backdrop wherever the UI is transparent. */
+    /* Ambient video theme: paints before React boots and stays as the
+       app's background theme; panels go translucent over it (themes.ts). */
     #boot-bg {
       position: fixed;
       inset: 0;
@@ -25,13 +25,16 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      opacity: 0.28;
+      opacity: 0.85;
     }
+    /* Light tint only — the app's panels now go translucent over the video
+       (see applyAppearance in src/lib/themes.ts), which provides the rest
+       of the dimming while keeping the video properly visible. */
     #boot-bg::after {
       content: "";
       position: absolute;
       inset: 0;
-      background: rgba(5, 8, 15, 0.78);
+      background: rgba(5, 8, 15, 0.25);
     }
     #root { position: relative; z-index: 1; }
   </style>
