@@ -40,6 +40,7 @@ export class LocalWhisperRecognition {
   private cycleStart = 0;
   private speechMs = 0;
   private lastVoice = 0;
+  private lastTickAt = 0;
 
   start(): void {
     this.running = true;
@@ -54,9 +55,15 @@ export class LocalWhisperRecognition {
   private async open(): Promise<void> {
     try {
       // AEC keeps Jarvis's own TTS output out of the microphone so his
-      // voice isn't transcribed back as a command.
+      // voice isn't transcribed back as a command. `ideal` keeps these
+      // best-effort — mandatory constraints can hard-fail getUserMedia on
+      // devices/browsers that don't support them exactly.
       this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+        },
       });
     } catch (err) {
       const name = err instanceof DOMException ? err.name : '';
@@ -81,6 +88,7 @@ export class LocalWhisperRecognition {
     this.chunks = [];
     this.speechMs = 0;
     this.lastVoice = 0;
+    this.lastTickAt = 0;
     this.cycleStart = Date.now();
     this.recorder = new MediaRecorder(this.stream);
     this.recorder.ondataavailable = (event) => {
@@ -101,8 +109,13 @@ export class LocalWhisperRecognition {
   private tick(): void {
     if (!this.running) return;
     const now = Date.now();
+    // Accumulate real elapsed time, not TICK_MS: backgrounded pages get
+    // their timers throttled (1s+, sometimes once a minute), and a fixed
+    // step would make speech/silence detection drift minutes out of true.
+    const dt = this.lastTickAt === 0 ? TICK_MS : Math.min(now - this.lastTickAt, 1000);
+    this.lastTickAt = now;
     if (this.level() > SPEECH_RMS) {
-      this.speechMs += TICK_MS;
+      this.speechMs += dt;
       this.lastVoice = now;
     }
 

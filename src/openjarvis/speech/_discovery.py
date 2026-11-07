@@ -64,10 +64,12 @@ def get_speech_backend(config: "JarvisConfig") -> Optional["SpeechBackend"]:
 
     backend_key = config.speech.backend
 
-    # Offline mode: local Whisper only — cloud STT backends are never tried,
-    # even when ``speech.backend`` names one explicitly.
+    # Offline mode: local engines only — cloud STT backends are never tried,
+    # even when ``speech.backend`` names one explicitly. faster-whisper goes
+    # first: System.Speech's dictation grammar mangles short commands (e.g.
+    # "Jarvis" -> "Tablas") and pays a PowerShell+ffmpeg spawn per utterance.
     if getattr(config, "offline_mode", False):
-        order = ["windows-speech", "faster-whisper"]
+        order = ["faster-whisper", "windows-speech"]
     elif backend_key != "auto":
         order = [backend_key]
     else:

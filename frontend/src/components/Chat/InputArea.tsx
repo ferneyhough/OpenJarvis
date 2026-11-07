@@ -90,6 +90,73 @@ function pickAckPhrase(): string {
   return pick;
 }
 
+// Greeting pools — "hello Jarvis" gets an instant canned reply (no model
+// round-trip) that addresses the user as "sir" and asks what they need,
+// randomized every time so it never feels scripted.
+const GREETING_OPENERS = [
+  'Yes', 'Why yes', 'Hello', 'Hi there', 'Good day', 'Greetings',
+  'Right away', 'At your service', 'Listening', 'Hey', 'Good to hear you',
+  'Why, hello', 'There you are', 'Hello again', 'Good to see you',
+  'Why, hello there', 'Always a pleasure', 'Delighted to hear you',
+];
+const GREETING_TITLES = [
+  'sir', 'good sir', 'kind sir', 'esteemed sir', 'dear sir',
+];
+const GREETING_OFFERS = [
+  'what can I do for you', 'how may I assist you', 'what do you need',
+  'what would you like', 'how can I help', "what's on your mind",
+  'what can I get done for you', 'how may I be of service',
+  'what do you want to work on', "what's the mission", 'need anything',
+  'what can I do for you today', 'how can I be of assistance',
+  'what would you like me to handle', 'what can I help you with',
+  'what do you need doing', 'how may I help you', "what's the word",
+  'what can I get for you', 'what do you fancy',
+  'what can I do for you now', 'how can I be of help',
+  'what would you like me to take care of', 'what can I do for you this fine day',
+];
+let lastGreeting = '';
+function buildGreeting(): string {
+  const hour = new Date().getHours();
+  const daypart = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const opener =
+      Math.random() < 0.25
+        ? `Good ${daypart}`
+        : GREETING_OPENERS[Math.floor(Math.random() * GREETING_OPENERS.length)];
+    const useTitle = Math.random() < 0.75;
+    const title = useTitle
+      ? GREETING_TITLES[Math.floor(Math.random() * GREETING_TITLES.length)]
+      : '';
+    const offer =
+      GREETING_OFFERS[Math.floor(Math.random() * GREETING_OFFERS.length)];
+    const greeting =
+      Math.random() < 0.5
+        ? `${opener}${title ? `, ${title}` : ''} — ${offer}?`
+        : `${title ? `${title[0].toUpperCase()}${title.slice(1)}! ` : ''}${opener} — ${offer}?`;
+    const final = greeting.charAt(0).toUpperCase() + greeting.slice(1);
+    if (final !== lastGreeting) {
+      lastGreeting = final;
+      return final;
+    }
+  }
+  return 'At your service, sir — what can I do for you?';
+}
+
+function isGreetingMessage(text: string): boolean {
+  const normalized = text
+    .toLocaleLowerCase()
+    .replace(/[.,!?;:"]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return false;
+  const core = normalized
+    .replace(/^jarvis\s+/, '')
+    .replace(/\s+jarvis$/, '');
+  return /^(?:(?:hey|hi|hello|yo|hiya|howdy|greetings|good|morning|afternoon|evening|g day|sup|what s up)\s*)+$/.test(
+    core,
+  );
+}
+
 // While Deep Research is toggled on, poll connected sources for sync
 // progress so we can surface "Searching over N items — sync in progress"
 // next to the toggle. Polling is gated on `enabled` so toggling DR off
@@ -552,6 +619,26 @@ export function InputArea() {
       media: userMedia.length ? userMedia : undefined,
     };
     addMessage(convId, userMsg);
+
+    // Greetings get an instant canned reply — no model round-trip, so
+    // "hello Jarvis" feels like a real assistant answering right away.
+    if (isGreetingMessage(content)) {
+      const greeting = buildGreeting();
+      const greetMsg: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: greeting,
+        timestamp: Date.now(),
+      };
+      addMessage(convId, greetMsg);
+      const greetSettings = useAppStore.getState().settings;
+      if (greetSettings.voiceOutputEnabled && greetSettings.voiceAutoplay) {
+        void useTtsStore
+          .getState()
+          .speak(greetMsg.id, greeting, greetSettings.voiceId);
+      }
+      return;
+    }
 
     // Build API messages before adding assistant placeholder
     const currentMessages = useAppStore.getState().messages;
