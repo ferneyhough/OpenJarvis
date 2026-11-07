@@ -162,6 +162,9 @@ class OllamaEngine(AsyncHTTPEngineMixin, InferenceEngine):
             "model": model,
             "messages": msg_dicts,
             "stream": False,
+            # Keep the model hot between messages — Ollama's default 5m
+            # idle unload causes a ~30s cold-load on the next request.
+            "keep_alive": "30m",
             "options": _ollama_request_options(
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -284,6 +287,7 @@ class OllamaEngine(AsyncHTTPEngineMixin, InferenceEngine):
             "model": model,
             "messages": messages_to_dicts(messages),
             "stream": True,
+            "keep_alive": "30m",
             "options": _ollama_request_options(
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -383,6 +387,7 @@ class OllamaEngine(AsyncHTTPEngineMixin, InferenceEngine):
             "model": model,
             "messages": msg_dicts,
             "stream": True,
+            "keep_alive": "30m",
             "options": _ollama_request_options(
                 temperature=temperature,
                 max_tokens=max_tokens,

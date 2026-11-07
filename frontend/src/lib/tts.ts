@@ -47,6 +47,45 @@ let levelData: Uint8Array<ArrayBuffer> | null = null;
 let smoothedLevel = 0;
 let levelRaf = 0;
 
+// Pre-synthesized clip cache for canned phrases (acknowledgments). Kokoro
+// takes ~3s per sentence on CPU, so short repeated phrases are rendered once
+// up front and replayed instantly instead of paying synthesis latency on
+// every send. Keyed by voice + text; entries are shared Promises so
+// concurrent consumers reuse one synthesis.
+const speechCache = new Map<string, Promise<Blob>>();
+
+function speechCacheKey(text: string, voiceId?: string): string {
+  return `${voiceId ?? ''}${text}`;
+}
+
+/**
+ * Synthesize `text` ahead of time so a later speak/streamSpeaker call for the
+ * same voice+text replays the cached audio immediately. Safe to call
+ * repeatedly; failures evict the entry so a later call can retry.
+ */
+export function prefetchSpeech(text: string, voiceId?: string): void {
+  const trimmed = toSpeakableText(text);
+  if (!trimmed) return;
+  const key = speechCacheKey(trimmed, voiceId);
+  if (speechCache.has(key)) return;
+  const p = synthesizeSpeech(trimmed, { voiceId });
+  p.catch(() => speechCache.delete(key));
+  speechCache.set(key, p);
+}
+
+function synthForPlayback(
+  text: string,
+  voiceId: string | undefined,
+  signal: AbortSignal,
+): Promise<Blob> {
+  const key = speechCacheKey(text, voiceId);
+  const hit = speechCache.get(key);
+  if (hit) return hit;
+  const p = synthesizeSpeech(text, { voiceId, signal });
+  p.catch(() => undefined);
+  return p;
+}
+
 function teardownLevelMeter(): void {
   if (levelRaf) cancelAnimationFrame(levelRaf);
   levelRaf = 0;
@@ -214,10 +253,7 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
       try {
         // Prefetch the next sentence's audio while the current one plays, so
         // there is no synthesis gap between chunks.
-        let pending: Promise<Blob> | null = synthesizeSpeech(chunks[0], {
-          voiceId: selectedVoice,
-          signal: ac.signal,
-        });
+        let pending: Promise<Blob> | null = synthForPlayback(chunks[0], selectedVoice, ac.signal);
         pending.catch(() => undefined);
 
         for (let i = 0; i < chunks.length; i += 1) {
@@ -233,10 +269,7 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
           attachLevelMeter(el);
 
           if (i + 1 < chunks.length) {
-            pending = synthesizeSpeech(chunks[i + 1], {
-              voiceId: selectedVoice,
-              signal: ac.signal,
-            });
+            pending = synthForPlayback(chunks[i + 1], selectedVoice, ac.signal);
             pending.catch(() => undefined);
           }
 
@@ -401,11 +434,7 @@ export function createStreamSpeaker(id: string, voiceId?: string): StreamSpeaker
     }
   };
 
-  const synth = (text: string) => {
-    const p = synthesizeSpeech(text, { voiceId: selectedVoice, signal: ac.signal });
-    p.catch(() => undefined);
-    return p;
-  };
+  const synth = (text: string) => synthForPlayback(text, selectedVoice, ac.signal);
 
   const pump = async () => {
     if (pumpStarted) return;

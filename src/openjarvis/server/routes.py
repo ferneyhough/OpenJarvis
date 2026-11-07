@@ -175,6 +175,9 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
     use_server_agent = (
         agent is not None
         and not request_body.tools
+        # "ask" mode is a direct-answer request: skip the orchestrator's
+        # tool schema + multi-turn loop so plain questions stay fast.
+        and request_body.agent_mode != "ask"
         and (not request_body.stream or bool(getattr(agent, "_tools", None)))
     )
 

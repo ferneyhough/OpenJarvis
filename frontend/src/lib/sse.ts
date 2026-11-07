@@ -7,6 +7,8 @@ export interface ChatRequest {
   stream: true;
   temperature?: number;
   max_tokens?: number;
+  /** Resolved chat-agent mode; "ask" bypasses the server-side tool loop. */
+  agent_mode?: string;
 }
 
 export async function* streamChat(

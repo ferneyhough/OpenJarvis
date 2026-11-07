@@ -271,6 +271,68 @@ def create_app(
             await asyncio.to_thread(warm_guides_blocking)
         except Exception:
             pass  # guide warm-up must never prevent the server from starting
+
+        # Warm the chat model and TTS pipeline in the background: Ollama
+        # cold-loads a model for ~30s on first inference and Kokoro pays a
+        # similar cost on first synthesis, which made the first message after
+        # every launch feel dead. Daemon thread — never blocks startup.
+        def _warm_runtime() -> None:
+            def _run() -> None:
+                try:
+                    from openjarvis.core.types import Message, Role
+
+                    eng = getattr(_app.state, "engine", None)
+                    cfg = getattr(_app.state, "config", None)
+                    model = getattr(_app.state, "model", "") or ""
+                    if not model and cfg is not None:
+                        model = (
+                            getattr(
+                                getattr(cfg, "intelligence", None),
+                                "default_model",
+                                "",
+                            )
+                            or ""
+                        )
+                    if eng is not None and model:
+                        eng.generate(
+                            [Message(role=Role.USER, content="hi")],
+                            model=model,
+                            temperature=0,
+                            max_tokens=1,
+                        )
+                except Exception:
+                    pass
+                try:
+                    from openjarvis.speech._tts_discovery import (
+                        get_tts_backend,
+                        voice_preferences,
+                    )
+
+                    cfg = getattr(_app.state, "config", None)
+                    if cfg is None:
+                        from openjarvis.core.config import load_config
+
+                        cfg = load_config()
+                    preferred, voice_id, speed = voice_preferences(cfg)
+                    backend = get_tts_backend(
+                        preferred,
+                        offline=bool(getattr(cfg, "offline_mode", False)),
+                    )
+                    if backend is not None:
+                        _app.state.tts_backend = backend
+                        _app.state.tts_resolved = True
+                        synth_kwargs: dict = {"speed": speed}
+                        if voice_id:
+                            synth_kwargs["voice_id"] = voice_id
+                        backend.synthesize("Ready.", **synth_kwargs)
+                except Exception:
+                    pass
+
+            import threading
+
+            threading.Thread(target=_run, daemon=True).start()
+
+        _warm_runtime()
         try:
             yield
         finally:

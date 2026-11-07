@@ -40,7 +40,7 @@ import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
 import { matchesHotkey } from '../../lib/hotkeys';
 import { useHandsFree } from '../../hooks/useHandsFree';
-import { useTtsStore, createStreamSpeaker, type StreamSpeaker } from '../../lib/tts';
+import { useTtsStore, createStreamSpeaker, prefetchSpeech, type StreamSpeaker } from '../../lib/tts';
 import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { resolveAgent } from '../../lib/chat-agents';
 import { resolvePermissions } from '../../lib/permissions';
@@ -199,7 +199,18 @@ export function InputArea() {
   const setDeepResearch = useAppStore((s) => s.setDeepResearch);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const corpusSync = useResearchCorpusSync(deepResearch);
+  const ttsAvailable = useTtsStore((s) => s.available);
+  const ttsBackend = useTtsStore((s) => s.backend);
+  const ttsVoiceId = useAppStore((s) => s.settings.voiceId);
   const isCurrentChatStreaming = streamState.isStreaming && streamState.conversationId === activeId;
+
+  // Pre-render the canned ack phrases once TTS is confirmed available, so the
+  // spoken acknowledgment plays instantly instead of waiting on Kokoro.
+  useEffect(() => {
+    if (ttsAvailable !== true) return;
+    const voice = ttsBackend === 'kokoro' ? ttsVoiceId : undefined;
+    for (const phrase of ACK_PHRASES) prefetchSpeech(phrase, voice);
+  }, [ttsAvailable, ttsBackend, ttsVoiceId]);
 
   const {
     state: speechState,
@@ -787,7 +798,7 @@ export function InputArea() {
         }
       } else {
       for await (const sseEvent of streamChat(
-        { model: selectedModel, messages: requestMessages, stream: true, temperature, max_tokens: maxTokens },
+        { model: selectedModel, messages: requestMessages, stream: true, temperature, max_tokens: maxTokens, agent_mode: routed.id },
         controller.signal,
       )) {
         const eventName = sseEvent.event;

@@ -28,6 +28,10 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: int = 1024
     stream: bool = False
     tools: Optional[List[Dict[str, Any]]] = None
+    # Frontend-resolved chat agent mode. "ask" means "answer directly" — the
+    # server skips the tool-bearing orchestrator so simple questions get a
+    # fast single-pass reply instead of a full agent loop.
+    agent_mode: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
