@@ -1328,6 +1328,21 @@ export function InputArea() {
       }
       return;
     }
+    // Task-routed voice commands get a confirmation first — Jarvis doesn't
+    // commit to doing things (build/install/run) on a misheard transcript.
+    const confirmRoute = resolveAgent(
+      useAppStore.getState().settings.chatMode,
+      text,
+    );
+    if (confirmRoute.id === 'agent' || confirmRoute.id === 'autopilot') {
+      const ok = window.confirm(
+        `Jarvis heard: "${text}"\n\nThis looks like a task. Proceed?`,
+      );
+      if (!ok) {
+        toast.info("Okay — I won't do that.");
+        return;
+      }
+    }
     void sendMessage(text);
   }, [sendMessage, runVoiceNav]);
   const handsFree = useHandsFree({
@@ -1337,6 +1352,12 @@ export function InputArea() {
 
   const ttsBusyState = useTtsStore((s) => s.state);
   const ttsBusy = ttsBusyState === 'loading' || ttsBusyState === 'speaking';
+
+  // Hard-mute the mic while Jarvis's voice is playing so he can never
+  // transcribe himself — no wake-word heuristics needed.
+  useEffect(() => {
+    handsFree.setMuted(ttsBusy);
+  }, [ttsBusy, handsFree.setMuted]);
 
   useEffect(() => {
     if (streamState.isStreaming || ttsBusy || !pendingVoiceRef.current) return;

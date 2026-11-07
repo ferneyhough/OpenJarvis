@@ -243,6 +243,12 @@ export function useHandsFree({
     return beginRecognition();
   }, [beginRecognition, autoOpenPermissions]);
 
+  const setMuted = useCallback((muted: boolean) => {
+    // Only the local Whisper recognizer supports muting; browser
+    // SpeechRecognition has no equivalent, so this is a no-op there.
+    (recognitionRef.current as LocalWhisperRecognition | null)?.setMuted?.(muted);
+  }, []);
+
   const stop = useCallback(() => {
     shouldRunRef.current = false;
     awakeRef.current = false;
@@ -303,5 +309,6 @@ export function useHandsFree({
     isEnabled: shouldRunRef.current,
     start,
     stop,
+    setMuted,
   };
 }

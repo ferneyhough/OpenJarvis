@@ -41,6 +41,9 @@ export class LocalWhisperRecognition {
   private speechMs = 0;
   private lastVoice = 0;
   private lastTickAt = 0;
+  /** When true, audio is captured but never transcribed — used while Jarvis
+   *  is speaking so his own TTS can't loop back as a command. */
+  private muted = false;
 
   start(): void {
     this.running = true;
@@ -50,6 +53,24 @@ export class LocalWhisperRecognition {
   stop(): void {
     this.running = false;
     this.teardown();
+  }
+
+  /** Drop all audio captured while muted — nothing is transcribed or sent. */
+  setMuted(muted: boolean): void {
+    if (this.muted === muted) return;
+    this.muted = muted;
+    if (muted) {
+      const recorder = this.recorder;
+      this.recorder = null;
+      if (recorder) {
+        recorder.onstop = null;
+        if (recorder.state !== 'inactive') recorder.stop();
+      }
+      this.chunks = [];
+    } else {
+      this.lastTickAt = 0;
+      if (this.running && this.stream && !this.recorder) this.beginCycle();
+    }
   }
 
   private async open(): Promise<void> {
@@ -84,7 +105,7 @@ export class LocalWhisperRecognition {
   }
 
   private beginCycle(): void {
-    if (!this.stream) return;
+    if (!this.stream || this.muted) return;
     this.chunks = [];
     this.speechMs = 0;
     this.lastVoice = 0;
@@ -109,6 +130,10 @@ export class LocalWhisperRecognition {
   private tick(): void {
     if (!this.running) return;
     const now = Date.now();
+    if (this.muted) {
+      this.lastTickAt = now;
+      return;
+    }
     // Accumulate real elapsed time, not TICK_MS: backgrounded pages get
     // their timers throttled (1s+, sometimes once a minute), and a fixed
     // step would make speech/silence detection drift minutes out of true.
@@ -143,7 +168,9 @@ export class LocalWhisperRecognition {
     try {
       const result = await transcribeAudio(blob, 'speech.webm');
       const text = (result.text ?? '').trim();
-      if (text && this.running) {
+      // A transcription that lands after muting began is still his own
+      // voice leaking through — drop it.
+      if (text && this.running && !this.muted) {
         this.onresult?.({
           resultIndex: 0,
           results: [{ isFinal: true, 0: { transcript: text } }],
