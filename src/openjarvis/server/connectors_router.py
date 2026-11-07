@@ -703,19 +703,14 @@ def create_connectors_router():
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
-        # Auto-trigger a full backfill on a successful connect. Routed
-        # through the same _start_sync helper that POST /sync uses so the
-        # connection's progress is visible to GET /{id}/sync polling
-        # immediately — the user shouldn't have to click "Sync Now".
-        sync_status: Optional[str] = None
-        if instance.is_connected():
-            sync_status = _start_sync(connector_id, instance)
-
+        # Sync is never automatic: data only enters the knowledge base after
+        # an explicit POST /{id}/sync, so the user confirms before anything
+        # is pulled in.
         return {
             "connector_id": connector_id,
             "connected": instance.is_connected(),
             "status": "connected" if instance.is_connected() else "pending",
-            "sync_status": sync_status,
+            "sync_status": None,
         }
 
     @router.post("/{connector_id}/disconnect")

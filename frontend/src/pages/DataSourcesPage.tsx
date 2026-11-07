@@ -987,11 +987,19 @@ export function DataSourcesSection() {
         setConnectStage(i < 5 ? 'Authenticating...' : 'Waiting for connection...');
       }
 
-      // Trigger sync
-      setConnectStage('Syncing data...');
-      try {
-        await triggerSync(id);
-      } catch { /* sync may already be running */ }
+      // Sync only pulls data into the knowledge base — require explicit
+      // confirmation before anything is ingested.
+      const displayName =
+        connectors.find((c) => c.connector_id === id)?.display_name || id;
+      const wantsSync = window.confirm(
+        `"${displayName}" is connected.\n\nSync its data into the knowledge base now?`,
+      );
+      if (wantsSync) {
+        setConnectStage('Syncing data...');
+        try {
+          await triggerSync(id);
+        } catch { /* sync may already be running */ }
+      }
 
       // Close form after a brief moment
       await new Promise((r) => setTimeout(r, 1500));
