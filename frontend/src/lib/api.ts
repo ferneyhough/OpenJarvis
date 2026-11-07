@@ -1901,6 +1901,26 @@ export async function fetchGuideEpg(url: string, hours = 24): Promise<GuideEpgRe
   return res.json();
 }
 
+export interface GuideProgramInfo {
+  source: 'epg' | 'tvmaze' | string;
+  title: string;
+  description: string;
+  sub_title: string;
+  category: string;
+  genres: string[];
+  rating: number | null;
+  premiered: string;
+  network: string;
+  image: string;
+}
+
+export async function fetchGuideProgramInfo(title: string): Promise<GuideProgramInfo | null> {
+  const params = new URLSearchParams({ title });
+  const res = await apiFetch(`/v1/guide/program-info?${params}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 // ---------------------------------------------------------------------------
 // VOD sources (Stremio addons) + torrent playback
 // ---------------------------------------------------------------------------

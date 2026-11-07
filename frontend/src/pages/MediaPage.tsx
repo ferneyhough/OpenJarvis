@@ -40,6 +40,7 @@ import {
   fetchGuideDocument,
   fetchGuideEpg,
   fetchGuideProbe,
+  fetchGuideProgramInfo,
   fetchIvueGuide,
   fetchVodStreams,
   vodTorrentAdd,
@@ -49,6 +50,7 @@ import {
   vodMagnetUri,
   getBase,
   type GuideEpgResponse,
+  type GuideProgramInfo,
   type VodStream,
   type VodEpisode,
   type VodTorrentStatus,
@@ -1437,6 +1439,8 @@ function IptvTab() {
   const [loaded, setLoaded] = useState(false);
   const [playing, setPlaying] = useState<GuideChannel | null>(null);
   const [detail, setDetail] = useState<{ channel: GuideChannel; program: GuideProgram } | null>(null);
+  const [programInfo, setProgramInfo] = useState<GuideProgramInfo | null>(null);
+  const [programInfoLoading, setProgramInfoLoading] = useState(false);
   const [regionFilter, setRegionFilter] = useState<string>('ALL');
   const [query, setQuery] = useState('');
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -1463,6 +1467,38 @@ function IptvTab() {
   const rowRefs = useRef<Map<number, HTMLElement>>(new Map());
   const dragRef = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
+
+  // Fetch rich program info (EPG description or TVMaze summary) when the
+  // detail popup opens. Cancelled-safe via a request token.
+  useEffect(() => {
+    if (!detail) {
+      setProgramInfo(null);
+      setProgramInfoLoading(false);
+      return;
+    }
+    const title = detail.program.title?.trim();
+    if (!title) {
+      setProgramInfo(null);
+      setProgramInfoLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setProgramInfo(null);
+    setProgramInfoLoading(true);
+    fetchGuideProgramInfo(title)
+      .then((info) => {
+        if (!cancelled) setProgramInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setProgramInfo(null);
+      })
+      .finally(() => {
+        if (!cancelled) setProgramInfoLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -2182,40 +2218,12 @@ function IptvTab() {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        Live channels merged from regional playlists with TV schedules for the next 24 hours.
-        Times are shown in each channel's home timezone. Channels play in the built-in player.
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <p className="text-xs shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+        Live channels merged from regional playlists with TV schedules. Times are shown in each channel's home timezone.
       </p>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {REGION_PRESETS.map((region) => {
-          const active = enabledRegions.has(region.key);
-          return (
-            <button
-              key={region.key}
-              onClick={() =>
-                setEnabledRegions((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(region.key)) next.delete(region.key);
-                  else next.add(region.key);
-                  return next;
-                })
-              }
-              className="px-2.5 py-1 rounded-lg text-xs cursor-pointer"
-              style={{
-                background: active ? 'var(--color-accent-subtle)' : 'var(--color-bg-secondary)',
-                color: active ? 'var(--color-text)' : 'var(--color-text-tertiary)',
-                border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
-              }}
-            >
-              {region.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="grid gap-2 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2 shrink-0">
         <label className="space-y-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
           Custom playlist URL (M3U/M3U8, optional)
           <input
@@ -2238,7 +2246,7 @@ function IptvTab() {
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
         <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
           {(['main', 'kids', 'sports'] as const).map((view) => (
             <button
@@ -2319,39 +2327,6 @@ function IptvTab() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={linkUrl}
-          onChange={(e) => setLinkUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && linkUrl.trim()) {
-              setLinkTarget({ src: linkUrl.trim() });
-              setLinkUrl('');
-            }
-          }}
-          placeholder="Play any video link here — YouTube, MP4, WebM or M3U8 stream"
-          className="h-9 flex-1 min-w-[16rem] rounded-lg bg-transparent px-3 text-sm outline-none"
-          style={inputStyle}
-        />
-        <button
-          onClick={() => {
-            if (linkUrl.trim()) {
-              setLinkTarget({ src: linkUrl.trim() });
-              setLinkUrl('');
-            }
-          }}
-          disabled={!linkUrl.trim()}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
-          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-        >
-          <Play size={12} />
-          Play in Jarvis
-        </button>
-      </div>
-      <p className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        Video links open in the built-in player instead of leaving the app. YouTube embeds; MP4/WebM/M3U8 streams play directly. Sites with DRM (Netflix, Twitch, etc.) cannot be embedded and will show a fallback message.
-      </p>
-
       {error && <ErrorNote message={error} />}
       {playNotice && (
         <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{playNotice}</div>
@@ -2418,21 +2393,11 @@ function IptvTab() {
       )}
 
       {channels.length > 0 && (
-        <p className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
-          <Gamepad2 size={11} />
-          <span>
-            D-pad / arrow keys: ↑↓ channels · ←→ ±30 min · Enter play · I program info · Esc close
-          </span>
-          <span className="ml-auto">Drag the grid to pan</span>
-        </p>
-      )}
-
-      {channels.length > 0 && (
-        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+        <div className="flex-1 min-h-0 flex flex-col rounded-xl overflow-hidden" style={panelStyle}>
           <div
             ref={gridScrollRef}
-            className="overflow-auto"
-            style={{ height: 'min(74vh, 56rem)', minHeight: '26rem', cursor: 'grab' }}
+            className="overflow-auto flex-1 min-h-0"
+            style={{ cursor: 'grab' }}
             onPointerDown={(e) => {
               if (e.pointerType !== 'mouse' || e.button !== 0) return;
               const el = e.currentTarget;
@@ -2689,6 +2654,71 @@ function IptvTab() {
         </div>
       )}
 
+      {/* Bottom dock — region picks, custom sources, link player, shortcuts */}
+      <div className="shrink-0 rounded-xl px-3 py-2.5 flex flex-col gap-2" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-widest mr-1" style={{ color: 'var(--color-text-tertiary)' }}>Regions</span>
+          {REGION_PRESETS.map((region) => {
+            const active = enabledRegions.has(region.key);
+            return (
+              <button
+                key={region.key}
+                onClick={() =>
+                  setEnabledRegions((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(region.key)) next.delete(region.key);
+                    else next.add(region.key);
+                    return next;
+                  })
+                }
+                className="px-2.5 py-1 rounded-lg text-xs cursor-pointer"
+                style={{
+                  background: active ? 'var(--color-accent-subtle)' : 'var(--color-bg-tertiary)',
+                  color: active ? 'var(--color-text)' : 'var(--color-text-tertiary)',
+                  border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                }}
+              >
+                {region.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && linkUrl.trim()) {
+                setLinkTarget({ src: linkUrl.trim() });
+                setLinkUrl('');
+              }
+            }}
+            placeholder="Play any video link — YouTube, MP4, WebM or M3U8 stream"
+            className="h-8 flex-1 min-w-[14rem] rounded-lg bg-transparent px-3 text-xs outline-none"
+            style={inputStyle}
+          />
+          <button
+            onClick={() => {
+              if (linkUrl.trim()) {
+                setLinkTarget({ src: linkUrl.trim() });
+                setLinkUrl('');
+              }
+            }}
+            disabled={!linkUrl.trim()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
+            style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+          >
+            <Play size={12} />
+            Play in Jarvis
+          </button>
+        </div>
+        <p className="text-[10px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
+          <Gamepad2 size={10} />
+          <span>↑↓ channels · ←→ ±30 min · Enter play · I info · Esc close · drag to pan</span>
+          <span className="ml-auto">Links play in-app; DRM sites can't embed.</span>
+        </p>
+      </div>
+
       {/* Program detail popup — iVue-style: click a programme for info + play */}
       {detail && (
         <div
@@ -2697,10 +2727,18 @@ function IptvTab() {
           onClick={() => setDetail(null)}
         >
           <div
-            className="rounded-2xl w-full max-w-sm p-5"
+            className="rounded-2xl w-full max-w-md p-5"
             style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}
             onClick={(e) => e.stopPropagation()}
           >
+            {programInfo?.image && (
+              <img
+                src={programInfo.image}
+                alt=""
+                className="w-full h-28 object-cover rounded-xl mb-3"
+                style={{ background: 'var(--color-bg-tertiary)' }}
+              />
+            )}
             <div className="flex items-start gap-3">
               {detail.channel.logo ? (
                 <img src={detail.channel.logo} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" style={{ background: '#000' }} />
@@ -2719,13 +2757,70 @@ function IptvTab() {
             </div>
             <div className="mt-4 rounded-xl p-3" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
               <div className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: NOW_COLOR }}>Now / Next</div>
-              <div className="text-sm font-medium mt-1" style={{ color: 'var(--color-text)' }}>{detail.program.title || '—'}</div>
+              <div className="text-sm font-medium mt-1" style={{ color: 'var(--color-text)' }}>
+                {detail.program.title || '—'}
+                {programInfo?.sub_title ? (
+                  <span className="font-normal" style={{ color: 'var(--color-text-secondary)' }}> — {programInfo.sub_title}</span>
+                ) : null}
+              </div>
               <div className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
                 {new Date(detail.program.start).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
                 {' – '}
                 {new Date(detail.program.stop).toLocaleString([], { hour: 'numeric', minute: '2-digit' })}
+                {` · ${Math.max(1, Math.round((detail.program.stop - detail.program.start) / 60000))} min`}
               </div>
             </div>
+
+            {/* Rich program info: EPG description or TVMaze summary */}
+            <div className="mt-3">
+              {programInfoLoading ? (
+                <div className="text-[11px] py-2" style={{ color: 'var(--color-text-tertiary)' }}>Loading program info…</div>
+              ) : programInfo && (programInfo.description || programInfo.genres.length > 0 || programInfo.category) ? (
+                <div className="rounded-xl p-3" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+                  {programInfo.description && (
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+                      {programInfo.description}
+                    </p>
+                  )}
+                  {(programInfo.category || programInfo.genres.length > 0 || programInfo.rating != null || programInfo.premiered || programInfo.network) && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {programInfo.category && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}>{programInfo.category}</span>
+                      )}
+                      {programInfo.genres.map((g) => (
+                        <span key={g} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}>{g}</span>
+                      ))}
+                      {programInfo.rating != null && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,193,7,0.15)', color: '#ffc107' }}>★ {programInfo.rating.toFixed(1)}</span>
+                      )}
+                      {programInfo.premiered && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}>{programInfo.premiered}</span>
+                      )}
+                      {programInfo.network && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}>{programInfo.network}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : !programInfoLoading ? (
+                <div className="text-[11px] py-1" style={{ color: 'var(--color-text-tertiary)' }}>No description available for this program.</div>
+              ) : null}
+            </div>
+
+            {/* Up next on this channel */}
+            {(() => {
+              const next = detail.channel.schedule
+                .filter((p) => p.start >= detail.program.stop)
+                .sort((a, b) => a.start - b.start)[0];
+              if (!next) return null;
+              return (
+                <div className="mt-3 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                  <span className="font-semibold uppercase tracking-widest text-[9px]" style={{ color: NOW_COLOR }}>Up next · </span>
+                  {new Date(next.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — {next.title || '—'}
+                </div>
+              );
+            })()}
+
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() => { playChannel(detail.channel); setDetail(null); }}
@@ -2767,9 +2862,10 @@ export function MediaPage() {
     return () => window.removeEventListener('jarvis:media-tab', onTab);
   }, []);
 
+  const isGuide = tab === 'guide';
   return (
-    <div className="flex-1 flex flex-col overflow-hidden px-6 py-10">
-      <div className="max-w-6xl mx-auto w-full flex flex-col flex-1 overflow-hidden">
+    <div className={isGuide ? 'flex-1 flex flex-col overflow-hidden' : 'flex-1 flex flex-col overflow-hidden px-6 py-10'}>
+      <div className={isGuide ? 'flex-1 flex flex-col min-h-0 w-full' : 'max-w-6xl mx-auto w-full flex flex-col flex-1 overflow-hidden'}>
         <header className="mb-5 shrink-0 flex items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Media</h1>
@@ -2805,23 +2901,24 @@ export function MediaPage() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-1 pb-4">
-          {tab === 'guide' && (
-            <div className="flex flex-col gap-6">
-              <IptvTab />
-              <div>
-                <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text)' }}>
-                  Tonight's Shows
-                </h2>
-                <TvGuideTab />
-              </div>
+        {isGuide ? (
+          <div className="flex-1 flex flex-col min-h-0 gap-3">
+            <IptvTab />
+            <div className="shrink-0 max-h-64 overflow-y-auto pr-1">
+              <h2 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+                Tonight's Shows
+              </h2>
+              <TvGuideTab />
             </div>
-          )}
-          {tab === 'movies' && <CatalogTab type="movie" />}
-          {tab === 'shows' && <CatalogTab type="series" />}
-          {tab === 'local' && <LocalTab />}
-          {tab === 'links' && <LinksTab />}
-        </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto pr-1 pb-4">
+            {tab === 'movies' && <CatalogTab type="movie" />}
+            {tab === 'shows' && <CatalogTab type="series" />}
+            {tab === 'local' && <LocalTab />}
+            {tab === 'links' && <LinksTab />}
+          </div>
+        )}
       </div>
     </div>
   );

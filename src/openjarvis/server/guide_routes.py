@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import html as _html_mod
 import ipaddress
 import json
 import logging
@@ -762,6 +763,13 @@ _xmltv_programme_re = re.compile(
     r"<programme\b([^>]*)>([\s\S]*?)</programme>", re.IGNORECASE
 )
 _xmltv_title_re = re.compile(r"<title\b[^>]*>([\s\S]*?)</title>", re.IGNORECASE)
+_xmltv_subtitle_re = re.compile(
+    r"<sub-title\b[^>]*>([\s\S]*?)</sub-title>", re.IGNORECASE
+)
+_xmltv_desc_re = re.compile(r"<desc\b[^>]*>([\s\S]*?)</desc>", re.IGNORECASE)
+_xmltv_category_re = re.compile(
+    r"<category\b[^>]*>([\s\S]*?)</category>", re.IGNORECASE
+)
 _xmltv_display_re = re.compile(
     r"<display-name\b[^>]*>([\s\S]*?)</display-name>", re.IGNORECASE
 )
@@ -927,9 +935,19 @@ def _epg_document(url: str) -> tuple[dict, dict]:
             continue
         title_match = _xmltv_title_re.search(body)
         title = _strip_html(title_match.group(1)) if title_match else ""
-        programmes.setdefault(channel.group(1), []).append(
-            {"title": title, "start": start, "stop": stop}
-        )
+        entry = {"title": title, "start": start, "stop": stop}
+        # Rich metadata is kept in the doc cache (for /program-info lookups)
+        # but stripped from the bulk /epg payload to keep it small.
+        sub = _xmltv_subtitle_re.search(body)
+        if sub:
+            entry["sub_title"] = _html_mod.unescape(_strip_html(sub.group(1)))[:300]
+        desc = _xmltv_desc_re.search(body)
+        if desc:
+            entry["desc"] = _html_mod.unescape(_strip_html(desc.group(1)))[:2000]
+        cat = _xmltv_category_re.search(body)
+        if cat:
+            entry["category"] = _html_mod.unescape(_strip_html(cat.group(1)))[:200]
+        programmes.setdefault(channel.group(1), []).append(entry)
     for entries in programmes.values():
         entries.sort(key=lambda p: p["start"])
 
@@ -961,7 +979,8 @@ def guide_epg(url: str, hours: float = 24.0) -> dict:
     programmes: dict[str, list[dict]] = {}
     for cid, entries in all_programmes.items():
         windowed = [
-            p for p in entries
+            {"title": p["title"], "start": p["start"], "stop": p["stop"]}
+            for p in entries
             if p["stop"] >= window_start and p["start"] <= window_stop
         ]
         if windowed:
@@ -975,6 +994,177 @@ def guide_epg(url: str, hours: float = 24.0) -> dict:
         "fetched_at": now,
     }
     _cache[cache_key] = (time.monotonic(), result)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Program info — rich text (description, subtitle, category) for one programme.
+# Searches the warm EPG doc caches first (free, instant), then falls back to
+# TVMaze for a plot summary + genres + rating when the guide has no <desc>.
+# ---------------------------------------------------------------------------
+
+_pinfo_cache: dict[str, tuple[float, dict]] = {}
+_PINFO_TTL = 3600.0
+# url -> (doc_monotonic_ts, {normalized_title: programme})
+_epg_title_index: dict[str, tuple[float, dict]] = {}
+
+
+def _norm_prog_title(title: str) -> str:
+    t = re.sub(r"\s*\(\d{4}\)\s*$", "", title.strip().lower())
+    return re.sub(r"\s+", " ", t)
+
+
+def _epg_program_for_title(title: str) -> Optional[dict]:
+    """Find a cached programme matching ``title`` across all warm EPG docs."""
+    want = _norm_prog_title(title)
+    if not want:
+        return None
+    for url, (doc_ts, _channels, programmes) in list(_epg_doc_cache.items()):
+        idx = _epg_title_index.get(url)
+        if idx is None or idx[0] != doc_ts:
+            built: dict[str, dict] = {}
+            for entries in programmes.values():
+                for p in entries:
+                    key = _norm_prog_title(p.get("title", ""))
+                    if key and key not in built:
+                        built[key] = p
+            idx = (doc_ts, built)
+            _epg_title_index[url] = idx
+        hit = idx[1].get(want)
+        if hit is not None and (
+            hit.get("desc") or hit.get("sub_title") or hit.get("category")
+        ):
+            return hit
+    return None
+
+
+@guide_router.get("/program-info")
+def guide_program_info(title: str) -> dict:
+    """Return rich info text for a programme title.
+
+    Priority: EPG ``<desc>``/``<sub-title>``/``<category>`` from the warm doc
+    caches, then a TVMaze show lookup for summary/genres/rating.
+    """
+    _require_online()
+    title = (title or "").strip()
+    if len(title) < 2:
+        raise HTTPException(status_code=400, detail="title too short")
+    if len(title) > 300:
+        title = title[:300]
+
+    cache_key = f"pinfo:{title.lower()}"
+    hit = _pinfo_cache.get(cache_key)
+    if hit is not None and time.monotonic() - hit[0] < _PINFO_TTL:
+        return hit[1]
+
+    epg_hit = _epg_program_for_title(title)
+    if epg_hit is not None:
+        result = {
+            "source": "epg",
+            "title": epg_hit.get("title", title),
+            "description": _html_mod.unescape(epg_hit.get("desc", "")),
+            "sub_title": _html_mod.unescape(epg_hit.get("sub_title", "")),
+            "category": _html_mod.unescape(epg_hit.get("category", "")),
+            "genres": [],
+            "rating": None,
+            "premiered": "",
+            "network": "",
+            "image": "",
+        }
+        _pinfo_cache[cache_key] = (time.monotonic(), result)
+        return result
+
+    # TVMaze fallback — search/shows returns a list (never 404s on no match).
+    try:
+        url = (
+            "https://api.tvmaze.com/search/shows?q="
+            + urllib.parse.quote(title)
+        )
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "OpenJarvis/1.0", "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+            hits = json.loads(resp.read().decode("utf-8"))
+        if hits:
+            show = hits[0].get("show") or {}
+            summary = _html_mod.unescape(_strip_html(show.get("summary") or ""))
+            image = (show.get("image") or {}).get("medium") or ""
+            network = ((show.get("network") or {}).get("name")) or ""
+            rating = (show.get("rating") or {}).get("average")
+            result = {
+                "source": "tvmaze",
+                "title": show.get("name") or title,
+                "description": summary,
+                "sub_title": "",
+                "category": "",
+                "genres": show.get("genres") or [],
+                "rating": rating,
+                "premiered": (show.get("premiered") or "")[:4],
+                "network": network,
+                "image": image,
+            }
+            _pinfo_cache[cache_key] = (time.monotonic(), result)
+            return result
+    except Exception as exc:
+        logger.debug("TVMaze program-info lookup failed for %r: %s", title, exc)
+
+    # Cinemeta fallback — covers movies and series the TV guides don't list.
+    # Candidates from both types are scored by name similarity; a poor match
+    # returns "none" rather than wrong info.
+    try:
+        encoded = urllib.parse.quote(title)
+        want = _norm_prog_title(title)
+        best = None
+        best_score = 0
+        best_type = ""
+        for media_type in ("series", "movie"):
+            cin_url = f"{_CINEMETA}/catalog/{media_type}/top/search={encoded}.json"
+            data = _cached_get(cin_url)
+            for m in data.get("metas") or []:
+                cand = _norm_prog_title(str(m.get("name") or ""))
+                if not cand:
+                    continue
+                if cand == want:
+                    score = 4
+                elif cand.startswith(want) or want.startswith(cand):
+                    score = 3
+                elif want in cand or cand in want:
+                    score = 2
+                else:
+                    continue
+                if score > best_score:
+                    best, best_score, best_type = m, score, media_type
+        if best is not None and best_score >= 2:
+            result = {
+                "source": f"cinemeta:{best_type}",
+                "title": best.get("name") or title,
+                "description": _strip_html(best.get("description") or ""),
+                "sub_title": "",
+                "category": ", ".join(best.get("genres") or [])[:200],
+                "genres": best.get("genres") or [],
+                "rating": best.get("imdbRating") or best.get("rating"),
+                "premiered": str(best.get("releaseInfo") or best.get("year") or "")[:4],
+                "network": "",
+                "image": best.get("poster") or "",
+            }
+            _pinfo_cache[cache_key] = (time.monotonic(), result)
+            return result
+    except Exception as exc:
+        logger.debug("Cinemeta program-info lookup failed for %r: %s", title, exc)
+
+    result = {
+        "source": "none",
+        "title": title,
+        "description": "",
+        "sub_title": "",
+        "category": "",
+        "genres": [],
+        "rating": None,
+        "premiered": "",
+        "network": "",
+        "image": "",
+    }
+    _pinfo_cache[cache_key] = (time.monotonic(), result)
     return result
 
 
