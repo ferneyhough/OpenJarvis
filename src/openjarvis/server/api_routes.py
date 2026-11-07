@@ -1351,6 +1351,35 @@ def _allow_windows_device_consent() -> List[str]:
             except OSError:
                 continue
         granted.append(cap)
+
+    # Pre-register this runtime as a per-app consent entry. Unpackaged apps
+    # normally only appear in Settings > Privacy after their first device
+    # use; creating the entry up front makes the app visible immediately.
+    # Key names encode the exe path: C:\a\b.exe -> C:#a#b.exe.
+    try:
+        import sys
+
+        exe = Path(sys.executable).resolve()
+        if exe.exists():
+            encoded = str(exe).replace("\\", "#")
+            for cap in _DEVICE_CONSENT_CAPABILITIES:
+                try:
+                    key = winreg.CreateKeyEx(
+                        winreg.HKEY_CURRENT_USER,
+                        base + "\\" + cap + r"\NonPackaged\\" + encoded,
+                        0,
+                        winreg.KEY_SET_VALUE,
+                    )
+                    try:
+                        winreg.SetValueEx(
+                            key, "Value", 0, winreg.REG_SZ, "Allow"
+                        )
+                    finally:
+                        winreg.CloseKey(key)
+                except OSError:
+                    continue
+    except OSError:
+        pass
     return granted
 
 
