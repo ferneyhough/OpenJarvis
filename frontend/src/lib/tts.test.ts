@@ -154,6 +154,8 @@ describe('shared voice output', () => {
 
     await useTtsStore.getState().speak('m1', 'Hallo');
     useTtsStore.getState().stop();
+    // Chunked playback revokes the blob URL on a microtask after abort.
+    await new Promise((r) => setTimeout(r, 0));
 
     expect(FakeAudio.instances[0].paused).toBe(true);
     expect(revoked).toEqual(created);
@@ -170,6 +172,8 @@ describe('shared voice output', () => {
     el.onended?.();
     // Clearing src fires a media error; the handler must already be detached.
     el.onerror?.();
+    // The chunk loop finishes on a microtask after `ended` resolves.
+    await new Promise((r) => setTimeout(r, 0));
 
     expect(useTtsStore.getState().error).toBeNull();
     expect(useTtsStore.getState().state).toBe('idle');

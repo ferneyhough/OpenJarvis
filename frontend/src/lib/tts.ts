@@ -113,6 +113,30 @@ export function shouldAutoplayFinishedReply(
     && lastMessage.id !== autoSpokenId;
 }
 
+/**
+ * Split speakable text into sentence-sized chunks (<= ~400 chars). Kokoro
+ * synthesizes on CPU, so feeding it the whole reply means the first sound only
+ * plays after the entire message is rendered; chunking lets playback start
+ * after the first sentence while later chunks synthesize in the background.
+ */
+function splitForSpeech(text: string): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]+["'”)\]]*\s*|[^.!?]+$/g) ?? [text];
+  const chunks: string[] = [];
+  let cur = '';
+  for (const raw of sentences) {
+    const piece = raw.trim();
+    if (!piece) continue;
+    if (cur && (cur + ' ' + piece).length > 400) {
+      chunks.push(cur);
+      cur = piece;
+    } else {
+      cur = cur ? `${cur} ${piece}` : piece;
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks.length > 0 ? chunks : [text];
+}
+
 function teardown(): void {
   if (audio) {
     // Detach first: clearing src re-runs the media load algorithm, which fails
@@ -175,41 +199,113 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
     const ac = new AbortController();
     controller = ac;
 
-    try {
-      const selectedVoice = get().backend === 'kokoro' ? voiceId : undefined;
-      const blob = await synthesizeSpeech(trimmed, { voiceId: selectedVoice, signal: ac.signal });
-      if (mine !== token) return;
+    const selectedVoice = get().backend === 'kokoro' ? voiceId : undefined;
+    const chunks = splitForSpeech(trimmed);
 
-      const url = URL.createObjectURL(blob);
-      objectUrl = url;
-      const el = new Audio(url);
-      audio = el;
-      attachLevelMeter(el);
+    // speak() resolves once the first chunk is actually playing; the rest of
+    // the utterance continues in the background so callers are not held for
+    // the full length of the reply.
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
 
-      el.onended = () => {
-        if (mine !== token) return;
+    const run = async () => {
+      try {
+        // Prefetch the next sentence's audio while the current one plays, so
+        // there is no synthesis gap between chunks.
+        let pending: Promise<Blob> | null = synthesizeSpeech(chunks[0], {
+          voiceId: selectedVoice,
+          signal: ac.signal,
+        });
+        pending.catch(() => undefined);
+
+        for (let i = 0; i < chunks.length; i += 1) {
+          const blob = await pending!;
+          pending = null;
+          if (mine !== token || ac.signal.aborted) return;
+
+          const url = URL.createObjectURL(blob);
+          objectUrl = url;
+          const el = new Audio(url);
+          audio = el;
+          teardownLevelMeter();
+          attachLevelMeter(el);
+
+          if (i + 1 < chunks.length) {
+            pending = synthesizeSpeech(chunks[i + 1], {
+              voiceId: selectedVoice,
+              signal: ac.signal,
+            });
+            pending.catch(() => undefined);
+          }
+
+          let failed = false;
+          const ended = new Promise<void>((resolve) => {
+            el.onended = () => {
+              el.onended = null;
+              el.onerror = null;
+              resolve();
+            };
+            el.onerror = () => {
+              failed = true;
+              el.onended = null;
+              el.onerror = null;
+              resolve();
+            };
+            // pause()/abort does not fire `ended`; without this the loop would
+            // wait forever on a superseded utterance.
+            ac.signal.addEventListener('abort', () => resolve(), { once: true });
+          });
+          const played = el
+            .play()
+            .then(() => {
+              if (mine === token) set({ state: 'speaking', speakingId: id });
+            })
+            .catch(() => {
+              failed = true;
+            });
+          if (i === 0) {
+            await played;
+            markStarted();
+          }
+          await ended;
+          if (i === 0) await played;
+
+          // teardown() may already have revoked this URL when the utterance
+          // was superseded; only revoke the one we still own.
+          if (objectUrl === url) {
+            URL.revokeObjectURL(url);
+            objectUrl = null;
+          }
+          if (mine !== token || ac.signal.aborted) return;
+          if (failed) {
+            teardown();
+            set({ state: 'idle', speakingId: null, error: 'Playback failed', errorId: id });
+            return;
+          }
+        }
+
         teardown();
         set({ state: 'idle', speakingId: null });
-      };
-      el.onerror = () => {
+      } catch (err) {
         if (mine !== token) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         teardown();
-        set({ state: 'idle', speakingId: null, error: 'Playback failed', errorId: id });
-      };
+        set({
+          state: 'idle',
+          speakingId: null,
+          error: err instanceof Error ? err.message : 'Speech synthesis failed',
+          errorId: id,
+        });
+      } finally {
+        // Unblock speak() even when the utterance never reached playback.
+        markStarted();
+      }
+    };
 
-      await el.play();
-      if (mine === token) set({ state: 'speaking', speakingId: id });
-    } catch (err) {
-      if (mine !== token) return;
-      if (err instanceof DOMException && err.name === 'AbortError') return;
-      teardown();
-      set({
-        state: 'idle',
-        speakingId: null,
-        error: err instanceof Error ? err.message : 'Speech synthesis failed',
-        errorId: id,
-      });
-    }
+    void run();
+    await started;
   },
 
   stop: () => {
