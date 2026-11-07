@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LocalWhisperRecognition, isEmbeddedWebView } from '../lib/localRecognition';
+import { LocalWhisperRecognition } from '../lib/localRecognition';
 import { openMicSettings } from '../lib/api';
 
 type HandsFreePhase = 'unsupported' | 'off' | 'starting' | 'sleeping' | 'awake' | 'error';
@@ -49,7 +49,11 @@ function recognitionConstructor(): SpeechRecognitionWindow['SpeechRecognition'] 
   if (typeof window === 'undefined') return undefined;
   const speechWindow = window as SpeechRecognitionWindow;
   const hasMic = Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
-  if (isEmbeddedWebView() && hasMic) {
+  // Prefer the local Whisper path everywhere, not just embedded WebViews:
+  // the browser's SpeechRecognition API depends on a cloud speech service
+  // (fails offline and is flaky in regular tabs), while LocalWhisperRecognition
+  // records short utterances and transcribes them via /v1/speech/transcribe.
+  if (hasMic) {
     return LocalWhisperRecognition as unknown as SpeechRecognitionWindow['SpeechRecognition'];
   }
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
