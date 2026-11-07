@@ -40,6 +40,7 @@ import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
 import { matchesHotkey } from '../../lib/hotkeys';
 import { useHandsFree } from '../../hooks/useHandsFree';
+import { useTtsStore } from '../../lib/tts';
 import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { resolveAgent } from '../../lib/chat-agents';
 import { resolvePermissions } from '../../lib/permissions';
@@ -936,7 +937,6 @@ export function InputArea() {
     window.addEventListener('jarvis:resend', onResend);
     return () => window.removeEventListener('jarvis:resend', onResend);
   }, []);
-  const pendingVoiceMessagesRef = useRef<string[]>([]);
   const launchedHubWindowRef = useRef<Window | null>(null);
 
   const runVoiceNav = useCallback((action: VoiceNavAction) => {
@@ -1014,6 +1014,10 @@ export function InputArea() {
   }, [navigate]);
 
   const handleVoiceCommand = useCallback((text: string) => {
+    // Ignore transcripts while Jarvis is speaking — otherwise the microphone
+    // hears his own TTS output and queues it back as commands forever.
+    const ttsState = useTtsStore.getState().state;
+    if (ttsState === 'loading' || ttsState === 'speaking') return;
     const music = parseMusicVoiceCommand(text);
     if (music && music.type !== 'open-app') {
       runMusicAction(music);
@@ -1160,8 +1164,7 @@ export function InputArea() {
     }
 
     if (useAppStore.getState().streamState.isStreaming) {
-      pendingVoiceMessagesRef.current.push(text);
-      toast.info('Voice request queued until the current reply finishes.');
+      toast.info('Jarvis is still replying — say it again when he finishes.');
       return;
     }
     void sendMessage(text);
@@ -1170,12 +1173,6 @@ export function InputArea() {
     autoResume: handsFreeEnabled,
     onCommand: handleVoiceCommand,
   });
-
-  useEffect(() => {
-    if (streamState.isStreaming || pendingVoiceMessagesRef.current.length === 0) return;
-    const nextMessage = pendingVoiceMessagesRef.current.shift();
-    if (nextMessage) void sendMessage(nextMessage);
-  }, [streamState.isStreaming, sendMessage]);
 
   const startHandsFree = useCallback(async () => {
     const started = await handsFree.start();
