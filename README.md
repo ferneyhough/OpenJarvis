@@ -168,8 +168,9 @@ guide), **Kids**, **Crypto**, **Games**, **Music**, **Browsers**, **Social**, **
 **Record**, **Remote**, **Stores**, and **AI** — each opening a panel of launchers below.
 
 **Guide (Media → Guide tab):** one merged guide pulls live channels from regional
-iptv-org playlists (US, Canada, UK, Ireland, Australia, New Zealand), the Mad Titan
-playlist, and the iVue TV Guide scraper, each with windowed XMLTV schedules out to 24h.
+iptv-org playlists (US, Canada, UK, Ireland, Australia, New Zealand) with windowed
+XMLTV schedules out to 24h — the sources that carry real channel metadata (names,
+logos, groups, synopses).
 Two layouts share the same channel set: **Channels** (default, iVue-style rows — channel
 logo, name and home-timezone badge, Now-playing card with progress bar and EPG/iVue
 synopsis, clickable Up-next chips, expandable full schedule) and **Timeline** (the

@@ -47,7 +47,6 @@ import {
   fetchGuideEpg,
   fetchGuideProbe,
   fetchGuideProgramInfo,
-  fetchIvueGuide,
   fetchVodStreams,
   vodTorrentAdd,
   vodTorrentStatus,
@@ -1213,7 +1212,6 @@ interface RegionPreset {
   playlist: string;
   epg: string;
   tz: string;
-  ivue?: boolean;
 }
 
 const REGION_PRESETS: RegionPreset[] = [
@@ -1259,21 +1257,9 @@ const REGION_PRESETS: RegionPreset[] = [
     epg: 'https://epgshare01.online/epgshare01/epg_ripper_NZ1.xml.gz',
     tz: 'Pacific/Auckland',
   },
-  {
-    key: 'MT',
-    label: 'Mad Titan',
-    playlist: 'https://magnetic.website/jet/playlists/titan.m3u8',
-    epg: 'https://magnetic.website/jet/epg/merged_epg.xml.gz',
-    tz: 'America/New_York',
-  },
-  {
-    key: 'IV',
-    label: 'iVue Guide',
-    playlist: '',
-    epg: '',
-    tz: '',
-    ivue: true,
-  },
+  // Mad Titan and iVue sources removed — their channels lacked usable
+  // metadata (no logos/groups, thin synopses). iptv-org playlists +
+  // windowed XMLTV EPG carry the real channel info.
 ];
 
 interface GuideChannel extends M3UChannel {
@@ -1671,8 +1657,7 @@ function IptvTab() {
       }
     };
 
-    const streamRegions = regions.filter((r) => !r.ivue);
-    const ivueRegions = regions.filter((r) => r.ivue);
+    const streamRegions = regions;
 
     // Per-source progress: each playlist fetch and each EPG fetch counts as a
     // task so the UI can show "3/12 sources · 14s · ~45s left".
@@ -1680,7 +1665,6 @@ function IptvTab() {
     for (const r of streamRegions) {
       taskLabels.push(`${r.label} playlist`, `${r.label} schedule`);
     }
-    if (ivueRegions.length > 0) taskLabels.push('iVue guide');
     if (customUrl) {
       taskLabels.push('Custom playlist');
       if (customGuide.trim()) taskLabels.push('Custom guide');
@@ -1734,40 +1718,6 @@ function IptvTab() {
         }
       }),
     );
-
-    if (ivueRegions.length > 0) {
-      try {
-        const data = await withDeadline(fetchIvueGuide(), 'iVue guide');
-        tickProgress('iVue guide');
-        if (data.stale) {
-          errors.push('iVue guide: showing cached schedule — refreshing in background');
-        }
-        for (const region of ivueRegions) {
-          for (const channel of data.channels) {
-            if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
-            const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
-            if (seen.has(dedupeKey)) continue;
-            seen.add(dedupeKey);
-            merged.push({
-              ...channel,
-              userAgent: '',
-              referrer: '',
-              region: region.key,
-              regionLabel: channel.regionLabel || region.label,
-              tz: channel.tz || region.tz,
-              schedule: channel.schedule ?? [],
-              playable: false,
-            });
-          }
-        }
-        publish();
-      } catch (ivueError) {
-        tickProgress('iVue guide (failed)');
-        errors.push(
-          `iVue Guide: ${ivueError instanceof Error ? ivueError.message : String(ivueError)}`,
-        );
-      }
-    }
 
     if (customUrl) {
       try {
@@ -1959,7 +1909,7 @@ function IptvTab() {
   const playChannel = (channel: GuideChannel) => {
     setPlayNotice('');
     if (!channel.playable) {
-      setPlayNotice(`${channel.name} is guide-only — Mad Titan/plugin channels have no stream OpenJarvis can play.`);
+      setPlayNotice(`${channel.name} is guide-only — this channel has no stream URL OpenJarvis can play.`);
       return;
     }
     if (probing === channel.url) return;
