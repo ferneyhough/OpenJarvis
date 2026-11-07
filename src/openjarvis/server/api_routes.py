@@ -1301,11 +1301,65 @@ async def tts_health(request: Request):
     }
 
 
+# Windows CapabilityAccessManager consent-store capabilities we can enable
+# directly. Covers microphone, camera, and screen capture.
+_DEVICE_CONSENT_CAPABILITIES = ("microphone", "webcam", "graphicsCapture")
+
+# Windows Settings URIs for the same capabilities, used as a visual fallback
+# when the registry write is not permitted.
+_DEVICE_SETTINGS_URIS = {
+    "microphone": "ms-settings:privacy-microphone",
+    "webcam": "ms-settings:privacy-webcam",
+    "graphicsCapture": "ms-settings:privacy-graphicscapture",
+}
+
+
+def _allow_windows_device_consent() -> List[str]:
+    """Set Windows privacy consent entries to Allow for device capabilities.
+
+    Returns the capability names whose consent was granted. Best-effort: any
+    capability that cannot be written is simply omitted so the caller can fall
+    back to opening the Settings page for it.
+    """
+    import sys
+
+    granted: List[str] = []
+    if sys.platform != "win32":
+        return granted
+    try:
+        import winreg
+    except ImportError:
+        return granted
+
+    base = (
+        r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager"
+        r"\ConsentStore"
+    )
+    for cap in _DEVICE_CONSENT_CAPABILITIES:
+        for suffix in ("", r"\NonPackaged"):
+            try:
+                key = winreg.CreateKeyEx(
+                    winreg.HKEY_CURRENT_USER,
+                    base + "\\" + cap + suffix,
+                    0,
+                    winreg.KEY_SET_VALUE,
+                )
+                try:
+                    winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, "Allow")
+                finally:
+                    winreg.CloseKey(key)
+            except OSError:
+                continue
+        granted.append(cap)
+    return granted
+
+
 @speech_router.post("/open-mic-settings")
 async def open_mic_settings(request: Request):
-    """Open the OS microphone privacy page and the browser's mic site settings.
+    """Enable mic/camera/screen privacy access and open the settings pages.
 
-    Local-only: this launches programs on the machine running the server.
+    Local-only: this launches programs and writes HKCU consent values on the
+    machine running the server.
     """
     import os
     import shutil
@@ -1317,12 +1371,23 @@ async def open_mic_settings(request: Request):
         raise HTTPException(status_code=403, detail="Local requests only")
 
     opened: List[str] = []
+    consent: List[str] = []
     if sys.platform == "win32":
-        try:
-            os.startfile("ms-settings:privacy-microphone")  # type: ignore[attr-defined]
-            opened.append("windows-privacy")
-        except OSError:
-            logger.debug("Could not open Windows mic privacy page", exc_info=True)
+        consent = _allow_windows_device_consent()
+
+        # Open each capability's Settings page so the user can see the result.
+        # Staggered in the background: the Settings app is single-window, so
+        # back-to-back opens would cancel each other out, and the route should
+        # not hold the request open for several seconds.
+        async def _open_device_pages() -> None:
+            for uri in _DEVICE_SETTINGS_URIS.values():
+                try:
+                    os.startfile(uri)  # type: ignore[attr-defined]
+                except OSError:
+                    logger.debug("Could not open %s", uri, exc_info=True)
+                await asyncio.sleep(2.0)
+
+        asyncio.create_task(_open_device_pages())
 
         browser, url = "chrome", "chrome://settings/content/microphone"
         try:
@@ -1356,7 +1421,7 @@ async def open_mic_settings(request: Request):
             ]
         )
         opened.append("macos-privacy")
-    return {"opened": opened}
+    return {"opened": opened, "consent": consent}
 
 
 # ---- Feedback routes ----

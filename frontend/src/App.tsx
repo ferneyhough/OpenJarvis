@@ -209,7 +209,7 @@ export default function App() {
           </Route>
         </Routes>
       </Suspense>
-      <Toaster position="bottom-right" />
+      <Toaster position="bottom-right" offset={{ right: '5rem' }} />
       <InAppBrowser />
       {commandPaletteOpen && <CommandPalette />}
       {optInModalOpen && (

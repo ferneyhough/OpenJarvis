@@ -2032,6 +2032,11 @@ function IptvTab() {
         }
         return;
       }
+      if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
@@ -2074,7 +2079,7 @@ function IptvTab() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moveGuideCursor, guideCursorChannel, openCursorProgram, detail, channelRows, toggleFullscreen]);
+  }, [moveGuideCursor, guideCursorChannel, openCursorProgram, detail, channelRows, toggleFullscreen, isFullscreen]);
 
   // Gamepad: standard mapping — D-pad/stick moves, A plays, X info, B closes.
   // Held directions auto-repeat so you can "pull" through the grid.
@@ -2388,6 +2393,23 @@ function IptvTab() {
           </span>
         )}
       </div>
+
+      {isFullscreen && (
+        <button
+          onClick={toggleFullscreen}
+          className="fixed top-3 right-3 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer shadow-lg"
+          style={{
+            background: 'var(--color-bg-secondary)',
+            color: 'var(--color-text)',
+            border: '1px solid var(--color-border)',
+          }}
+          title="Exit fullscreen"
+        >
+          <Minimize2 size={13} />
+          Exit fullscreen
+          <span style={{ color: 'var(--color-text-tertiary)' }}>Esc / F</span>
+        </button>
+      )}
 
       {error && <ErrorNote message={error} />}
       {playNotice && (

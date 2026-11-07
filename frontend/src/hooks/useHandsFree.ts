@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocalWhisperRecognition, isEmbeddedWebView } from '../lib/localRecognition';
+import { openMicSettings } from '../lib/api';
 
 type HandsFreePhase = 'unsupported' | 'off' | 'starting' | 'sleeping' | 'awake' | 'error';
 type SpeechRecognitionError = 'not-allowed' | 'service-not-allowed' | 'audio-capture' | 'no-speech' | 'network' | string;
@@ -111,6 +112,16 @@ export function useHandsFree({
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onCommandRef = useRef(onCommand);
   onCommandRef.current = onCommand;
+  // Permission failures trigger the OS settings flow once per session — the
+  // user shouldn't have to hunt for a button when the fix is one click away.
+  const autoOpenedRef = useRef(false);
+  const autoOpenPermissions = useCallback(() => {
+    if (autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    void openMicSettings().catch(() => {
+      autoOpenedRef.current = false;
+    });
+  }, []);
 
   const clearRetry = useCallback(() => {
     if (retryTimerRef.current !== null) {
@@ -153,7 +164,8 @@ export function useHandsFree({
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         shouldRunRef.current = false;
         setPhase('error');
-        setError('Microphone or speech recognition permission was denied. Open this site’s browser permissions, allow Microphone, then retry.');
+        setError('Microphone or speech recognition permission was denied. Windows privacy settings for microphone, camera, and screen capture have been opened — set them to Allow, then retry.');
+        autoOpenPermissions();
       } else if (event.error === 'audio-capture') {
         shouldRunRef.current = false;
         setPhase('error');
@@ -178,16 +190,18 @@ export function useHandsFree({
     try {
       recognition.start();
     } catch (startError) {
+      const name = startError instanceof DOMException ? startError.name : '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+        autoOpenPermissions();
+      }
       recognitionRef.current = null;
       shouldRunRef.current = false;
       setPhase('error');
-      setError(permissionMessage(
-        startError instanceof DOMException ? startError.name : undefined,
-      ));
+      setError(permissionMessage(name || undefined));
       return false;
     }
     return true;
-  }, [clearRetry]);
+  }, [clearRetry, autoOpenPermissions]);
 
   const start = useCallback(async (): Promise<boolean> => {
     if (!recognitionConstructor()) {
@@ -210,16 +224,18 @@ export function useHandsFree({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
     } catch (startError) {
+      const name = startError instanceof DOMException ? startError.name : '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+        autoOpenPermissions();
+      }
       setPhase('error');
-      setError(permissionMessage(
-        startError instanceof DOMException ? startError.name : undefined,
-      ));
+      setError(permissionMessage(name || undefined));
       return false;
     }
 
     shouldRunRef.current = true;
     return beginRecognition();
-  }, [beginRecognition]);
+  }, [beginRecognition, autoOpenPermissions]);
 
   const stop = useCallback(() => {
     shouldRunRef.current = false;
@@ -244,7 +260,8 @@ export function useHandsFree({
         if (cancelled) return;
         if (permission.state === 'denied') {
           setPhase('error');
-          setError('Microphone access is blocked. Open this site’s browser permissions, allow Microphone, then retry.');
+          setError('Microphone access is blocked. Windows privacy settings for microphone, camera, and screen capture have been opened — set them to Allow, then retry.');
+          autoOpenPermissions();
           return;
         }
         if (permission.state !== 'granted') return;
@@ -259,7 +276,7 @@ export function useHandsFree({
     return () => {
       cancelled = true;
     };
-  }, [autoResume, beginRecognition]);
+  }, [autoResume, beginRecognition, autoOpenPermissions]);
 
   useEffect(() => () => {
     shouldRunRef.current = false;

@@ -1257,8 +1257,8 @@ export function InputArea() {
           <button
             type="button"
             onClick={() => { void openMicSettings(); }}
-            title="Open Windows microphone privacy settings and the browser's site permission page"
-            aria-label="Microphone settings"
+            title="Allow microphone, camera, and screen capture in Windows privacy settings, then open the browser's site permission page"
+            aria-label="Device privacy settings"
             className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{
               background: 'var(--color-bg-secondary)',
@@ -1266,19 +1266,19 @@ export function InputArea() {
               border: '1px solid var(--color-border)',
             }}
           >
-            Mic settings{micPerm === 'denied' ? ' (blocked)' : micPerm === 'granted' ? ' ✓' : ''}
+            Device access{micPerm === 'denied' ? ' (blocked)' : micPerm === 'granted' ? ' ✓' : ''}
           </button>
         </div>
         {handsFree.error && handsFree.phase !== 'unsupported' && (
           <div className="flex items-center gap-2 px-1 text-[11px]" role="alert" style={{ color: 'var(--color-error)' }}>
-            <span>To change permission, allow Microphone for this site, then retry.</span>
+            <span>Windows privacy settings were opened — set Microphone, Camera, and Screen capture to Allow, then retry.</span>
             <button
               type="button"
               onClick={() => { void openMicSettings(); }}
               className="shrink-0 rounded px-2 py-0.5 cursor-pointer underline"
               style={{ color: 'var(--color-accent)' }}
             >
-              Open microphone settings
+              Open device settings
             </button>
           </div>
         )}
