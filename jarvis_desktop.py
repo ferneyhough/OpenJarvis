@@ -86,10 +86,50 @@ class _DesktopApi:
 
     def __init__(self):
         self._window = None
+        self._popup = None
         self._fullscreen = False
 
-    def attach(self, window) -> None:
+    def attach(self, window, popup=None) -> None:
         self._window = window
+        self._popup = popup
+
+    # -- Avatar pop-up ------------------------------------------------------
+    # The web UI calls these (see frontend/src/lib/avatarSync.ts): when the
+    # main window loses focus / is covered by another app, the small avatar
+    # pops up at the top of the screen, notification-style; it goes away
+    # when the main window comes back to the front.
+
+    def show_avatar_popup(self) -> None:
+        if self._popup is None:
+            return
+        try:
+            screens = webview.screens
+            screen_w = screens[0].width if screens else 1280
+            self._popup.move(max(0, (screen_w - 184) // 2), 10)
+            self._popup.show()
+        except Exception as exc:
+            print(f"[desktop] avatar pop-up show failed: {exc}")
+
+    def hide_avatar_popup(self) -> None:
+        if self._popup is None:
+            return
+        try:
+            self._popup.hide()
+        except Exception as exc:
+            print(f"[desktop] avatar pop-up hide failed: {exc}")
+
+    def focus_main_window(self) -> None:
+        """Pop-up clicked: bring the main window back to the front."""
+        if self._window is None:
+            return
+        try:
+            self._window.restore()
+        except Exception:
+            pass
+        try:
+            self._window.show()
+        except Exception as exc:
+            print(f"[desktop] focus main window failed: {exc}")
 
     def set_fullscreen(self, fullscreen: bool) -> None:
         want = bool(fullscreen)
@@ -103,6 +143,16 @@ class _DesktopApi:
 
     def is_fullscreen(self) -> bool:
         return self._fullscreen
+
+
+class _PopupApi:
+    """JS bridge for the avatar pop-up window: click brings Jarvis forward."""
+
+    def __init__(self, on_focus):
+        self._on_focus = on_focus
+
+    def focus_main_window(self) -> None:
+        self._on_focus()
 
 
 def _shutdown_server(_window) -> None:
@@ -123,8 +173,33 @@ if __name__ == "__main__":
     _start_server()
     api = _DesktopApi()
     window = webview.create_window("OpenJarvis", URL, width=1280, height=840, js_api=api)
-    api.attach(window)
+    # Avatar pop-up: a small frameless always-on-top window holding the
+    # talking avatar (frontend/public/avatar-popup.html). Created off-screen
+    # so it never flashes at launch; show_avatar_popup() moves it to the top
+    # centre of the screen when another app covers the main window.
+    popup = webview.create_window(
+        "OpenJarvis Avatar",
+        URL + "avatar-popup.html",
+        width=184,
+        height=126,
+        x=-10000,
+        y=-10000,
+        frameless=True,
+        on_top=True,
+        transparent=True,
+        resizable=False,
+        js_api=_PopupApi(api.focus_main_window),
+    )
+    api.attach(window, popup)
     window.events.loaded += lambda: _allow_media_permissions(window)
     window.events.loaded += lambda: _refresh_stale_cache(window)
-    window.events.closed += _shutdown_server
+
+    def _on_main_closed(_window) -> None:
+        _shutdown_server(_window)
+        try:
+            popup.destroy()
+        except Exception:
+            pass
+
+    window.events.closed += _on_main_closed
     webview.start()

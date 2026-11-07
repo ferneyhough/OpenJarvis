@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import App from './App';
 import { initApiBase } from './lib/api';
+import { initAvatarSync } from './lib/avatarSync';
 import { initAnalytics } from './lib/analytics';
 import { applyAppearance } from './lib/themes';
 import './index.css';
@@ -23,6 +24,10 @@ function applyTheme() {
 }
 
 applyTheme();
+
+// Avatar pop-up: broadcast TTS level for the pop-up window and tell the
+// desktop host when this window is covered (see lib/avatarSync.ts).
+initAvatarSync();
 
 // Fetch the API base URL from the Tauri backend before rendering.
 // This ensures JARVIS_PORT is defined in one place (the Rust backend).

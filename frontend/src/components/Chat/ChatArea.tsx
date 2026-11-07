@@ -6,7 +6,7 @@ import { useAppStore } from '../../lib/store';
 import { shouldAutoplayFinishedReply, useTtsStore } from '../../lib/tts';
 import { stripThinkTags } from '../../lib/message-text';
 import { MainPageHub } from './MainPageHub';
-import { JarvisBoot } from './JarvisBoot';
+import { TalkingAvatar } from '../Avatar/TalkingAvatar';
 import { MicHotkeyPrompt } from './MicHotkeyPrompt';
 
 export function ChatArea() {
@@ -114,14 +114,20 @@ export function ChatArea() {
     <div className="flex flex-col h-full">
       <MainPageHub />
 
+      {/* The one and only avatar: a single full-size TalkingAvatar, always on
+          screen — empty chat or mid-conversation — fixed above the message
+          list (outside the scroll area) so whichever state the page is in,
+          the avatar showing is the one that talks. No compact variant. */}
+      <div className="flex justify-center px-4 pt-3">
+        <TalkingAvatar className="w-[min(600px,92%)] rounded-xl" />
+      </div>
+
       <div
         ref={listRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto"
       >
-        {isEmpty ? (
-          <JarvisBoot />
-        ) : (
+        {isEmpty ? null : (
           <div className="max-w-[var(--chat-max-width)] mx-auto px-4 py-6">
             {messages.map((msg, i) => {
               const isLastAssistant =
