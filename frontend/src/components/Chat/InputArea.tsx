@@ -142,6 +142,12 @@ function buildGreeting(): string {
   return 'At your service, sir — what can I do for you?';
 }
 
+const GREETING_TOKENS = new Set([
+  'hey', 'hi', 'hello', 'yo', 'hiya', 'howdy', 'greetings', 'good',
+  'morning', 'afternoon', 'evening', "g'day", 'sup', 'what', 's', 'up',
+  'you', 'there', 'again', 'jarvis',
+]);
+
 function isGreetingMessage(text: string): boolean {
   const normalized = text
     .toLocaleLowerCase()
@@ -149,12 +155,10 @@ function isGreetingMessage(text: string): boolean {
     .replace(/\s+/g, ' ')
     .trim();
   if (!normalized) return false;
-  const core = normalized
-    .replace(/^jarvis\s+/, '')
-    .replace(/\s+jarvis$/, '');
-  return /^(?:(?:hey|hi|hello|yo|hiya|howdy|greetings|good|morning|afternoon|evening|g day|sup|what s up)\s*)+$/.test(
-    core,
-  );
+  const tokens = normalized.split(' ');
+  // Every word must be greeting vocabulary — "hey you jarvis", "hello
+  // there", "good morning" all pass; anything with real content doesn't.
+  return tokens.every((t) => GREETING_TOKENS.has(t));
 }
 
 // While Deep Research is toggled on, poll connected sources for sync
@@ -1308,12 +1312,20 @@ export function InputArea() {
     // Chat-bound commands wait for the current reply AND its speech to
     // finish — deterministic commands above (music, nav, launchers) already
     // ran instantly. Latest command wins; nothing is dropped or backlogged.
+    // While he's busy, only a wake-worded command may queue: without it the
+    // mic hears Jarvis's own voice ("On it.", his replies) and queues that
+    // back as a user message — he ends up answering himself.
     const ttsBusy =
       useTtsStore.getState().state === 'loading' ||
       useTtsStore.getState().state === 'speaking';
     if (ttsBusy || useAppStore.getState().streamState.isStreaming) {
-      pendingVoiceRef.current = text;
-      toast.info("Still on it — I'll handle that right after this reply.");
+      if (/\bjarvis\b/i.test(text)) {
+        pendingVoiceRef.current = text.replace(
+          /^\s*(?:hey\s+)?jarvis\b[\s,:-]*/i,
+          '',
+        );
+        toast.info("Still on it — I'll handle that right after this reply.");
+      }
       return;
     }
     void sendMessage(text);

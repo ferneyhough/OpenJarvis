@@ -73,7 +73,9 @@ export function interpretHandsFreeTranscript(text: string, currentlyAwake: boole
   if (!transcript) return { awake: currentlyAwake };
 
   if (!currentlyAwake) {
-    const wakeWord = /^\s*(?:hey\s+)?jarvis\b[\s,:-]*/i.exec(transcript);
+    // Tolerate natural filler before the wake word: "hey you jarvis",
+    // "hi there jarvis", "hello jarvis" all wake him.
+    const wakeWord = /^\s*(?:(?:hey|hi|hello|yo|hiya|howdy)\s+)?(?:you\s+|there\s+)?jarvis\b[\s,:-]*/i.exec(transcript);
     if (!wakeWord) return { awake: false };
 
     const command = transcript.slice(wakeWord[0].length).trim();
