@@ -315,6 +315,229 @@ export const useTtsStore = create<TtsStore>((set, get) => ({
   },
 }));
 
+/**
+ * Sentence-boundary extraction for streaming speech. Only punctuation-
+ * terminated sentences are emitted mid-stream; the unterminated tail stays
+ * buffered until more text arrives or flush() is called.
+ */
+function extractSpeakUnits(buffer: string): { units: string[]; rest: string } {
+  const re = /[^.!?…]+[.!?…]+["'”’)\]]*(?=\s|$)/g;
+  const units: string[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(buffer))) {
+    units.push(buffer.slice(m.index, re.lastIndex).trim());
+    last = re.lastIndex;
+  }
+  return { units, rest: buffer.slice(last) };
+}
+
+export interface StreamSpeaker {
+  /** Feed a streamed text delta; completed sentences are queued for speech. */
+  push: (delta: string) => void;
+  /** Speak whatever remains buffered; call when the stream ends. */
+  flush: () => void;
+  /** Stop immediately (abort, superseded reply). */
+  cancel: () => void;
+  /** Speak a short phrase immediately, ahead of queued reply sentences. */
+  sayNow: (text: string) => void;
+}
+
+/**
+ * Progressive read-aloud for a streaming reply: instead of waiting for the
+ * full message and synthesizing it whole, each finished sentence is queued
+ * and played as soon as its audio is ready, with the next sentence
+ * prefetched during playback. Shares the module playback slot with speak(),
+ * so a manual read-aloud or a newer reply supersedes it cleanly.
+ */
+export function createStreamSpeaker(id: string, voiceId?: string): StreamSpeaker {
+  token += 1;
+  const mine = token;
+  teardown();
+  const ac = new AbortController();
+  controller = ac;
+  useTtsStore.setState({
+    state: 'loading',
+    speakingId: id,
+    error: null,
+    errorId: null,
+  });
+
+  const selectedVoice = useTtsStore.getState().backend === 'kokoro' ? voiceId : undefined;
+  let buffer = '';
+  let carry = '';
+  const queue: string[] = [];
+  let done = false;
+  let pumpStarted = false;
+  let waiters: (() => void) | null = null;
+  const kick = () => {
+    waiters?.();
+    waiters = null;
+  };
+
+  // Short sentences are merged into the next one so Kokoro doesn't get a
+  // stream of one-word blips; anything >= ~60 chars speaks immediately.
+  const enqueue = (unit: string) => {
+    const s = toSpeakableText(unit);
+    if (!s) return;
+    carry = carry ? `${carry} ${s}` : s;
+    if (carry.length >= 60) {
+      queue.push(carry);
+      carry = '';
+    }
+  };
+
+  const absorb = (final: boolean) => {
+    const { units, rest } = extractSpeakUnits(buffer);
+    buffer = rest;
+    for (const u of units) enqueue(u);
+    if (final) {
+      if (buffer.trim()) enqueue(buffer);
+      buffer = '';
+      if (carry) {
+        queue.push(carry);
+        carry = '';
+      }
+    }
+  };
+
+  const synth = (text: string) => {
+    const p = synthesizeSpeech(text, { voiceId: selectedVoice, signal: ac.signal });
+    p.catch(() => undefined);
+    return p;
+  };
+
+  const pump = async () => {
+    if (pumpStarted) return;
+    pumpStarted = true;
+    try {
+      let nextUnit: string | null = null;
+      let nextPromise: Promise<Blob> | null = null;
+      const ensureNext = () => {
+        if (!nextPromise && queue.length > 0) {
+          nextUnit = queue.shift()!;
+          nextPromise = synth(nextUnit);
+        }
+      };
+      ensureNext();
+
+      while (mine === token && !ac.signal.aborted) {
+        if (!nextPromise) {
+          if (done) break;
+          await new Promise<void>((resolve) => {
+            waiters = resolve;
+          });
+          ensureNext();
+          continue;
+        }
+        nextUnit = null;
+        const blob = await nextPromise;
+        nextPromise = null;
+        if (mine !== token || ac.signal.aborted) return;
+        // Prefetch the following sentence while this one plays.
+        ensureNext();
+
+        const url = URL.createObjectURL(blob);
+        objectUrl = url;
+        const el = new Audio(url);
+        audio = el;
+        teardownLevelMeter();
+        attachLevelMeter(el);
+
+        let failed = false;
+        const ended = new Promise<void>((resolve) => {
+          el.onended = () => {
+            el.onended = null;
+            el.onerror = null;
+            resolve();
+          };
+          el.onerror = () => {
+            failed = true;
+            el.onended = null;
+            el.onerror = null;
+            resolve();
+          };
+          ac.signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+        const played = el
+          .play()
+          .then(() => {
+            if (mine === token) {
+              useTtsStore.setState({ state: 'speaking', speakingId: id });
+            }
+          })
+          .catch(() => {
+            failed = true;
+          });
+        await played;
+        await ended;
+
+        if (objectUrl === url) {
+          URL.revokeObjectURL(url);
+          objectUrl = null;
+        }
+        if (mine !== token || ac.signal.aborted) return;
+        if (failed) {
+          teardown();
+          useTtsStore.setState({
+            state: 'idle',
+            speakingId: null,
+            error: 'Playback failed',
+            errorId: id,
+          });
+          return;
+        }
+      }
+
+      if (mine === token) {
+        teardown();
+        useTtsStore.setState({ state: 'idle', speakingId: null });
+      }
+    } catch (err) {
+      if (mine !== token) return;
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      teardown();
+      useTtsStore.setState({
+        state: 'idle',
+        speakingId: null,
+        error: err instanceof Error ? err.message : 'Speech synthesis failed',
+        errorId: id,
+      });
+    }
+  };
+
+  return {
+    push: (delta: string) => {
+      if (mine !== token || ac.signal.aborted || !delta) return;
+      buffer += delta;
+      absorb(false);
+      kick();
+      void pump();
+    },
+    flush: () => {
+      if (mine !== token || ac.signal.aborted) return;
+      absorb(true);
+      done = true;
+      kick();
+      void pump();
+    },
+    cancel: () => {
+      if (mine !== token) return;
+      token += 1;
+      teardown();
+      useTtsStore.setState({ state: 'idle', speakingId: null });
+    },
+    sayNow: (text: string) => {
+      if (mine !== token || ac.signal.aborted) return;
+      const s = toSpeakableText(text);
+      if (!s) return;
+      queue.unshift(s);
+      kick();
+      void pump();
+    },
+  };
+}
+
 /** Test seam: reset module-level playback handles between cases. */
 export function __resetTtsForTests(): void {
   teardown();

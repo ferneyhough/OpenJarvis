@@ -40,7 +40,7 @@ import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
 import { matchesHotkey } from '../../lib/hotkeys';
 import { useHandsFree } from '../../hooks/useHandsFree';
-import { useTtsStore } from '../../lib/tts';
+import { useTtsStore, createStreamSpeaker, type StreamSpeaker } from '../../lib/tts';
 import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { resolveAgent } from '../../lib/chat-agents';
 import { resolvePermissions } from '../../lib/permissions';
@@ -62,6 +62,33 @@ import type {
   TokenUsage,
   ToolCallInfo,
 } from '../../types';
+
+// Short spoken acknowledgments Jarvis says the instant a request starts, so
+// there is never dead air while the model generates. Rotates without
+// repeating the same phrase twice in a row.
+const ACK_PHRASES = [
+  'On it.',
+  'Let me check on that.',
+  'One moment.',
+  'Looking into it now.',
+  'Give me a second.',
+  'Sure thing.',
+  'Right away.',
+  'Checking that for you.',
+  'Hang on a sec.',
+  'Let me see.',
+  'Working on it.',
+  'Be right with you.',
+];
+let lastAckPhrase = '';
+function pickAckPhrase(): string {
+  let pick = ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
+  if (pick === lastAckPhrase) {
+    pick = ACK_PHRASES[(ACK_PHRASES.indexOf(pick) + 1) % ACK_PHRASES.length];
+  }
+  lastAckPhrase = pick;
+  return pick;
+}
 
 // While Deep Research is toggled on, poll connected sources for sync
 // progress so we can surface "Searching over N items — sync in progress"
@@ -568,6 +595,14 @@ export function InputArea() {
       activeToolCalls: [],
       content: '',
     });
+
+    // Speak each finished sentence as it streams in instead of waiting for
+    // the whole reply — Jarvis starts talking while he is still writing.
+    const speaker: StreamSpeaker | null =
+      baseSettings.voiceOutputEnabled && baseSettings.voiceAutoplay
+        ? createStreamSpeaker(assistantMsg.id, baseSettings.voiceId)
+        : null;
+    speaker?.sayNow(pickAckPhrase());
     useAppStore.getState().addLogEntry({
       timestamp: Date.now(),
       level: 'info',
@@ -681,6 +716,7 @@ export function InputArea() {
           } else if (ev.type === 'synthesis') {
             if (!ttftMs) ttftMs = Date.now() - startTime;
             accumulatedContent += ev.text;
+            speaker?.push(ev.text);
             setStreamState({ content: accumulatedContent, phase: '' });
             const now = Date.now();
             if (now - lastFlush >= 80) {
@@ -808,6 +844,7 @@ export function InputArea() {
             if (delta?.content) {
               if (!ttftMs) ttftMs = Date.now() - startTime;
               accumulatedContent += delta.content;
+              speaker?.push(delta.content);
               setStreamState({ content: accumulatedContent, phase: '' });
 
               const now = Date.now();
@@ -890,6 +927,11 @@ export function InputArea() {
         researchTraces.length > 0 ? researchTraces : undefined,
         researchSourcesByRef.size > 0 ? flushSources() : undefined,
       );
+      // Finish or abort the progressive voice track, then fence the message
+      // so ChatArea's end-of-stream autoplay doesn't speak it a second time.
+      if (controller.signal.aborted) speaker?.cancel();
+      else speaker?.flush();
+      useTtsStore.getState().markAutoSpoken(assistantMsg.id);
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -938,6 +980,9 @@ export function InputArea() {
     return () => window.removeEventListener('jarvis:resend', onResend);
   }, []);
   const launchedHubWindowRef = useRef<Window | null>(null);
+  // Single-slot voice follow-up: a command spoken mid-reply is kept (latest
+  // wins, so it can never back up) and sent the moment the stream ends.
+  const pendingVoiceRef = useRef<string | null>(null);
 
   const runVoiceNav = useCallback((action: VoiceNavAction) => {
     const dispatch = (name: string, detail?: unknown) =>
@@ -1164,7 +1209,8 @@ export function InputArea() {
     }
 
     if (useAppStore.getState().streamState.isStreaming) {
-      toast.info('Jarvis is still replying — say it again when he finishes.');
+      pendingVoiceRef.current = text;
+      toast.info("Still on it — I'll handle that right after this reply.");
       return;
     }
     void sendMessage(text);
@@ -1173,6 +1219,13 @@ export function InputArea() {
     autoResume: handsFreeEnabled,
     onCommand: handleVoiceCommand,
   });
+
+  useEffect(() => {
+    if (streamState.isStreaming || !pendingVoiceRef.current) return;
+    const next = pendingVoiceRef.current;
+    pendingVoiceRef.current = null;
+    void sendMessage(next);
+  }, [streamState.isStreaming, sendMessage]);
 
   const startHandsFree = useCallback(async () => {
     const started = await handsFree.start();
