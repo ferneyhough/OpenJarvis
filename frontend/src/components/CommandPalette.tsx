@@ -5,11 +5,13 @@ import {
   pullModel,
   deleteModel,
   fetchModels,
+  fetchModelCatalog,
   preloadModel,
   isTauri,
   getCloudKeyStatus,
   saveCloudKey,
 } from '../lib/api';
+import type { CatalogEntry } from '../lib/api';
 
 /** Popular models that users can download from the catalogue. */
 const CATALOGUE_MODELS = [
@@ -98,6 +100,8 @@ export function CommandPalette() {
   const [cloudKeyStatus, setCloudKeyStatus] = useState<Record<string, boolean>>({});
   const [cloudKeyError, setCloudKeyError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [catalogEntries, setCatalogEntries] = useState<CatalogEntry[]>([]);
+  const [catalogHardware, setCatalogHardware] = useState<{ available_gb: number; ram_gb: number; gpu: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const models = useAppStore((s) => s.models);
@@ -122,13 +126,32 @@ export function CommandPalette() {
     }
   }, [desktopKeyStorage]);
 
+  // Normalized catalogue rows: live API catalog when available, otherwise the
+  // built-in fallback list.
+  const catalogRows: Array<{
+    id: string; size: string; desc: string;
+    fit?: string; verified?: boolean; cloud_only?: boolean; installed?: boolean;
+  }> = catalogEntries.length > 0
+    ? catalogEntries.map((c) => ({
+        id: c.id,
+        size: c.cloud_only ? 'cloud only' : `~${c.size_gb} GB`,
+        desc: c.desc,
+        fit: c.fit,
+        verified: c.verified,
+        cloud_only: c.cloud_only,
+        installed: c.installed,
+      }))
+    : CATALOGUE_MODELS.filter((m) => !installedIds.has(m.id)).map((m) => ({
+        id: m.id, size: m.size, desc: m.desc, verified: true,
+      }));
+
   const filtered = tab === 'installed'
     ? (query
         ? models.filter((m) => m.id.toLowerCase().includes(query.toLowerCase()))
         : models)
     : tab === 'catalogue'
-    ? CATALOGUE_MODELS.filter((m) =>
-        !installedIds.has(m.id) &&
+    ? catalogRows.filter((m) =>
+        !m.installed &&
         (!query || m.id.toLowerCase().includes(query.toLowerCase()) || m.desc.toLowerCase().includes(query.toLowerCase()))
       )
     : []; // cloud tab doesn't use filtered
@@ -140,6 +163,20 @@ export function CommandPalette() {
   useEffect(() => {
     void refreshCloudKeyStatus();
   }, [refreshCloudKeyStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchModelCatalog()
+      .then((cat) => {
+        if (cancelled) return;
+        setCatalogEntries(cat.data || []);
+        setCatalogHardware(cat.hardware || null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedIdx(0);
@@ -385,10 +422,15 @@ export function CommandPalette() {
                       ) : (
                         <Cpu size={16} style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }} />
                       )}
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 flex items-center gap-1.5">
                         <div className="text-sm truncate" style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text)', fontWeight: isActive ? 500 : 400 }}>
                           {model.id}
                         </div>
+                        {model.engine && model.engine !== 'openjarvis' && (
+                          <span className="text-[9px] px-1.5 py-px rounded flex-shrink-0" style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)' }}>
+                            {model.engine}
+                          </span>
+                        )}
                       </div>
                       {isActive && (
                         <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}>
@@ -415,16 +457,47 @@ export function CommandPalette() {
             )
           ) : tab === 'catalogue' ? (
             <>
-              {(filtered as typeof CATALOGUE_MODELS).map((model) => {
+              {catalogHardware && catalogHardware.available_gb > 0 && (
+                <div className="px-4 py-1.5 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                  Your hardware: {catalogHardware.gpu || 'CPU-only'} · ~{catalogHardware.available_gb} GB usable
+                  {' '}— badges show fit.
+                </div>
+              )}
+              {(filtered as typeof catalogRows).map((model) => {
                 const isPulling = pulling === model.id;
                 const justInstalled = pullSuccess === model.id;
+                const fitColor =
+                  model.fit === 'great' ? 'var(--color-success)' :
+                  model.fit === 'tight' ? '#d97706' :
+                  model.fit === 'toolarge' ? 'var(--color-error)' :
+                  'var(--color-text-tertiary)';
+                const fitLabel =
+                  model.fit === 'great' ? 'Fits well' :
+                  model.fit === 'tight' ? 'Tight fit' :
+                  model.fit === 'toolarge' ? 'Too big' :
+                  model.fit === 'cloud' ? 'Cloud only' : '';
                 return (
                   <div key={model.id} className="flex items-center gap-3 w-full px-4 py-2.5">
                     <Download size={16} style={{ color: 'var(--color-text-tertiary)' }} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm truncate" style={{ color: 'var(--color-text)' }}>{model.id}</div>
+                      <div className="text-sm truncate flex items-center gap-1.5" style={{ color: 'var(--color-text)' }}>
+                        {model.id}
+                        {model.verified === false && (
+                          <span className="text-[9px] px-1 py-px rounded" style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-tertiary)' }}>unverified</span>
+                        )}
+                      </div>
                       <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>{model.desc} &middot; {model.size}</div>
                     </div>
+                    {fitLabel && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0" style={{ color: fitColor, border: `1px solid ${fitColor}55` }}>
+                        {fitLabel}
+                      </span>
+                    )}
+                    {model.cloud_only ? (
+                      <span className="text-[10px] px-2 py-1 rounded-lg flex-shrink-0" style={{ color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)' }}>
+                        No local tag
+                      </span>
+                    ) : (
                     <button
                       onClick={() => handlePull(model.id)}
                       disabled={isPulling || !!pulling}
@@ -439,6 +512,7 @@ export function CommandPalette() {
                        justInstalled ? <><Check size={12} /> Installed</> :
                        <><Download size={12} /> Download</>}
                     </button>
+                    )}
                   </div>
                 );
               })}

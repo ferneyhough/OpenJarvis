@@ -198,6 +198,74 @@ export async function fetchRecommendedModel(): Promise<{ model: string; reason: 
   return res.json();
 }
 
+// --- Smart model catalog / engines / per-section presets -------------------
+
+export interface CatalogEntry {
+  id: string;
+  name: string;
+  params_b: number;
+  size_gb: number;
+  desc: string;
+  tags: string[];
+  verified: boolean;
+  cloud_only?: boolean;
+  fit: 'great' | 'tight' | 'toolarge' | 'cloud' | 'unknown';
+  installed: boolean;
+}
+
+export interface ModelCatalogResponse {
+  data: CatalogEntry[];
+  hardware: { available_gb: number; ram_gb: number; gpu: string };
+}
+
+export interface EngineStatus {
+  key: string;
+  host: string;
+  healthy: boolean;
+  model_count: number;
+}
+
+export interface SectionPreset {
+  section: string;
+  model: string;
+  source: 'installed' | 'catalog' | 'none';
+  fit: string;
+  override: string;
+}
+
+export interface ModelPresetsResponse {
+  sections: string[];
+  presets: SectionPreset[];
+}
+
+export async function fetchModelCatalog(): Promise<ModelCatalogResponse> {
+  const res = await apiFetch(`/v1/models/catalog`);
+  if (!res.ok) throw new Error(`Failed to fetch catalog: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchEngines(): Promise<EngineStatus[]> {
+  const res = await apiFetch(`/v1/engines`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.engines || [];
+}
+
+export async function fetchModelPresets(): Promise<ModelPresetsResponse> {
+  const res = await apiFetch(`/v1/models/presets`);
+  if (!res.ok) return { sections: [], presets: [] };
+  return res.json();
+}
+
+export async function saveModelPreset(section: string, model: string): Promise<void> {
+  const res = await apiFetch(`/v1/models/presets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section, model }),
+  });
+  if (!res.ok) throw new Error(`Failed to save preset: ${res.status}`);
+}
+
 export async function pullModel(modelName: string): Promise<void> {
   // In Tauri, go through the Rust backend directly (avoids CORS / timeout
   // issues with long model downloads via fetch).

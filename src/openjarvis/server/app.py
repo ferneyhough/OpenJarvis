@@ -33,6 +33,7 @@ from openjarvis.server.installer_routes import installer_router
 from openjarvis.server.ivue_routes import ivue_router
 from openjarvis.server.vod_routes import vod_router
 from openjarvis.server.media_routes import media_router
+from openjarvis.server.model_catalog_routes import router as model_catalog_router
 from openjarvis.server.research_router import router as research_router
 from openjarvis.server.routes import router
 from openjarvis.server.upload_router import router as upload_router
@@ -513,6 +514,7 @@ def create_app(
     app.include_router(ivue_router)
     app.include_router(vod_router)
     app.include_router(games_router)
+    app.include_router(model_catalog_router)
     include_all_routes(app)
 
     # Restore SendBlue channel bindings from database on startup

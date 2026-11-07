@@ -1178,6 +1178,7 @@ async def list_models(request: Request) -> ModelListResponse:
                     if _engine_key_for_model(engine, mid) == "litellm"
                     else "openjarvis"
                 ),
+                engine=_engine_key_for_model(engine, mid) or "",
             )
             for mid in model_ids
         ],

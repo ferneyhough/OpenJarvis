@@ -111,6 +111,8 @@ class ModelObject(BaseModel):
     object: str = "model"
     created: int = Field(default_factory=lambda: int(time.time()))
     owned_by: str = "openjarvis"
+    engine: str = ""  # inference backend that serves this model (ollama, lmstudio, ...)
+    fit: str = ""  # hardware-fit badge for catalog entries (great/tight/toolarge)
 
 
 class ModelListResponse(BaseModel):

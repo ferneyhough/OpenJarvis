@@ -25,6 +25,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { useAppStore, type ThemeMode } from '../lib/store';
+import type { ModelInfo } from '../types';
 import { toast } from 'sonner';
 import { useTts } from '../hooks/useTts';
 import {
@@ -44,6 +45,12 @@ import {
   isTauri,
   pullModel,
   deleteModel,
+  fetchModels,
+  fetchModelPresets,
+  fetchEngines,
+  saveModelPreset,
+  type SectionPreset,
+  type EngineStatus,
   fetchMediaModelStatus,
   downloadMediaModel,
   addHubSection,
@@ -376,6 +383,138 @@ function OllamaModelList() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const SECTION_LABELS: Record<string, string> = {
+  chat: 'Chat / assistants',
+  code: 'Coding & modding',
+  reasoning: 'Reasoning & planning',
+  creative: 'Creative writing',
+  kids: 'Kids panel',
+  vision: 'Vision / screenshots',
+  short: 'Quick answers',
+  long: 'Deep / long tasks',
+};
+
+function EngineStatusRow() {
+  const [engines, setEngines] = useState<EngineStatus[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetchEngines()
+        .then((list) => { if (!cancelled) setEngines(list); })
+        .catch(() => {});
+    void load();
+    const t = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  const healthy = engines.filter((e) => e.healthy);
+  if (engines.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>Backends:</span>
+      {engines.map((e) => (
+        <span
+          key={e.key}
+          title={e.host ? `${e.host} — ${e.model_count} model(s)` : e.key}
+          className="text-[10px] px-2 py-0.5 rounded-full"
+          style={{
+            background: e.healthy ? 'color-mix(in srgb, var(--color-success) 12%, transparent)' : 'var(--color-bg-secondary)',
+            color: e.healthy ? 'var(--color-success)' : 'var(--color-text-tertiary)',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          {e.key}{e.healthy ? ` · ${e.model_count}` : ' · off'}
+        </span>
+      ))}
+      {healthy.length === 0 && (
+        <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+          No local backend running — start Ollama, LM Studio, LocalAI, or Jan.
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SectionPresetsRow() {
+  const [presets, setPresets] = useState<SectionPreset[]>([]);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [saving, setSaving] = useState('');
+
+  const refresh = useCallback(async () => {
+    try {
+      const [p, m] = await Promise.all([fetchModelPresets(), fetchModels()]);
+      setPresets(p.presets || []);
+      setModels(m.filter((x) => x.id));
+    } catch {}
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  if (presets.length === 0) {
+    return <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>Loading…</span>;
+  }
+
+  const modelIds = models.map((m) => m.id);
+  const effective = (p: SectionPreset) => p.override || p.model;
+
+  const setOverride = async (section: string, model: string) => {
+    setSaving(section);
+    try {
+      await saveModelPreset(section, model);
+      await refresh();
+      toast.success(model ? `${SECTION_LABELS[section] || section} → ${model}` : `${SECTION_LABELS[section] || section} → auto`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save preset');
+    } finally {
+      setSaving('');
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      {presets.map((p) => (
+        <div key={p.section} className="flex items-center gap-2">
+          <span className="text-[11px] w-36 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+            {SECTION_LABELS[p.section] || p.section}
+          </span>
+          <select
+            value={effective(p)}
+            disabled={saving === p.section}
+            onChange={(e) => void setOverride(p.section, e.target.value === effective(p) && p.override ? '' : e.target.value)}
+            className="flex-1 min-w-0 text-xs rounded-lg px-2 py-1 outline-none cursor-pointer"
+            style={{ background: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+            title={p.override ? 'Override — pick "Auto" entry to clear' : `Recommended (${p.source})`}
+          >
+            {!p.override && p.model && (
+              <option value={p.model}>{p.model} (recommended)</option>
+            )}
+            <option value="">Auto — {p.model || 'none fit'}</option>
+            {modelIds.filter((id) => id !== p.model).map((id) => (
+              <option key={id} value={id}>{id}</option>
+            ))}
+            {p.override && !modelIds.includes(p.override) && (
+              <option value={p.override}>{p.override} (saved)</option>
+            )}
+          </select>
+          {p.fit && p.fit !== 'unknown' && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0"
+              style={{
+                color: p.fit === 'great' ? 'var(--color-success)' : p.fit === 'tight' ? '#d97706' : 'var(--color-error)',
+                border: '1px solid var(--color-border)',
+              }}>
+              {p.fit}
+            </span>
+          )}
+        </div>
+      ))}
+      <div className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+        Recommended models per Jarvis section, chosen for your hardware. Pick a model to override, or leave on Auto.
+      </div>
     </div>
   );
 }
@@ -1790,8 +1929,14 @@ export function SettingsPage() {
 
           {/* Models */}
           <Section title="Models">
+            <SettingRow label="Inference backends" description="Local model servers detected on this machine — Ollama, LM Studio, LocalAI, Jan and more are auto-detected">
+              <EngineStatusRow />
+            </SettingRow>
             <SettingRow label="Local models (Ollama)" description="Chat, coding, vision, reasoning and embedding models — all run offline">
               <OllamaModelList />
+            </SettingRow>
+            <SettingRow label="Per-section model presets" description="Recommended model for each Jarvis section, matched to your hardware — override any of them">
+              <SectionPresetsRow />
             </SettingRow>
             <SettingRow label="Media generation models" description="Image & video generation for the Record/Media tools">
               <MediaModelsRow />

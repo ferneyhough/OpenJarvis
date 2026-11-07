@@ -473,6 +473,20 @@ class LemonadeEngineConfig:
     host: str = "http://localhost:13305"
 
 
+@dataclass(slots=True)
+class LocalAIEngineConfig:
+    """Per-engine config for LocalAI (OpenAI-compatible backend)."""
+
+    host: str = "http://localhost:8080"
+
+
+@dataclass(slots=True)
+class JanEngineConfig:
+    """Per-engine config for Jan's local API server."""
+
+    host: str = "http://localhost:1337"
+
+
 @dataclass
 class EngineConfig:
     """Inference engine settings with nested per-engine configs."""
@@ -491,6 +505,8 @@ class EngineConfig:
     afm: AfmEngineConfig = field(default_factory=AfmEngineConfig)
     gemma_cpp: GemmaCppEngineConfig = field(default_factory=GemmaCppEngineConfig)
     lemonade: LemonadeEngineConfig = field(default_factory=LemonadeEngineConfig)
+    localai: LocalAIEngineConfig = field(default_factory=LocalAIEngineConfig)
+    jan: JanEngineConfig = field(default_factory=JanEngineConfig)
 
     # Backward-compat properties for old flat attribute names
     @property
@@ -601,6 +617,24 @@ class EngineConfig:
     def lemonade_host(self, value: str) -> None:
         self.lemonade.host = value
 
+    @property
+    def localai_host(self) -> str:
+        """Deprecated: use ``engine.localai.host``."""
+        return self.localai.host
+
+    @localai_host.setter
+    def localai_host(self, value: str) -> None:
+        self.localai.host = value
+
+    @property
+    def jan_host(self) -> str:
+        """Deprecated: use ``engine.jan.host``."""
+        return self.jan.host
+
+    @jan_host.setter
+    def jan_host(self, value: str) -> None:
+        self.jan.host = value
+
 
 @dataclass(slots=True)
 class IntelligenceConfig:
@@ -625,6 +659,9 @@ class IntelligenceConfig:
     top_k: int = 40
     repetition_penalty: float = 1.0
     stop_sequences: str = ""  # Comma-separated stop strings
+    # Per-section model overrides (chat/code/reasoning/...) used by the
+    # desktop hub's per-pill presets. Empty = auto-recommend.
+    pill_models: dict = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -2298,6 +2335,12 @@ host = "http://localhost:8080"
 # [engine.apple_fm]
 # host = "http://localhost:8079"
 
+# [engine.localai]
+# host = "http://localhost:8080"
+
+# [engine.jan]
+# host = "http://localhost:1337"
+
 [intelligence]
 default_model = "{model}"{model_comment}
 fallback_model = ""
@@ -2512,8 +2555,10 @@ __all__ = [
     "IntelligenceConfig",
     "IntelligenceLearningConfig",
     "JarvisConfig",
+    "JanEngineConfig",
     "LearningConfig",
     "LMStudioEngineConfig",
+    "LocalAIEngineConfig",
     "LlamaCppEngineConfig",
     "MCPConfig",
     "MLXEngineConfig",

@@ -16,6 +16,8 @@ _ENGINES = {
     "uzu": ("UzuEngine", "http://localhost:8000", ""),
     "apple_fm": ("AppleFmEngine", "http://localhost:8079", "/v1"),
     "lemonade": ("LemonadeEngine", "http://localhost:13305", "/v1"),
+    "localai": ("LocalAIEngine", "http://localhost:8080", "/v1"),
+    "jan": ("JanEngine", "http://localhost:1337", "/v1"),
 }
 
 for _key, (_cls_name, _default_host, _api_prefix) in _ENGINES.items():
