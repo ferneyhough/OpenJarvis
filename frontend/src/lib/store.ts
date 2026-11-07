@@ -19,6 +19,7 @@ import { isEmbedOnlyModel } from './model-capabilities';
 import type { ChatMode } from './chat-agents';
 import type { PermissionMode } from './permissions';
 import { serializeToolCallArguments } from './tool-call';
+import { track } from './analytics';
 
 export interface CachedConnector {
   connector_id: string;
@@ -412,9 +413,7 @@ export const useAppStore = create<AppState>((set, get) => {
         if (existing && existing.messages.length >= overlay.messages.length) return;
         // Track first use of overlay for this conversation
         if (!existing) {
-          import('../lib/analytics').then(({ track }) => {
-            track('feature_used', { feature_name: 'overlay' });
-          });
+          track('feature_used', { feature_name: 'overlay' });
         }
         store.conversations[overlay.id] = {
           id: overlay.id,

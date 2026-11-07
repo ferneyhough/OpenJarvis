@@ -1851,6 +1851,8 @@ export interface GuideEpgProgram {
   title: string;
   start: number;
   stop: number;
+  /** Programme synopsis when the source provides one (iVue scrapes do). */
+  desc?: string;
 }
 
 export interface GuideEpgResponse {
@@ -1877,6 +1879,8 @@ export interface IvueGuideChannel {
 export interface IvueGuideResponse {
   channels: IvueGuideChannel[];
   count: number;
+  /** true when the server served a stale/cached payload and is refreshing. */
+  stale?: boolean;
 }
 
 export async function fetchIvueGuide(): Promise<IvueGuideResponse> {

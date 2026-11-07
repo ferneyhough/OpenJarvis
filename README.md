@@ -167,19 +167,20 @@ The Chat page is the main page. Its top row has section pills — **Guides** (op
 guide), **Kids**, **Crypto**, **Games**, **Music**, **Browsers**, **Social**, **Media**,
 **Record**, **Remote**, **Stores**, and **AI** — each opening a panel of launchers below.
 
-**Guide (Media → Guide tab):** a Rogers-style EPG grid merges live channels from regional
-iptv-org playlists (US, Canada, UK, Ireland, Australia, New Zealand), the Mad Titan playlist,
-and the iVue TV Guide scraper, each with windowed XMLTV schedules out to 24h in the channel's
-home timezone. The grid is a fixed-height viewport: scroll vertically through channels and
-horizontally through the timeline; it auto-centers on the now-line (cyan, JARVIS theme) and
-a **Now** button jumps back. Views: **Guide** (main channels), **Kids** (kids channels plus a
+**Guide (Media → Guide tab):** one merged guide pulls live channels from regional
+iptv-org playlists (US, Canada, UK, Ireland, Australia, New Zealand), the Mad Titan
+playlist, and the iVue TV Guide scraper, each with windowed XMLTV schedules out to 24h.
+Two layouts share the same channel set: **Channels** (default, iVue-style rows — channel
+logo, name and home-timezone badge, Now-playing card with progress bar and EPG/iVue
+synopsis, clickable Up-next chips, expandable full schedule) and **Timeline** (the
+Rogers-style EPG grid). Views: **Guide** (main channels), **Kids** (kids channels plus a
 Games group), and **Sports** (channels grouped under per-sport separators). Religious,
-non-English, and gaming channels are filtered out of the main guide; game-show channels stay.
-Channels appear progressively as each playlist/EPG pair finishes loading. Clicking a
-programme opens an iVue-style detail popup with a Watch button; clicking the channel plays
-it in the built-in HLS player. Channels with no playable stream (e.g. `plugin://` Mad Titan
-entries) are marked guide-only. A **Tonight's Shows** section below lists TVMaze schedules
-by show with air times.
+non-English, and gaming channels are filtered out of the main guide; game-show channels
+stay. Channels appear progressively as each playlist/EPG pair finishes loading. Clicking
+a programme opens a detail popup with synopsis, rating/genre metadata, and a Watch button;
+clicking the channel plays it in the built-in HLS player. Channels with no playable
+stream (e.g. `plugin://` Mad Titan entries) are marked guide-only. A **Tonight's Shows**
+section below lists TVMaze schedules by show with air times.
 
 **Movies & Shows tabs:** Rogers-style catalog rows browse movies and series with genre
 filters and global dedupe. Title details offer season/episode pickers, quality filters,

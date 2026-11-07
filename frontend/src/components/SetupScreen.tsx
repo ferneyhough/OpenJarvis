@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2, CheckCircle2, XCircle, Cpu, Server, Database } from 'lucide-react';
 import {
   getSetupStatus,
@@ -11,8 +11,13 @@ import { useAppStore } from '../lib/store';
 import { getOptionalPrograms } from '../lib/optional-programs';
 import { isEmbedOnlyModel } from '../lib/model-capabilities';
 import { InferenceRecoveryButton, InferenceSourceSetup } from './InferenceSourceSetup';
-import { DataSourcesSection } from '../pages/DataSourcesPage';
-import { AppIntegrationsSettings } from '../pages/SettingsPage';
+// Lazy — these pull in the full page modules; keep them out of the eager chunk.
+const DataSourcesSection = lazy(() =>
+  import('../pages/DataSourcesPage').then((m) => ({ default: m.DataSourcesSection })),
+);
+const AppIntegrationsSettings = lazy(() =>
+  import('../pages/SettingsPage').then((m) => ({ default: m.AppIntegrationsSettings })),
+);
 
 const STEPS = [
   { key: 'ollama_ready', label: 'Inference Engine', icon: Cpu, detail: 'Starting Ollama...' },
@@ -206,7 +211,7 @@ function FirstRunSetup({ onFinish }: { onFinish: () => void }) {
                 Choose a source and complete its provider sign-in or credential flow here. OpenJarvis
                 only accesses data through the connector you explicitly connect.
               </p>
-              <DataSourcesSection />
+              <Suspense fallback={null}><DataSourcesSection /></Suspense>
             </>
           )}
 
@@ -313,7 +318,7 @@ function FirstRunSetup({ onFinish }: { onFinish: () => void }) {
                 account data to OpenJarvis; use the supported account connectors in the first tab
                 for that.
               </p>
-              <AppIntegrationsSettings />
+              <Suspense fallback={null}><AppIntegrationsSettings /></Suspense>
             </>
           )}
         </div>

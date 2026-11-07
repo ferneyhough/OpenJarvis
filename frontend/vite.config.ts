@@ -1,4 +1,5 @@
 import path from 'path';
+import { readFileSync } from 'fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -13,7 +14,16 @@ const apiTarget = process.env.OPENJARVIS_VITE_PROXY_TARGET
   || process.env.VITE_API_URL
   || 'http://localhost:8000';
 
+// App version comes from package.json so analytics/events always match the
+// build that produced them — no hardcoded constant to drift.
+const appVersion = JSON.parse(
+  readFileSync(path.resolve(import.meta.dirname, 'package.json'), 'utf-8'),
+).version as string;
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),

@@ -29,7 +29,9 @@ folder back to its original location (`Downloads`, `C:\BuildCache`,
 
 - IPTV tab merges regional playlists (iptv-org US/CA/UK/IE/AU/NZ + Mad Titan
   `titan.m3u8`) with windowed XMLTV EPG via `/v1/guide/epg`.
-- `/v1/guide/ivue` scrapes iVue TV Guide sources (~2 min cold; cache it).
+- `/v1/guide/ivue` scrapes iVue TV Guide sources. Stale-while-revalidate: expired cache
+  is served instantly with `"stale": true` while a single-flight background rebuild runs;
+  last payload persists to `~/.openjarvis/epg_cache/ivue_guide.json`.
 - VOD: `/v1/vod/*` Stremio addons + libtorrent progressive playback.
 - EPG docs are parsed once into `_epg_doc_cache` (6h TTL) and persisted to
   `~/.openjarvis/epg_cache/*.json` so restarts stay fast. A background thread

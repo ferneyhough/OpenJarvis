@@ -22,6 +22,8 @@ import {
   Maximize2,
   Minimize2,
   SlidersHorizontal,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import {
   fetchTvGuide,
@@ -79,6 +81,8 @@ const panelStyle: React.CSSProperties = {
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
 };
+// JARVIS cyan — matches the boot screen theme; shared by all guide views.
+const NOW_COLOR = '#22d3ee';
 const inputStyle: React.CSSProperties = {
   background: 'var(--color-bg-secondary)',
   border: '1px solid var(--color-border)',
@@ -186,47 +190,69 @@ function TvGuideTab() {
         </div>
       )}
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         {groups.map(([showName, eps]) => {
           const first = eps[0];
           return (
             <div key={showName} className="flex gap-3 rounded-xl p-3" style={panelStyle}>
-              {first.show.image && (
-                <img src={first.show.image} alt={showName} className="w-16 h-24 object-cover rounded-lg shrink-0" />
+              {first.show.image ? (
+                <img src={first.show.image} alt={showName} className="w-16 h-24 object-cover rounded-lg shrink-0" style={{ background: 'var(--color-bg-tertiary)' }} />
+              ) : (
+                <span className="w-16 h-24 rounded-lg flex items-center justify-center shrink-0 text-[10px] text-center px-1" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}>
+                  {showName}
+                </span>
               )}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>{showName}</span>
                   <Rating value={first.show.rating} />
                   {first.network && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-text)' }}>
                       {first.network}
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] mt-0.5 mb-2" style={{ color: 'var(--color-text-tertiary)' }}>
-                  {first.show.genres.join(' · ')}
-                  {first.show.url && (
-                    <a href={first.show.url} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-0.5" style={{ color: 'var(--color-accent)' }}>
-                      TVMaze <ExternalLink size={10} />
-                    </a>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  {eps.map((ep) => (
-                    <div key={ep.id ?? `${ep.name}-${ep.airtime}`} className="flex items-start gap-2 text-xs">
-                      <span className="shrink-0 font-mono w-12" style={{ color: 'var(--color-accent)' }}>
-                        {ep.airtime ?? '—'}
+                {first.show.genres.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {first.show.genres.slice(0, 4).map((g) => (
+                      <span key={g} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}>
+                        {g}
                       </span>
-                      <span style={{ color: 'var(--color-text)' }}>
-                        S{ep.season ?? '?'}E{ep.number ?? '?'} — {ep.name}
+                    ))}
+                  </div>
+                )}
+                {first.show.url && (
+                  <a href={first.show.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 mt-1 text-[10px]" style={{ color: 'var(--color-accent)' }}>
+                    TVMaze <ExternalLink size={9} />
+                  </a>
+                )}
+                <div className="flex flex-col gap-1.5 mt-2">
+                  {eps.map((ep) => (
+                    <div
+                      key={ep.id ?? `${ep.name}-${ep.airtime}`}
+                      className="flex items-start gap-2 rounded-lg px-2 py-1.5"
+                      style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+                    >
+                      {ep.airtime && (
+                        <span
+                          className="shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded"
+                          style={{ background: 'var(--color-bg-tertiary)', color: NOW_COLOR }}
+                          title={ep.airdate ? `Airs ${ep.airdate} (${country} local time)` : undefined}
+                        >
+                          {ep.airtime}
+                        </span>
+                      )}
+                      <span className="text-xs min-w-0" style={{ color: 'var(--color-text)' }}>
+                        <span className="font-medium">S{ep.season ?? '?'}E{ep.number ?? '?'} — {ep.name}</span>
                         {ep.runtime ? <span style={{ color: 'var(--color-text-tertiary)' }}> ({ep.runtime}m)</span> : null}
                       </span>
                     </div>
                   ))}
                 </div>
                 {first.summary && (
-                  <p className="text-xs mt-2 line-clamp-2" style={{ color: 'var(--color-text-secondary)' }}>{first.summary}</p>
+                  <p className="text-xs mt-2 leading-relaxed line-clamp-3" style={{ color: 'var(--color-text-secondary)' }}>
+                    {first.summary.replace(/<[^>]+>/g, '')}
+                  </p>
                 )}
               </div>
             </div>
@@ -1431,6 +1457,42 @@ function epgLookup(epg: GuideEpgResponse): (channel: M3UChannel) => GuideProgram
   };
 }
 
+// Timezone helpers for the channel list — programmes are epoch ms, but each
+// channel's schedule is labelled in *its* region's timezone (e.g. a US East
+// channel shows EDT times even when the viewer is elsewhere).
+const tzFormatCache = new Map<string, Intl.DateTimeFormat>();
+
+function tzFormatter(tz: string | undefined, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${tz ?? ''}|${JSON.stringify(opts)}`;
+  let fmt = tzFormatCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: tz || undefined });
+    tzFormatCache.set(key, fmt);
+  }
+  return fmt;
+}
+
+function tzAbbrev(tz: string | undefined, ts: number): string {
+  if (!tz) return '';
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'short',
+    }).formatToParts(ts);
+    return parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function fmtChannelTime(tz: string | undefined, ts: number): string {
+  try {
+    return tzFormatter(tz, { hour: 'numeric', minute: '2-digit', hour12: false }).format(ts);
+  } catch {
+    return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: false });
+  }
+}
+
 function IptvTab() {
   const [initialState] = useState(loadIptvState);
   const [enabledRegions, setEnabledRegions] = useState<Set<string>>(
@@ -1452,7 +1514,9 @@ function IptvTab() {
   const [guideErrors, setGuideErrors] = useState<string[]>([]);
   const [playerError, setPlayerError] = useState('');
   const [playNotice, setPlayNotice] = useState('');
-  const [guideView, setGuideView] = useState<'main' | 'kids' | 'sports'>('main');
+  const [guideView, setGuideView] = useState<'main' | 'kids' | 'sports' | 'movies' | 'shows'>('main');
+  const [guideLayout, setGuideLayout] = useState<'list' | 'grid'>('list');
+  const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
   const [guideDays, setGuideDays] = useState<1 | 2 | 3>(1);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTarget, setLinkTarget] = useState<MediaPlayerTarget | null>(null);
@@ -1675,6 +1739,9 @@ function IptvTab() {
       try {
         const data = await withDeadline(fetchIvueGuide(), 'iVue guide');
         tickProgress('iVue guide');
+        if (data.stale) {
+          errors.push('iVue guide: showing cached schedule — refreshing in background');
+        }
         for (const region of ivueRegions) {
           for (const channel of data.channels) {
             if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
@@ -1850,7 +1917,6 @@ function IptvTab() {
   const GRID_HOURS = guideDays * 24;
   const PX_PER_HOUR = guideDays > 1 ? 80 : 120;
   const GRID_LEFT_W = 240;
-  const NOW_COLOR = '#22d3ee'; // JARVIS cyan — matches the boot screen theme
   const gridStart = useMemo(() => {
     const d = new Date(nowTick);
     d.setMinutes(0, 0, 0);
@@ -2231,11 +2297,11 @@ function IptvTab() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex-1 min-h-0 flex flex-col gap-2">
       {/* Single control row — everything else lives in the bottom dock */}
       <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-0.5">
         <div className="flex rounded-lg overflow-hidden shrink-0" style={{ border: '1px solid var(--color-border)' }}>
-          {(['main', 'kids', 'sports'] as const).map((view) => (
+          {(['main', 'kids', 'sports', 'movies', 'shows'] as const).map((view) => (
             <button
               key={view}
               onClick={() => setGuideView(view)}
@@ -2245,10 +2311,30 @@ function IptvTab() {
                 color: guideView === view ? '#fff' : 'var(--color-text-secondary)',
               }}
             >
-              {view === 'main' ? 'Guide' : view === 'kids' ? 'Kids' : 'Sports'}
+              {view === 'main' ? 'Guide' : view === 'kids' ? 'Kids' : view === 'sports' ? 'Sports' : view === 'movies' ? 'Movies' : 'TV Shows'}
             </button>
           ))}
         </div>
+
+        {/* Layout: iVue-style channel list (default) or EPG timeline grid —
+            hidden on the Movies / TV Shows catalog views */}
+        {guideView !== 'shows' && guideView !== 'movies' && (
+        <div className="flex rounded-lg overflow-hidden shrink-0" style={{ border: '1px solid var(--color-border)' }}>
+          {(['list', 'grid'] as const).map((layout) => (
+            <button
+              key={layout}
+              onClick={() => setGuideLayout(layout)}
+              className="px-3 py-1.5 text-xs cursor-pointer capitalize"
+              style={{
+                background: guideLayout === layout ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
+                color: guideLayout === layout ? '#fff' : 'var(--color-text-secondary)',
+              }}
+            >
+              {layout === 'list' ? 'Channels' : 'Timeline'}
+            </button>
+          ))}
+        </div>
+        )}
 
         {/* Sources dropdown — custom playlist + XMLTV guide */}
         <details className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -2418,7 +2504,215 @@ function IptvTab() {
         </div>
       )}
 
-      {channels.length > 0 && (
+      {/* TV Shows view — tonight's episodes as guide cards */}
+      {guideView === 'shows' && (
+        <div className="flex-1 min-h-0 overflow-y-auto rounded-xl p-3" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+          <TvGuideTab />
+        </div>
+      )}
+
+      {/* Movies view — the VOD movie catalog inside the guide */}
+      {guideView === 'movies' && (
+        <div className="flex-1 min-h-0 overflow-y-auto rounded-xl p-3" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+          <CatalogTab type="movie" />
+        </div>
+      )}
+
+      {/* iVue-style channel list — logo, timezone, now/next, synopses */}
+      {channels.length > 0 && guideLayout === 'list' && guideView !== 'shows' && guideView !== 'movies' && (
+        <div className="flex-1 min-h-0 overflow-y-auto rounded-xl p-1.5 flex flex-col gap-1.5" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+          {gridRows.map((row) => {
+            if (row.kind === 'header') {
+              return (
+                <div
+                  key={`list-header-${row.label}`}
+                  className="flex items-center gap-2 px-2 pt-3 pb-1"
+                  style={{ borderTop: '1px solid var(--color-border)' }}
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>
+                    {row.label}
+                  </span>
+                  <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                    {row.count} channel{row.count === 1 ? '' : 's'}
+                  </span>
+                </div>
+              );
+            }
+            const { channel } = row;
+            const chKey = channelKey(channel);
+            const isPlaying = playing?.url === channel.url;
+            const current = channel.schedule.find((p) => p.start <= nowTick && p.stop > nowTick);
+            const upcoming = channel.schedule
+              .filter((p) => p.start > nowTick)
+              .sort((a, b) => a.start - b.start)
+              .slice(0, 3);
+            const expanded = expandedChannels.has(chKey);
+            const tz = channel.tz || undefined;
+            const tzLabel = tzAbbrev(tz, nowTick);
+            const progPct = current
+              ? Math.min(100, Math.max(0, ((nowTick - current.start) / (current.stop - current.start)) * 100))
+              : 0;
+            return (
+              <div
+                key={chKey}
+                className="rounded-xl px-2.5 py-2"
+                style={{
+                  background: isPlaying ? 'var(--color-accent-subtle)' : 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                {/* Channel header — logo, name, timezone, play */}
+                <div className="flex items-center gap-2">
+                  {channel.logo ? (
+                    <img src={channel.logo} alt="" className="w-8 h-8 rounded-md object-cover shrink-0" style={{ background: '#000' }} loading="lazy" />
+                  ) : (
+                    <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--color-bg-tertiary)' }}>
+                      <Tv size={14} style={{ color: 'var(--color-text-tertiary)' }} />
+                    </span>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] font-semibold truncate" style={{ color: 'var(--color-text)' }}>{channel.name}</span>
+                      {tzLabel && (
+                        <span
+                          className="text-[9px] font-bold px-1 py-px rounded shrink-0"
+                          style={{ background: 'var(--color-bg-tertiary)', color: NOW_COLOR }}
+                          title={`Channel timezone: ${channel.tz}`}
+                        >
+                          {tzLabel}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                      {channel.regionLabel}{channel.group && channel.group !== channel.regionLabel ? ` · ${channel.group}` : ''}
+                    </div>
+                  </div>
+                  {channel.playable && (
+                    <button
+                      onClick={() => playChannel(channel)}
+                      className="p-1.5 rounded-lg cursor-pointer shrink-0"
+                      style={{ color: isPlaying ? 'var(--color-accent)' : 'var(--color-text-tertiary)', border: '1px solid var(--color-border)' }}
+                      title={`Play ${channel.name}`}
+                    >
+                      <Play size={12} />
+                    </button>
+                  )}
+                  {channel.schedule.length > 0 && (
+                    <button
+                      onClick={() =>
+                        setExpandedChannels((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(chKey)) next.delete(chKey);
+                          else next.add(chKey);
+                          return next;
+                        })
+                      }
+                      className="p-1.5 rounded-lg cursor-pointer shrink-0"
+                      style={{ color: 'var(--color-text-tertiary)' }}
+                      title={expanded ? 'Hide schedule' : 'Show full schedule'}
+                    >
+                      {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    </button>
+                  )}
+                </div>
+
+                {/* Now playing — title, channel-tz times, progress */}
+                <div className="mt-2">
+                  {current ? (
+                    <button
+                      onClick={() => setDetail({ channel, program: current })}
+                      className="w-full text-left rounded-lg px-2.5 py-2 cursor-pointer"
+                      style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-widest shrink-0" style={{ color: NOW_COLOR }}>Now</span>
+                        <span className="text-[12px] font-medium truncate flex-1" style={{ color: 'var(--color-text)' }}>
+                          {current.title || '—'}
+                        </span>
+                        <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>
+                          {fmtChannelTime(tz, current.start)}–{fmtChannelTime(tz, current.stop)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-bg-tertiary)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${progPct}%`, background: NOW_COLOR }} />
+                      </div>
+                      {current.desc && (
+                        <p className="text-[10px] mt-1.5 line-clamp-2 leading-snug" style={{ color: 'var(--color-text-tertiary)' }}>
+                          {current.desc}
+                        </p>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="px-2.5 py-2 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                      {channel.schedule.length > 0 ? 'Nothing on right now in this window.' : 'No schedule data.'}
+                    </div>
+                  )}
+                </div>
+
+                {/* Up next — clickable programme chips */}
+                {upcoming.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {upcoming.map((p) => (
+                      <button
+                        key={`${p.start}-${p.title}`}
+                        onClick={() => setDetail({ channel, program: p })}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] cursor-pointer max-w-full"
+                        style={{ background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                        title={p.desc || p.title}
+                      >
+                        <span className="font-mono shrink-0" style={{ color: NOW_COLOR }}>
+                          {fmtChannelTime(tz, p.start)}
+                        </span>
+                        <span className="truncate">{p.title || '—'}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Expanded full schedule */}
+                {expanded && channel.schedule.length > 0 && (
+                  <div className="mt-2 pt-2 flex flex-col gap-1" style={{ borderTop: '1px solid var(--color-border)' }}>
+                    {channel.schedule
+                      .filter((p) => p.stop > gridStart && p.start < gridEnd)
+                      .map((p) => {
+                        const isCurrent = p.start <= nowTick && p.stop > nowTick;
+                        return (
+                          <button
+                            key={`${p.start}-${p.stop}-${p.title}`}
+                            onClick={() => setDetail({ channel, program: p })}
+                            className="flex items-start gap-2 px-2 py-1.5 rounded-lg text-left cursor-pointer"
+                            style={{ background: isCurrent ? 'var(--color-accent-subtle)' : 'transparent' }}
+                          >
+                            <span className="text-[10px] font-mono w-24 shrink-0 pt-px" style={{ color: isCurrent ? NOW_COLOR : 'var(--color-text-tertiary)' }}>
+                              {fmtChannelTime(tz, p.start)}–{fmtChannelTime(tz, p.stop)}
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[11px] font-medium truncate" style={{ color: 'var(--color-text)' }}>
+                                {p.title || '—'}{isCurrent ? '  ●' : ''}
+                              </span>
+                              {p.desc && (
+                                <span className="block text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                                  {p.desc}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {visibleChannels.length === 0 && (
+            <div className="px-3 py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+              {loading ? 'Loading…' : 'No channels match the current filters.'}
+            </div>
+          )}
+        </div>
+      )}
+
+      {channels.length > 0 && guideLayout === 'grid' && guideView !== 'shows' && guideView !== 'movies' && (
         <div className="flex-1 min-h-0 flex flex-col rounded-xl overflow-hidden" style={panelStyle}>
           <div
             ref={gridScrollRef}
@@ -2801,6 +3095,13 @@ function IptvTab() {
               </div>
             </div>
 
+            {/* Synopsis — straight from the EPG/iVue scrape when present */}
+            {detail.program.desc && (
+              <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+                {detail.program.desc}
+              </p>
+            )}
+
             {/* Rich program info: EPG description or TVMaze summary */}
             <div className="mt-3">
               {programInfoLoading ? (
@@ -2832,7 +3133,7 @@ function IptvTab() {
                     </div>
                   )}
                 </div>
-              ) : !programInfoLoading ? (
+              ) : !programInfoLoading && !detail.program.desc ? (
                 <div className="text-[11px] py-1" style={{ color: 'var(--color-text-tertiary)' }}>No description available for this program.</div>
               ) : null}
             </div>
@@ -2932,14 +3233,8 @@ export function MediaPage() {
         </div>
 
         {isGuide ? (
-          <div className="flex-1 flex flex-col min-h-0 gap-3">
+          <div className="flex-1 flex flex-col min-h-0">
             <IptvTab />
-            <div className="shrink-0 max-h-64 overflow-y-auto pr-1">
-              <h2 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-                Tonight's Shows
-              </h2>
-              <TvGuideTab />
-            </div>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto pr-1 pb-4">

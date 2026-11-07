@@ -14,6 +14,8 @@ export interface GuideProgram {
   title: string;
   start: number;
   stop: number;
+  /** Programme synopsis/description when the EPG source provides one. */
+  desc?: string;
 }
 
 function findUnquotedComma(value: string): number {
@@ -119,11 +121,17 @@ export function parseXMLTV(text: string): Map<string, GuideProgram[]> {
   for (const [, attributes, body] of matches) {
     const channelId = xmlAttribute(attributes, 'channel');
     const titleMatch = body.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+    const descMatch = body.match(/<desc\b[^>]*>([\s\S]*?)<\/desc>/i);
     const start = parseXmltvTime(xmlAttribute(attributes, 'start'));
     const stop = parseXmltvTime(xmlAttribute(attributes, 'stop'));
     if (!channelId || !titleMatch || start === null || stop === null || stop <= start) continue;
     const entries = programs.get(channelId) ?? [];
-    entries.push({ title: decodeXml(titleMatch[1].trim()), start, stop });
+    entries.push({
+      title: decodeXml(titleMatch[1].trim()),
+      start,
+      stop,
+      desc: descMatch ? decodeXml(descMatch[1].trim()) : undefined,
+    });
     programs.set(channelId, entries);
   }
   for (const entries of programs.values()) entries.sort((left, right) => left.start - right.start);

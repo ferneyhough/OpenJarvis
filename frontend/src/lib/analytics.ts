@@ -17,8 +17,18 @@
  * initialized and track() becomes a no-op.
  */
 
-import posthog from 'posthog-js';
 import { apiFetch } from './api';
+
+// posthog-js is loaded lazily — it touches `window.location` at module scope,
+// so importing it eagerly breaks non-DOM contexts (tests, SSR, early boot).
+// It only loads when analytics actually initializes.
+type PosthogClient = typeof import('posthog-js').default;
+let posthog: PosthogClient | null = null;
+
+async function loadPosthog(): Promise<PosthogClient> {
+  if (!posthog) posthog = (await import('posthog-js')).default;
+  return posthog;
+}
 
 /**
  * Mirror of the Python event catalog (src/openjarvis/analytics/events.py
@@ -47,9 +57,9 @@ const KNOWN_EVENTS = new Set<string>([
   'usage_daily_summary',
 ]);
 
-// Hardcoded app version — should match the backend.
-// TODO: wire to Vite define() so this comes from package.json at build time.
-const APP_VERSION = '0.1.0';
+// App version injected at build time from package.json (vite define).
+const APP_VERSION =
+  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'unknown';
 
 export interface AnalyticsIdentity {
   enabled: boolean;
@@ -78,7 +88,7 @@ export async function saveAnalyticsPreference(enabled: boolean): Promise<void> {
     initialized = false;
     enabledState = false;
     cachedAnonId = '';
-    try { posthog.opt_out_capturing(); } catch { /* never break the UI */ }
+    try { posthog?.opt_out_capturing(); } catch { /* never break the UI */ }
   }
   const response = await apiFetch('/v1/analytics/preference', {
     method: 'POST',
@@ -111,11 +121,13 @@ export async function initAnalytics(force = false): Promise<void> {
 
     cachedAnonId = identity.anon_id;
 
+    const ph = await loadPosthog();
+
     // PostHog ignores repeated init() calls. Share the first initialization,
     // then explicitly resume capture for every later opt-in.
     if (!sdkReady) {
       sdkReady = new Promise<void>((resolve) => {
-        posthog.init(identity.key, {
+        ph.init(identity.key, {
           api_host: identity.host,
           bootstrap: { distinctID: identity.anon_id },
           // No surprise data collection — only events we call out by name.
@@ -135,15 +147,15 @@ export async function initAnalytics(force = false): Promise<void> {
     }
     await sdkReady;
     if (currentGeneration !== generation) return;
-    posthog.opt_in_capturing({ captureEventName: false });
+    ph.opt_in_capturing({ captureEventName: false });
     enabledState = true;
 
     // Set distinct_id explicitly in case bootstrap raced.
-    posthog.identify(identity.anon_id);
+    ph.identify(identity.anon_id);
 
     // Register version + platform as super-properties so they're attached
     // to every event automatically, without per-call-site repetition.
-    posthog.register({
+    ph.register({
       version: APP_VERSION,
       platform: detectPlatform(),
     });
@@ -174,7 +186,7 @@ export function track(
     return;
   }
   try {
-    posthog.capture(event, properties);
+    posthog?.capture(event, properties);
   } catch {
     // never throw
   }

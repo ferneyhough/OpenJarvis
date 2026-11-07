@@ -10,6 +10,7 @@ rows that can be matched to playable channels by name.
 from __future__ import annotations
 
 import configparser
+import json
 import logging
 import re
 import threading
@@ -32,6 +33,15 @@ INI_PATH = Path(__file__).parent / "data" / "ivue_sources.ini"
 CACHE_TTL = 6 * 3600
 MAX_WORKERS = 32
 DAYS_AHEAD = 2  # today + tomorrow so the 24h grid window is covered
+FETCH_TIMEOUT = 15          # per page; was 20 — dead hosts fail faster
+SOURCE_DEADLINE = 50.0      # max seconds one channel may spend scraping
+CACHE_PATH = (
+    Path.home() / ".openjarvis" / "epg_cache" / "ivue_guide.json"
+)
+
+_cache: dict[str, Any] = {"ts": 0.0, "payload": None}
+_cache_lock = threading.Lock()
+_refresh_lock = threading.Lock()   # single-flight guard for background rebuilds
 
 # section name -> (region key, label, timezone, listing style)
 SECTIONS = {
@@ -48,8 +58,6 @@ UA = {
     )
 }
 
-_cache: dict[str, Any] = {"ts": 0.0, "payload": None}
-_cache_lock = threading.Lock()
 _session = requests.Session()
 _session.headers.update(UA)
 
@@ -84,7 +92,7 @@ def _load_sources() -> list[dict[str, str]]:
 
 def _fetch(url: str) -> str:
     try:
-        r = _session.get(url, timeout=20)
+        r = _session.get(url, timeout=FETCH_TIMEOUT)
         if r.status_code == 200:
             return r.text
     except Exception as exc:  # noqa: BLE001
@@ -178,10 +186,19 @@ def _localize(row: dict[str, Any], tz: str, day: datetime) -> dict[str, Any] | N
     return {"start": start_ms, "title": row["title"], "desc": row.get("desc", "")}
 
 
-def _scrape_source(source: dict[str, str], days: list[datetime]) -> list[dict[str, Any]]:
+def _scrape_source(
+    source: dict[str, str], days: list[datetime], deadline: float | None = None
+) -> list[dict[str, Any]]:
     collected: list[dict[str, Any]] = []
+
+    def expired() -> bool:
+        return deadline is not None and time.monotonic() > deadline
+
     for day in days:
         for url in _page_urls(source, day):
+            if expired():
+                log.debug("ivue deadline hit for %s", source["name"])
+                break
             html = _fetch(url)
             if not html:
                 continue
@@ -232,7 +249,10 @@ def _build_payload() -> dict[str, Any]:
     days = [now + timedelta(days=d) for d in range(DAYS_AHEAD)]
     channels: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(_scrape_source, s, days): s for s in sources}
+        deadline = time.monotonic() + SOURCE_DEADLINE
+        futures = {
+            pool.submit(_scrape_source, s, days, deadline): s for s in sources
+        }
         for fut, source in futures.items():
             try:
                 programmes = fut.result()
@@ -260,14 +280,70 @@ def _build_payload() -> dict[str, Any]:
     return {"channels": channels, "count": len(channels)}
 
 
+def _load_disk() -> dict[str, Any] | None:
+    """Last persisted payload — survives restarts so the grid is never cold."""
+    try:
+        raw = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        if isinstance(raw, dict) and isinstance(raw.get("payload"), dict):
+            return raw
+    except Exception:  # noqa: BLE001 — missing/corrupt cache is fine
+        pass
+    return None
+
+
+def _store(now: float, payload: dict[str, Any]) -> None:
+    with _cache_lock:
+        _cache["ts"] = now
+        _cache["payload"] = payload
+    try:
+        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CACHE_PATH.with_suffix(".tmp")
+        tmp.write_text(
+            json.dumps({"ts": now, "payload": payload}), encoding="utf-8"
+        )
+        tmp.replace(CACHE_PATH)
+    except Exception as exc:  # noqa: BLE001 — cache write must never break the route
+        log.debug("ivue cache write failed: %s", exc)
+
+
+def _refresh_async() -> None:
+    """Single-flight background rebuild — stale data is served instantly."""
+    if not _refresh_lock.acquire(blocking=False):
+        return
+
+    def work() -> None:
+        try:
+            _store(time.time(), _build_payload())
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ivue background refresh failed: %s", exc)
+        finally:
+            _refresh_lock.release()
+
+    threading.Thread(target=work, daemon=True).start()
+
+
 @ivue_router.get("/ivue")
 def ivue_guide() -> dict[str, Any]:
     now = time.time()
     with _cache_lock:
-        if _cache["payload"] and now - _cache["ts"] < CACHE_TTL:
-            return _cache["payload"]
-    payload = _build_payload()
-    with _cache_lock:
-        _cache["ts"] = now
-        _cache["payload"] = payload
-    return payload
+        payload = _cache["payload"]
+        if payload and now - _cache["ts"] < CACHE_TTL:
+            return payload
+
+    # Stale-but-usable beats a multi-minute cold scrape: serve it and refresh
+    # in the background. Falls back to disk so restarts are never cold either.
+    if payload:
+        _refresh_async()
+        return {**payload, "stale": True}
+
+    disk = _load_disk()
+    if disk:
+        with _cache_lock:
+            _cache["ts"] = float(disk.get("ts") or 0.0)
+            _cache["payload"] = disk["payload"]
+        _refresh_async()
+        return {**disk["payload"], "stale": True}
+
+    fresh = _build_payload()
+    _store(now, fresh)
+    return fresh
