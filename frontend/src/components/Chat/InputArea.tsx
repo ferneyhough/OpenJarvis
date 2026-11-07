@@ -43,6 +43,7 @@ import { useHandsFree } from '../../hooks/useHandsFree';
 import { useTtsStore, createStreamSpeaker, prefetchSpeech, type StreamSpeaker } from '../../lib/tts';
 import { ChatToolbar, CHAT_MODES, MODE_PLACEHOLDERS, type Attachment } from './ChatToolbar';
 import { resolveAgent } from '../../lib/chat-agents';
+import { isEmbedOnlyModel } from '../../lib/model-capabilities';
 import { resolvePermissions } from '../../lib/permissions';
 import { FileExplorer } from './FileExplorer';
 import { generateMedia, convertMedia, openFreeMediaSite, openAllowedLink } from '../../lib/api';
@@ -652,6 +653,31 @@ export function InputArea() {
     }));
 
     const routed = resolveAgent(useAppStore.getState().settings.chatMode, content);
+
+    // Task routes get the biggest same-engine model available (smarter answers
+    // for work that takes a while anyway); plain questions stay on the fast
+    // default so chat still feels instant.
+    const paramSize = (id: string) => {
+      const m = /:(\d+(?:\.\d+)?)b/i.exec(id);
+      return m ? parseFloat(m[1]) : 0;
+    };
+    const requestModel = (() => {
+      if (routed.id === 'ask' || deepResearch) return selectedModel;
+      const appState = useAppStore.getState();
+      const owner = appState.models.find((m) => m.id === selectedModel)?.owned_by;
+      const selectedSize = paramSize(selectedModel);
+      const bigger = appState.models
+        .filter(
+          (m) =>
+            m.id !== selectedModel &&
+            !isEmbedOnlyModel(m.id) &&
+            paramSize(m.id) > selectedSize &&
+            (!owner || m.owned_by === owner),
+        )
+        .sort((a, b) => paramSize(b.id) - paramSize(a.id));
+      return bigger[0]?.id ?? selectedModel;
+    })();
+
     const assistantMsg: ChatMessage = {
       id: generateId(),
       role: 'assistant',
@@ -714,7 +740,7 @@ export function InputArea() {
       category: 'chat',
       message: deepResearch
         ? `Research: "${content.slice(0, 80)}${content.length > 80 ? '...' : ''}"`
-        : `Request: "${content.slice(0, 80)}${content.length > 80 ? '...' : ''}" → ${selectedModel}`,
+        : `Request: "${content.slice(0, 80)}${content.length > 80 ? '...' : ''}" → ${requestModel}`,
     });
 
     try {
@@ -889,7 +915,7 @@ export function InputArea() {
         }
       } else {
       for await (const sseEvent of streamChat(
-        { model: selectedModel, messages: requestMessages, stream: true, temperature, max_tokens: maxTokens, agent_mode: routed.id },
+        { model: requestModel, messages: requestMessages, stream: true, temperature, max_tokens: maxTokens, agent_mode: routed.id },
         controller.signal,
       )) {
         const eventName = sseEvent.event;
@@ -900,7 +926,7 @@ export function InputArea() {
           setStreamState({ phase: 'Generating...' });
           useAppStore.getState().addLogEntry({
             timestamp: Date.now(), level: 'info', category: 'chat',
-            message: `Generating with ${selectedModel}...`,
+            message: `Generating with ${requestModel}...`,
           });
         } else if (eventName === 'tool_call_start') {
           try {
