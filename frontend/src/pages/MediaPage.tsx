@@ -21,6 +21,7 @@ import {
   Gamepad2,
   Maximize2,
   Minimize2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   fetchTvGuide,
@@ -37,6 +38,7 @@ import {
   type LocalMediaResponse,
   type LocalMediaGroup,
   type GuideLink,
+  fetchGuideDeadList,
   fetchGuideDocument,
   fetchGuideEpg,
   fetchGuideProbe,
@@ -1564,6 +1566,8 @@ function IptvTab() {
     const errors: string[] = [];
     const merged: GuideChannel[] = [];
     const seen = new Set<string>();
+    // Streams that failed the reachability audit are purged from the grid.
+    const deadUrls = new Set(await fetchGuideDeadList());
     // Publish channels progressively — the grid fills in per region instead of
     // waiting for the slowest playlist+EPG pair (keeps first paint under ~10s).
     const publish = () => {
@@ -1580,6 +1584,7 @@ function IptvTab() {
     ) => {
       for (const channel of parsed) {
         if (isReligiousChannel(channel) || !isEnglishChannel(channel)) continue;
+        if (deadUrls.has(channel.url)) continue;
         const dedupeKey = channel.id || `${channel.name}|${channel.url}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -2219,35 +2224,9 @@ function IptvTab() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <p className="text-xs shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
-        Live channels merged from regional playlists with TV schedules. Times are shown in each channel's home timezone.
-      </p>
-
-      <div className="grid gap-2 md:grid-cols-2 shrink-0">
-        <label className="space-y-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-          Custom playlist URL (M3U/M3U8, optional)
-          <input
-            value={customPlaylist}
-            onChange={(e) => setCustomPlaylist(e.target.value)}
-            placeholder="https://…/channels.m3u8"
-            className="h-9 w-full rounded-lg bg-transparent px-3 text-sm outline-none"
-            style={inputStyle}
-          />
-        </label>
-        <label className="space-y-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-          Custom XMLTV guide URL (optional)
-          <input
-            value={customGuide}
-            onChange={(e) => setCustomGuide(e.target.value)}
-            placeholder="https://…/guide.xml"
-            className="h-9 w-full rounded-lg bg-transparent px-3 text-sm outline-none"
-            style={inputStyle}
-          />
-        </label>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 shrink-0">
-        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+      {/* Single control row — everything else lives in the bottom dock */}
+      <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-0.5">
+        <div className="flex rounded-lg overflow-hidden shrink-0" style={{ border: '1px solid var(--color-border)' }}>
           {(['main', 'kids', 'sports'] as const).map((view) => (
             <button
               key={view}
@@ -2262,57 +2241,71 @@ function IptvTab() {
             </button>
           ))}
         </div>
+
+        {/* Sources dropdown — custom playlist + XMLTV guide */}
+        <details className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+          <summary
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer list-none select-none"
+            style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+            title="Custom playlist / guide URLs"
+          >
+            <SlidersHorizontal size={12} /> Sources
+          </summary>
+          <div
+            className="absolute left-0 top-full mt-1 z-30 w-80 rounded-xl p-3 flex flex-col gap-2"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}
+          >
+            <label className="space-y-1 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+              Custom playlist URL (M3U/M3U8)
+              <input
+                value={customPlaylist}
+                onChange={(e) => setCustomPlaylist(e.target.value)}
+                placeholder="https://…/channels.m3u8"
+                className="h-8 w-full rounded-lg bg-transparent px-2.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </label>
+            <label className="space-y-1 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+              Custom XMLTV guide URL
+              <input
+                value={customGuide}
+                onChange={(e) => setCustomGuide(e.target.value)}
+                placeholder="https://…/guide.xml"
+                className="h-8 w-full rounded-lg bg-transparent px-2.5 text-xs outline-none"
+                style={inputStyle}
+              />
+            </label>
+            <p className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+              Applied on next channel load. Leave empty to use regional sources only.
+            </p>
+          </div>
+        </details>
+
         <button
           onClick={scrollToNow}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+          className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0"
           style={{ background: 'var(--color-bg-secondary)', color: NOW_COLOR, border: `1px solid ${NOW_COLOR}55` }}
           title="Jump the timeline back to the current time"
         >
           ● Now
         </button>
-        <button
-          onClick={toggleFullscreen}
-          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer"
-          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
-          title={isFullscreen ? 'Exit fullscreen (Esc or F)' : 'Fullscreen guide (F)'}
-        >
-          {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-        </button>
-        <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-          Guide range
-          <select
-            value={guideDays}
-            onChange={(e) => setGuideDays(Number(e.target.value) as 1 | 2 | 3)}
-            className="rounded-lg px-2 py-1.5 text-xs cursor-pointer"
-            style={inputStyle}
-            title="How many days of schedule to fetch and display"
-          >
-            <option value={1}>1 day</option>
-            <option value={2}>2 days</option>
-            <option value={3}>3 days</option>
-          </select>
-        </label>
-        <button
-          onClick={() => void loadChannels()}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
-          style={{ background: 'var(--color-accent)', color: '#fff' }}
-        >
-          {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-          {loaded ? 'Reload channels' : 'Load channels'}
-        </button>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter channels…"
-          className="h-8 w-44 rounded-lg bg-transparent px-3 text-xs outline-none"
+        <select
+          value={guideDays}
+          onChange={(e) => setGuideDays(Number(e.target.value) as 1 | 2 | 3)}
+          className="h-8 rounded-lg px-2 text-xs shrink-0 cursor-pointer"
           style={inputStyle}
-        />
+          title="How many days of schedule to fetch and display"
+        >
+          <option value={1}>1 day</option>
+          <option value={2}>2 days</option>
+          <option value={3}>3 days</option>
+        </select>
         <select
           value={regionFilter}
           onChange={(e) => setRegionFilter(e.target.value)}
-          className="h-8 rounded-lg px-2 text-xs"
+          className="h-8 rounded-lg px-2 text-xs shrink-0 cursor-pointer"
           style={inputStyle}
+          title="Filter grid to one region"
         >
           <option value="ALL">All regions</option>
           {REGION_PRESETS.filter((r) => enabledRegions.has(r.key)).map((r) => (
@@ -2320,8 +2313,33 @@ function IptvTab() {
           ))}
           {customPlaylist.trim() && <option value="CUSTOM">Custom</option>}
         </select>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter channels…"
+          className="h-8 w-36 rounded-lg bg-transparent px-3 text-xs outline-none shrink-0"
+          style={inputStyle}
+        />
+        <button
+          onClick={() => void loadChannels()}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 disabled:opacity-50"
+          style={{ background: 'var(--color-accent)', color: '#fff' }}
+          title={loaded ? 'Reload all guide sources' : 'Load guide channels'}
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+          {loaded ? 'Reload' : 'Load'}
+        </button>
+        <button
+          onClick={toggleFullscreen}
+          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer shrink-0"
+          style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+          title={isFullscreen ? 'Exit fullscreen (Esc or F)' : 'Fullscreen guide (F)'}
+        >
+          {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        </button>
         {channels.length > 0 && (
-          <span className="text-xs ml-auto" style={{ color: 'var(--color-text-tertiary)' }}>
+          <span className="text-xs ml-auto shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>
             {visibleChannels.length} of {channels.length} channels
           </span>
         )}
@@ -2581,6 +2599,10 @@ function IptvTab() {
                           <button
                             key={`${program.start}-${pIndex}`}
                             onClick={() => setDetail({ channel, program })}
+                            onDoubleClick={() => {
+                              setDetail(null);
+                              playChannel(channel);
+                            }}
                             className="absolute top-1 bottom-1 rounded-md px-2 text-left overflow-hidden cursor-pointer transition-opacity hover:opacity-80"
                             style={{
                               left,
@@ -2596,7 +2618,7 @@ function IptvTab() {
                               border: isCurrent ? 'none' : '1px solid var(--color-border)',
                               opacity: program.stop <= nowTick ? 0.45 : 1,
                             }}
-                            title={`${channel.name} — ${program.title || '—'}\n${new Date(program.start).toLocaleString()} – ${new Date(program.stop).toLocaleString()}`}
+                            title={`${channel.name} — ${program.title || '—'}\n${new Date(program.start).toLocaleString()} – ${new Date(program.stop).toLocaleString()}\nClick = program info · Double-click = play · drag to pan`}
                           >
                             <span
                               className="block text-[11px] font-medium truncate leading-tight"
@@ -2714,7 +2736,7 @@ function IptvTab() {
         </div>
         <p className="text-[10px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
           <Gamepad2 size={10} />
-          <span>↑↓ channels · ←→ ±30 min · Enter play · I info · Esc close · drag to pan</span>
+          <span>Click a show = info · Double-click = play · drag to pan · ↑↓ channels · ←→ ±30 min · Enter play · Esc close</span>
           <span className="ml-auto">Links play in-app; DRM sites can't embed.</span>
         </p>
       </div>

@@ -1278,6 +1278,27 @@ class LinkPatch(BaseModel):
     note: Optional[str] = Field(default=None, max_length=500)
 
 
+_DEAD_LIST_FILE = (
+    Path(os.environ.get("OPENJARVIS_CONFIG_DIR", str(Path.home() / ".openjarvis")))
+    / "guide_dead.json"
+)
+
+
+@guide_router.get("/dead-list")
+def guide_dead_list() -> dict:
+    """Stream URLs that failed the bulk reachability audit.
+
+    Written by the offline probe script; the guide UI filters these out so
+    dead channels never appear. Missing file = empty list.
+    """
+    try:
+        data = json.loads(_DEAD_LIST_FILE.read_text(encoding="utf-8"))
+        dead = data.get("dead") or {}
+        return {"dead": sorted(dead.keys()), "checked": data.get("checked", 0)}
+    except (OSError, ValueError):
+        return {"dead": [], "checked": 0}
+
+
 @guide_router.get("/links")
 def list_links() -> dict:
     return {"links": _load_links()}

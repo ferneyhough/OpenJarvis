@@ -1914,6 +1914,17 @@ export interface GuideProgramInfo {
   image: string;
 }
 
+export async function fetchGuideDeadList(): Promise<string[]> {
+  try {
+    const res = await apiFetch(`/v1/guide/dead-list`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.dead) ? data.dead : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchGuideProgramInfo(title: string): Promise<GuideProgramInfo | null> {
   const params = new URLSearchParams({ title });
   const res = await apiFetch(`/v1/guide/program-info?${params}`);
