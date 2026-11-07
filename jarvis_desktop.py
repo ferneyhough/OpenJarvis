@@ -77,6 +77,34 @@ def _refresh_stale_cache(window) -> None:
     )
 
 
+class _DesktopApi:
+    """JS bridge: lets the web UI toggle real window fullscreen.
+
+    The DOM Fullscreen API is unreliable inside the WebView2 host, so the
+    Guides page calls window.pywebview.api.set_fullscreen() instead.
+    """
+
+    def __init__(self):
+        self._window = None
+        self._fullscreen = False
+
+    def attach(self, window) -> None:
+        self._window = window
+
+    def set_fullscreen(self, fullscreen: bool) -> None:
+        want = bool(fullscreen)
+        if self._window is None or want == self._fullscreen:
+            return
+        try:
+            self._window.toggle_fullscreen()
+            self._fullscreen = want
+        except Exception as exc:
+            print(f"[desktop] fullscreen toggle failed: {exc}")
+
+    def is_fullscreen(self) -> bool:
+        return self._fullscreen
+
+
 def _shutdown_server(_window) -> None:
     """Window closed (Alt+F4, X button): stop the backend too so the whole
     program exits instead of leaving an orphaned server on :8000."""
@@ -93,7 +121,9 @@ def _shutdown_server(_window) -> None:
 
 if __name__ == "__main__":
     _start_server()
-    window = webview.create_window("OpenJarvis", URL, width=1280, height=840)
+    api = _DesktopApi()
+    window = webview.create_window("OpenJarvis", URL, width=1280, height=840, js_api=api)
+    api.attach(window)
     window.events.loaded += lambda: _allow_media_permissions(window)
     window.events.loaded += lambda: _refresh_stale_cache(window)
     window.events.closed += _shutdown_server

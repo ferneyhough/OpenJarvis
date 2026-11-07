@@ -2381,3 +2381,65 @@ export async function pcPower(action: 'lock' | 'sleep' | 'shutdown' | 'restart' 
     throw new Error(body.detail || `HTTP ${res.status}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Window fullscreen — native Tauri path first (DOM Fullscreen API is
+// unreliable inside the desktop webview), DOM API as browser fallback.
+// ---------------------------------------------------------------------------
+
+type PywebviewApi = {
+  set_fullscreen?: (fs: boolean) => Promise<void> | void;
+  is_fullscreen?: () => Promise<boolean> | boolean;
+};
+
+function pywebviewApi(): PywebviewApi | null {
+  const w = window as unknown as { pywebview?: { api?: PywebviewApi } };
+  return w.pywebview?.api ?? null;
+}
+
+export async function setWindowFullscreen(fullscreen: boolean): Promise<void> {
+  const pw = pywebviewApi();
+  if (pw?.set_fullscreen) {
+    try {
+      await pw.set_fullscreen(fullscreen);
+      return;
+    } catch {
+      /* fall through */
+    }
+  }
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_window_fullscreen', { fullscreen });
+      return;
+    } catch {
+      /* fall through to DOM API */
+    }
+  }
+  try {
+    if (fullscreen) await document.documentElement.requestFullscreen?.();
+    else if (document.fullscreenElement) await document.exitFullscreen?.();
+  } catch {
+    /* fullscreen unavailable */
+  }
+}
+
+export async function getWindowFullscreen(): Promise<boolean> {
+  const pw = pywebviewApi();
+  if (pw?.is_fullscreen) {
+    try {
+      return !!(await pw.is_fullscreen());
+    } catch {
+      /* fall through */
+    }
+  }
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<boolean>('is_window_fullscreen');
+    } catch {
+      return false;
+    }
+  }
+  return !!document.fullscreenElement;
+}

@@ -1760,6 +1760,24 @@ fn get_api_base() -> String {
     api_base()
 }
 
+/// Toggle native window fullscreen. The DOM Fullscreen API is unreliable in
+/// the desktop webview, so the Guides page drives this instead.
+#[tauri::command]
+fn set_window_fullscreen(app: tauri::AppHandle, fullscreen: bool) -> Result<(), String> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    win.set_fullscreen(fullscreen)
+        .map_err(|e| format!("set_fullscreen failed: {e}"))
+}
+
+#[tauri::command]
+fn is_window_fullscreen(app: tauri::AppHandle) -> bool {
+    app.get_webview_window("main")
+        .map(|w| w.is_fullscreen().unwrap_or(false))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 async fn start_backend(
     backend: tauri::State<'_, SharedBackend>,
@@ -4306,6 +4324,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_setup_status,
             get_api_base,
+            set_window_fullscreen,
+            is_window_fullscreen,
             start_backend,
             stop_backend,
             reset_inference_source,

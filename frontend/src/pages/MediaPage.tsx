@@ -40,6 +40,8 @@ import {
   type GuideLink,
   fetchGuideDeadList,
   fetchGuideDocument,
+  getWindowFullscreen,
+  setWindowFullscreen,
   fetchGuideEpg,
   fetchGuideProbe,
   fetchGuideProgramInfo,
@@ -1518,23 +1520,29 @@ function IptvTab() {
     return () => window.clearInterval(timer);
   }, []);
 
-  // Track fullscreen state for the toggle button icon.
+  // Track fullscreen state — native Tauri window fullscreen on desktop,
+  // DOM Fullscreen API in the browser.
   useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    let cancelled = false;
+    void getWindowFullscreen().then((fs) => {
+      if (!cancelled) setIsFullscreen(fs);
+    });
+    const onFs = () => {
+      void getWindowFullscreen().then((fs) => {
+        if (!cancelled) setIsFullscreen(fs);
+      });
+    };
     document.addEventListener('fullscreenchange', onFs);
-    return () => document.removeEventListener('fullscreenchange', onFs);
+    window.addEventListener('resize', onFs);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('fullscreenchange', onFs);
+      window.removeEventListener('resize', onFs);
+    };
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    try {
-      if (document.fullscreenElement) {
-        void document.exitFullscreen?.().catch(() => {});
-      } else {
-        void document.documentElement.requestFullscreen?.().catch(() => {});
-      }
-    } catch {
-      /* fullscreen unavailable */
-    }
+    void getWindowFullscreen().then((fs) => setWindowFullscreen(!fs));
   }, []);
 
   const destroyPlayer = useCallback(() => {

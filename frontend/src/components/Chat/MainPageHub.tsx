@@ -104,7 +104,7 @@ import { InstallerButton } from '../InstallerButton';
 import { useHubCustom } from '../../lib/hub-custom';
 import { openHubApp } from '../../lib/hub-open';
 import type { HubCustomApp, OsKeySource } from '../../lib/api';
-import { getCloudKeyStatus, fetchNativeApps } from '../../lib/api';
+import { getCloudKeyStatus, fetchNativeApps, setWindowFullscreen } from '../../lib/api';
 import { openVSCode } from '../../lib/developer';
 import { openHubService } from '../../lib/hub-voice';
 import {
@@ -3191,11 +3191,7 @@ export function MainPageHub() {
         <ActionButton
           active={false}
           onClick={() => {
-            try {
-              void document.documentElement.requestFullscreen?.().catch(() => {});
-            } catch {
-              /* fullscreen unavailable (e.g. desktop webview) */
-            }
+            void setWindowFullscreen(true);
             navigate('/media');
           }}
           title="Open TV, movie and show guides fullscreen"
